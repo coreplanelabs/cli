@@ -31,7 +31,7 @@ export const telemetryStatusCommand: Command = {
           'auth method class only: oauth | api-key | unauthenticated',
         ],
         runtime: [
-          'CLI version + install source (npm/brew/curl/winget/aur/bun/dev/unknown)',
+          'CLI version + install source (npm/brew/curl/bun/dev/unknown)',
           'Node version, OS + OS release, arch',
           'CI flag + CI provider name (GitHub Actions / CircleCI / ...) when applicable',
           'TTY flags (stdout, stderr)',

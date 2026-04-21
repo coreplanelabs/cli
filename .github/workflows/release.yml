@@ -20,7 +20,6 @@ jobs:
       id-token: write
     outputs:
       version: ${{ steps.meta.outputs.version }}
-      bundle_sha256: ${{ steps.meta.outputs.bundle_sha256 }}
       tarball_url: ${{ steps.meta.outputs.tarball_url }}
       tarball_sha256: ${{ steps.meta.outputs.tarball_sha256 }}
     steps:
@@ -43,38 +42,32 @@ jobs:
           NOMINAL_OAUTH_CLIENT_ID: ${{ secrets.NOMINAL_OAUTH_CLIENT_ID }}
           NOMINAL_OAUTH_CLIENT_SECRET: ${{ secrets.NOMINAL_OAUTH_CLIENT_SECRET }}
 
+      # npm Trusted Publishers (OIDC) needs npm >= 11.5.1; node 22.x ships with
+      # an older npm. Upgrade before publishing so the CLI picks up the OIDC
+      # auth flow and no NPM_TOKEN is required.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
+
       - name: Publish to npm
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # Prepare release artifacts.
-      # - nominal.mjs               — raw bundle for install.sh / brew to consume
-      # - nominal-windows-x64.zip   — bundle + shim for winget to install
-      - name: Prepare Windows zip
+      # Stage release artifacts. Only nominal.mjs ships now — install.sh and
+      # install.ps1 both fetch it directly from the GitHub Release.
+      - name: Stage release artifacts
         run: |
           mkdir -p release-artifacts
           cp dist/nominal.mjs release-artifacts/
-          mkdir -p build/windows
-          cp dist/nominal.mjs build/windows/nominal.mjs
-          cat > build/windows/nominal.cmd <<'EOF'
-          @echo off
-          node "%~dp0nominal.mjs" %*
-          EOF
-          (cd build/windows && zip -q ../../release-artifacts/nominal-windows-x64.zip nominal.mjs nominal.cmd)
 
       - name: Capture release metadata
         id: meta
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          BUNDLE_SHA="$(sha256sum release-artifacts/nominal.mjs | awk '{print $1}')"
           # Scoped npm package — the URL after the scope uses the unscoped
           # basename for the tarball filename.
           TARBALL_URL="https://registry.npmjs.org/${NPM_PACKAGE_NAME}/-/${NPM_TARBALL_BASENAME}-${VERSION}.tgz"
           curl -fsSL -o release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz "$TARBALL_URL"
           TARBALL_SHA="$(sha256sum release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz | awk '{print $1}')"
           echo "version=$VERSION"            >> "$GITHUB_OUTPUT"
-          echo "bundle_sha256=$BUNDLE_SHA"   >> "$GITHUB_OUTPUT"
           echo "tarball_url=$TARBALL_URL"    >> "$GITHUB_OUTPUT"
           echo "tarball_sha256=$TARBALL_SHA" >> "$GITHUB_OUTPUT"
 
@@ -84,7 +77,6 @@ jobs:
           generate_release_notes: true
           files: |
             release-artifacts/nominal.mjs
-            release-artifacts/nominal-windows-x64.zip
 
   update-homebrew:
     name: Bump Homebrew formula
@@ -120,71 +112,9 @@ jobs:
           sed -i "s|sha256 \".*\"|sha256 \"${{ needs.release.outputs.tarball_sha256 }}\"|" "$FORMULA"
           git config user.name  'coreplane-bot'
           git config user.email 'bot@coreplane.dev'
-          git commit -am "nominal ${{ needs.release.outputs.version }}"
-          git push
-
-  update-aur:
-    name: Push PKGBUILD to AUR
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check for AUR SSH key
-        id: gate
-        env:
-          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-        run: |
-          if [ -z "$AUR_KEY" ]; then
-            echo "AUR_SSH_PRIVATE_KEY not set — skipping AUR update." >&2
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Checkout
-        if: steps.gate.outputs.skip == 'false'
-        uses: actions/checkout@v4
-
-      - name: Regenerate PKGBUILD for this release
-        if: steps.gate.outputs.skip == 'false'
-        run: |
-          mkdir -p aur-staging
-          cp packaging/aur/PKGBUILD aur-staging/PKGBUILD
-          sed -i "s|^pkgver=.*|pkgver=${{ needs.release.outputs.version }}|" aur-staging/PKGBUILD
-          sed -i "s|^sha256sums=.*|sha256sums=('${{ needs.release.outputs.tarball_sha256 }}')|" aur-staging/PKGBUILD
-
-      - name: Generate .SRCINFO via Arch container
-        if: steps.gate.outputs.skip == 'false'
-        run: |
-          # makepkg isn't available on ubuntu-latest. Run it inside archlinux:base
-          # as a non-root user (makepkg refuses root) to produce .SRCINFO.
-          docker run --rm -v "$PWD/aur-staging:/pkg" -w /pkg archlinux:base-devel \
-            bash -c 'useradd -m builder && chown -R builder:builder /pkg && su builder -c "makepkg --printsrcinfo"' \
-            > aur-staging/.SRCINFO
-
-      - name: Configure AUR SSH
-        if: steps.gate.outputs.skip == 'false'
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-
-      - name: Commit and push to AUR
-        if: steps.gate.outputs.skip == 'false'
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -t ed25519,rsa aur.archlinux.org >> ~/.ssh/known_hosts
-          git clone ssh://aur@aur.archlinux.org/nominal.git aur
-          cp aur-staging/PKGBUILD aur-staging/.SRCINFO aur/
-          cd aur
-          git config user.name  'coreplane-bot'
-          git config user.email 'bot@coreplane.dev'
-          git add PKGBUILD .SRCINFO
-          git commit -m "nominal ${{ needs.release.outputs.version }}" || {
-            echo "Nothing to commit (already up to date)." >&2
+          git commit -am "nominal ${{ needs.release.outputs.version }}" || {
+            echo "Nothing to commit — formula already at this version." >&2
             exit 0
           }
           git push
 
-  # --- Manual steps (not automated here) -----------------------------------
-  # winget-pkgs:  regenerate packaging/winget/Coreplane.Nominal.*.yaml with new
-  #               version + SHAs, then open a PR against microsoft/winget-pkgs
-  #               (see `wingetcreate update Coreplane.Nominal --urls ...`).

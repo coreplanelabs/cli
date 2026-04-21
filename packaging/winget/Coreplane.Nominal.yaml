@@ -1,9 +1,0 @@
-# Winget version manifest.
-# Submit to https://github.com/microsoft/winget-pkgs under
-#   manifests/c/Coreplane/Nominal/<version>/
-# alongside the installer + locale manifests. Bump Version on each release.
-PackageIdentifier: Coreplane.Nominal
-PackageVersion: 0.1.0
-DefaultLocale: en-US
-ManifestType: version
-ManifestVersion: 1.6.0

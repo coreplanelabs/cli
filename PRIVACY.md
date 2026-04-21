@@ -26,7 +26,7 @@ One event per command invocation, fired after the command finishes (success or f
 | Field | Example | Purpose |
 |---|---|---|
 | `cli.version` | `"0.1.0"` | CLI release in use |
-| `cli.installSource` | `"brew"` | npm / brew / curl / winget / aur / bun / dev / unknown |
+| `cli.installSource` | `"brew"` | npm / brew / curl / bun / dev / unknown |
 
 ### Runtime
 

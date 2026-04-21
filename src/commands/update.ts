@@ -72,7 +72,7 @@ export const updateCommand: Command = {
     if (compareVersions(latest, current) > 0) {
       process.stderr.write(`Update available: ${latest}\n`);
       process.stderr.write(`Run: npm install -g @coreplane/nominal@${latest}\n`);
-      process.stderr.write(`  or: brew upgrade nominal  |  paru -Syu nominal  |  winget upgrade Coreplane.Nominal\n`);
+      process.stderr.write(`  or: brew upgrade nominal\n`);
     } else {
       process.stderr.write(`Already on the latest version\n`);
     }

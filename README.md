@@ -25,7 +25,7 @@ The full API surface is available behind `nominal api call <op>` as an escape ha
 
 ## Install
 
-Pick whichever channel fits your system. All install the same Node-based bundle and require Node 18+ (Homebrew / AUR / winget pull Node in as a dependency; the curl + PowerShell installers check for it).
+Pick whichever channel fits your system. All install the same Node-based bundle and require Node 18+ (Homebrew pulls Node in as a dependency; the curl + PowerShell installers check for it).
 
 ```bash
 # macOS / Linux — curl
@@ -36,12 +36,6 @@ irm https://nominal.dev/install.ps1 | iex
 
 # Homebrew (tap: coreplanelabs/nominal)
 brew install coreplanelabs/nominal
-
-# winget (Windows)
-winget install Coreplane.Nominal
-
-# Arch Linux (AUR)
-paru -S nominal   # or: yay -S nominal
 
 # npm
 npm install -g @coreplane/nominal

@@ -1,7 +1,7 @@
 import { sep } from 'node:path';
 import { release as osRelease, cpus as osCpus, totalmem } from 'node:os';
 
-export type InstallSource = 'npm' | 'bun' | 'brew' | 'curl' | 'winget' | 'aur' | 'dev' | 'unknown';
+export type InstallSource = 'npm' | 'bun' | 'brew' | 'curl' | 'dev' | 'unknown';
 
 // Best-effort detection of how the user got the binary, by inspecting the path
 // the launcher came from. False positives go to "unknown" rather than a wrong
@@ -22,12 +22,6 @@ export function detectInstallSource(): InstallSource {
 
   // Homebrew Cellar / opt
   if (haystack.includes(`${sep}cellar${sep}`) || haystack.includes(`${sep}homebrew${sep}`)) return 'brew';
-
-  // winget portable / Microsoft.Winget
-  if (haystack.includes(`${sep}winget${sep}`) || haystack.includes('microsoft\\winget')) return 'winget';
-
-  // Arch (AUR is installed under /usr/lib/node_modules)
-  if (haystack.includes(`${sep}usr${sep}lib${sep}node_modules${sep}nominal`)) return 'aur';
 
   // Generic npm-global location
   if (haystack.includes(`${sep}npm${sep}`) || haystack.includes(`${sep}node_modules${sep}`)) return 'npm';
