@@ -5,6 +5,9 @@ import { parseSpec } from './parse-spec';
 import { generateTypes } from './generate-types';
 import { generateClient } from './generate-client';
 import { generateCommandMeta } from './generate-commands';
+import { loadEnvLocal } from './env-local';
+
+loadEnvLocal();
 
 const GENERATED_DIR = join(process.cwd(), 'src', 'generated');
 

@@ -2,11 +2,13 @@ import { build } from 'esbuild';
 import { readFileSync, chmodSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { generateAll } from './codegen/index';
+import { loadEnvLocal } from './codegen/env-local';
 
 async function main(): Promise<void> {
-  // Build inputs are read from process.env. Local dev loads .env.local via
-  // `node --env-file-if-exists=.env.local` in package.json. CI sets the vars
-  // directly on the workflow step from repo secrets.
+  // Local dev loads .env.local here; CI supplies env vars on the workflow
+  // step from repo secrets, and process.env always wins over the file.
+  loadEnvLocal();
+
   await generateAll();
 
   // Step 2: read version

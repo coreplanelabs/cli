@@ -34,8 +34,8 @@
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env.local --import tsx src/main.ts",
-    "codegen": "node --env-file-if-exists=.env.local --import tsx codegen/index.ts",
-    "build": "node --env-file-if-exists=.env.local --import tsx build.ts",
+    "codegen": "node --import tsx codegen/index.ts",
+    "build": "node --import tsx build.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ codegen/",
     "test": "node --test --import tsx 'test/**/*.test.ts'",

@@ -219,10 +219,6 @@ npm run build        # codegen + esbuild → dist/nominal.mjs
 
 The HTTP client is generated at build time from the OpenAPI spec. Top-level commands hand-craft the agent UX on top of it.
 
-### Dev environment (pointing at non-prod)
-
-Put any `NOMINAL_*` override in a gitignored `.env.local` at the repo root. `npm run dev`, `npm run codegen`, and `npm run build` pick it up; `npm run build` additionally bakes every `NOMINAL_*` value into the bundle via esbuild `define`. `npm test` does **not** load `.env.local` — tests verify source defaults. A clean checkout produces a prod bundle and runtime env overrides still work.
-
 ## License
 
 [MIT](LICENSE)

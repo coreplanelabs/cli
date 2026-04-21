@@ -64,7 +64,10 @@ jobs:
           # Scoped npm package — the URL after the scope uses the unscoped
           # basename for the tarball filename.
           TARBALL_URL="https://registry.npmjs.org/${NPM_PACKAGE_NAME}/-/${NPM_TARBALL_BASENAME}-${VERSION}.tgz"
-          curl -fsSL -o release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz "$TARBALL_URL"
+          # npm publish returns before the registry CDN serves the tarball
+          # URL. Retry on any error (including 404) for up to ~50s.
+          curl -fsSL --retry 10 --retry-delay 5 --retry-all-errors \
+            -o release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz "$TARBALL_URL"
           TARBALL_SHA="$(sha256sum release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz | awk '{print $1}')"
           echo "version=$VERSION"            >> "$GITHUB_OUTPUT"
           echo "tarball_url=$TARBALL_URL"    >> "$GITHUB_OUTPUT"
