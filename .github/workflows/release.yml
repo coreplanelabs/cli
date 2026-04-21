@@ -25,10 +25,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 24 ships npm 11.x, which already supports Trusted Publishers
+      # (OIDC). We intentionally don't run `npm install -g npm@latest` — the
+      # npm bundled with some Node 22.x patch releases has a broken
+      # node_modules (missing `promise-retry`) that makes self-upgrade fail.
+      # ci.yml still runs the test matrix against 18/20/22 for runtime compat.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 24.x
           registry-url: https://registry.npmjs.org
           cache: npm
 
@@ -41,12 +46,6 @@ jobs:
           NOMINAL_API_DOMAIN: ${{ secrets.NOMINAL_API_DOMAIN }}
           NOMINAL_OAUTH_CLIENT_ID: ${{ secrets.NOMINAL_OAUTH_CLIENT_ID }}
           NOMINAL_OAUTH_CLIENT_SECRET: ${{ secrets.NOMINAL_OAUTH_CLIENT_SECRET }}
-
-      # npm Trusted Publishers (OIDC) needs npm >= 11.5.1; node 22.x ships with
-      # an older npm. Upgrade before publishing so the CLI picks up the OIDC
-      # auth flow and no NPM_TOKEN is required.
-      - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
 
       - name: Publish to npm
         run: npm publish --access public --provenance
