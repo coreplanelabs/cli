@@ -1,38 +1,12 @@
 import { build } from 'esbuild';
-import { readFileSync, chmodSync, mkdirSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, chmodSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { generateAll } from './codegen/index';
 
-function parseEnvFile(path: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!existsSync(path)) return out;
-  const raw = readFileSync(path, 'utf-8');
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eq = trimmed.indexOf('=');
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    out[key] = value;
-  }
-  return out;
-}
-
 async function main(): Promise<void> {
-  // Step 1: codegen from OpenAPI spec
-  // Build inputs come from two places:
-  //   - .env.local (gitignored) for local dev convenience
-  //   - process.env for CI (set via repo secrets / workflow env)
-  // process.env wins over .env.local if both are set.
-  const envLocal = parseEnvFile(join(process.cwd(), '.env.local'));
-  for (const [k, v] of Object.entries(envLocal)) {
-    if (process.env[k] === undefined) process.env[k] = v;
-  }
-
+  // Build inputs are read from process.env. Local dev loads .env.local via
+  // `node --env-file-if-exists=.env.local` in package.json. CI sets the vars
+  // directly on the workflow step from repo secrets.
   await generateAll();
 
   // Step 2: read version

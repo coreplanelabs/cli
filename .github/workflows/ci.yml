@@ -27,8 +27,8 @@ jobs:
 
       - name: Generate client from OpenAPI spec
         run: npm run codegen
-        # NOMINAL_API_DOMAIN defaults to api.nominal.dev. Override here for a
-        # PR/CI run if you want to validate against a non-prod spec.
+        env:
+          NOMINAL_API_DOMAIN: ${{ secrets.NOMINAL_API_DOMAIN }}
 
       - name: Typecheck
         run: npm run typecheck
@@ -41,8 +41,10 @@ jobs:
 
       - name: Build
         run: npm run build
-        # No env: CI builds use the prod defaults baked into source. The produced
-        # bundle is for verification only — release.yml is what publishes.
+        env:
+          NOMINAL_API_DOMAIN: ${{ secrets.NOMINAL_API_DOMAIN }}
+          NOMINAL_OAUTH_CLIENT_ID: ${{ secrets.NOMINAL_OAUTH_CLIENT_ID }}
+          NOMINAL_OAUTH_CLIENT_SECRET: ${{ secrets.NOMINAL_OAUTH_CLIENT_SECRET }}
 
       - name: Verify build output
         run: |
