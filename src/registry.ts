@@ -22,6 +22,7 @@ const RESOURCE_ORDER: Record<string, ResourceGroup> = {
   wiki: { name: 'wiki', description: 'Generated wiki documentation', order: 40 },
   memory: { name: 'memory', description: 'Persistent agent memory', order: 50 },
   thread: { name: 'thread', description: 'Conversation threads', order: 60 },
+  skill: { name: 'skill', description: 'Reusable agent skills (catalog, install, docs)', order: 63 },
   automation: { name: 'automation', description: 'Automations and executions', order: 65 },
   integration: { name: 'integration', description: 'Observability tools and cloud providers', order: 68 },
   cloud: { name: 'cloud', description: 'Cloud accounts (aws, cloudflare, fly, render, vercel)', order: 69 },

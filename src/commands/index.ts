@@ -15,6 +15,7 @@ import { cloudCommands } from './cloud';
 import { workspaceCommands } from './workspace';
 import { apiCommands } from './api';
 import { telemetryCommands } from './telemetry';
+import { skillCommands } from './skill';
 
 let registered = false;
 
@@ -29,6 +30,7 @@ export function registerAllCommands(): void {
     ...wikiCommands,
     ...memoryCommands,
     ...threadCommands,
+    ...skillCommands,
     ...automationCommands,
     ...integrationCommands,
     ...cloudCommands,
