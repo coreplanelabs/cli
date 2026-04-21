@@ -1,0 +1,22 @@
+PackageIdentifier: Coreplane.Nominal
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: Coreplane
+PublisherUrl: https://nominal.dev
+PublisherSupportUrl: https://github.com/coreplanelabs/cli/issues
+PackageName: Nominal
+PackageUrl: https://github.com/coreplanelabs/cli
+License: MIT
+LicenseUrl: https://github.com/coreplanelabs/cli/blob/main/LICENSE
+ShortDescription: Agent-focused CLI for the Nominal platform.
+Description: >-
+  Investigate incidents, explore cloud infrastructure, search code and wikis,
+  run automations, and drive threads with the Nominal agent from any terminal.
+Tags:
+  - cli
+  - devops
+  - observability
+  - incident-response
+  - nominal
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

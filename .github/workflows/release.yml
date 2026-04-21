@@ -1,0 +1,189 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Scoped npm package. Keep these in sync with package.json and the various
+# packaging manifests.
+env:
+  NPM_PACKAGE_NAME: '@coreplane/nominal'
+  NPM_TARBALL_BASENAME: 'nominal'   # tarball filename after /-/ on the registry
+
+jobs:
+  release:
+    name: Publish to npm + GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      bundle_sha256: ${{ steps.meta.outputs.bundle_sha256 }}
+      tarball_url: ${{ steps.meta.outputs.tarball_url }}
+      tarball_sha256: ${{ steps.meta.outputs.tarball_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          NOMINAL_OAUTH_CLIENT_ID: ${{ secrets.NOMINAL_OAUTH_CLIENT_ID }}
+          NOMINAL_OAUTH_CLIENT_SECRET: ${{ secrets.NOMINAL_OAUTH_CLIENT_SECRET }}
+
+      - name: Publish to npm
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Prepare release artifacts.
+      # - nominal.mjs               — raw bundle for install.sh / brew to consume
+      # - nominal-windows-x64.zip   — bundle + shim for winget to install
+      - name: Prepare Windows zip
+        run: |
+          mkdir -p release-artifacts
+          cp dist/nominal.mjs release-artifacts/
+          mkdir -p build/windows
+          cp dist/nominal.mjs build/windows/nominal.mjs
+          cat > build/windows/nominal.cmd <<'EOF'
+          @echo off
+          node "%~dp0nominal.mjs" %*
+          EOF
+          (cd build/windows && zip -q ../../release-artifacts/nominal-windows-x64.zip nominal.mjs nominal.cmd)
+
+      - name: Capture release metadata
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          BUNDLE_SHA="$(sha256sum release-artifacts/nominal.mjs | awk '{print $1}')"
+          # Scoped npm package — the URL after the scope uses the unscoped
+          # basename for the tarball filename.
+          TARBALL_URL="https://registry.npmjs.org/${NPM_PACKAGE_NAME}/-/${NPM_TARBALL_BASENAME}-${VERSION}.tgz"
+          curl -fsSL -o release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz "$TARBALL_URL"
+          TARBALL_SHA="$(sha256sum release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz | awk '{print $1}')"
+          echo "version=$VERSION"            >> "$GITHUB_OUTPUT"
+          echo "bundle_sha256=$BUNDLE_SHA"   >> "$GITHUB_OUTPUT"
+          echo "tarball_url=$TARBALL_URL"    >> "$GITHUB_OUTPUT"
+          echo "tarball_sha256=$TARBALL_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release-artifacts/nominal.mjs
+            release-artifacts/nominal-windows-x64.zip
+
+  update-homebrew:
+    name: Bump Homebrew formula
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for tap token
+        id: gate
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "HOMEBREW_TAP_TOKEN not set — skipping tap update." >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout tap
+        if: steps.gate.outputs.skip == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: coreplanelabs/homebrew-nominal
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Update Formula/nominal.rb
+        if: steps.gate.outputs.skip == 'false'
+        run: |
+          cd tap
+          FORMULA=Formula/nominal.rb
+          sed -i "s|url \".*\"|url \"${{ needs.release.outputs.tarball_url }}\"|" "$FORMULA"
+          sed -i "s|sha256 \".*\"|sha256 \"${{ needs.release.outputs.tarball_sha256 }}\"|" "$FORMULA"
+          git config user.name  'coreplane-bot'
+          git config user.email 'bot@coreplane.dev'
+          git commit -am "nominal ${{ needs.release.outputs.version }}"
+          git push
+
+  update-aur:
+    name: Push PKGBUILD to AUR
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for AUR SSH key
+        id: gate
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$AUR_KEY" ]; then
+            echo "AUR_SSH_PRIVATE_KEY not set — skipping AUR update." >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.skip == 'false'
+        uses: actions/checkout@v4
+
+      - name: Regenerate PKGBUILD for this release
+        if: steps.gate.outputs.skip == 'false'
+        run: |
+          mkdir -p aur-staging
+          cp packaging/aur/PKGBUILD aur-staging/PKGBUILD
+          sed -i "s|^pkgver=.*|pkgver=${{ needs.release.outputs.version }}|" aur-staging/PKGBUILD
+          sed -i "s|^sha256sums=.*|sha256sums=('${{ needs.release.outputs.tarball_sha256 }}')|" aur-staging/PKGBUILD
+
+      - name: Generate .SRCINFO via Arch container
+        if: steps.gate.outputs.skip == 'false'
+        run: |
+          # makepkg isn't available on ubuntu-latest. Run it inside archlinux:base
+          # as a non-root user (makepkg refuses root) to produce .SRCINFO.
+          docker run --rm -v "$PWD/aur-staging:/pkg" -w /pkg archlinux:base-devel \
+            bash -c 'useradd -m builder && chown -R builder:builder /pkg && su builder -c "makepkg --printsrcinfo"' \
+            > aur-staging/.SRCINFO
+
+      - name: Configure AUR SSH
+        if: steps.gate.outputs.skip == 'false'
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+
+      - name: Commit and push to AUR
+        if: steps.gate.outputs.skip == 'false'
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -t ed25519,rsa aur.archlinux.org >> ~/.ssh/known_hosts
+          git clone ssh://aur@aur.archlinux.org/nominal.git aur
+          cp aur-staging/PKGBUILD aur-staging/.SRCINFO aur/
+          cd aur
+          git config user.name  'coreplane-bot'
+          git config user.email 'bot@coreplane.dev'
+          git add PKGBUILD .SRCINFO
+          git commit -m "nominal ${{ needs.release.outputs.version }}" || {
+            echo "Nothing to commit (already up to date)." >&2
+            exit 0
+          }
+          git push
+
+  # --- Manual steps (not automated here) -----------------------------------
+  # winget-pkgs:  regenerate packaging/winget/Coreplane.Nominal.*.yaml with new
+  #               version + SHAs, then open a PR against microsoft/winget-pkgs
+  #               (see `wingetcreate update Coreplane.Nominal --urls ...`).

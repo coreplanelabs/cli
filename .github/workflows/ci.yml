@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test & typecheck
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate client from OpenAPI spec
+        run: npm run codegen
+        # NOMINAL_API_DOMAIN defaults to api.nominal.dev. Override here for a
+        # PR/CI run if you want to validate against a non-prod spec.
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+        # No env: CI builds use the prod defaults baked into source. The produced
+        # bundle is for verification only — release.yml is what publishes.
+
+      - name: Verify build output
+        run: |
+          test -f dist/nominal.mjs
+          test -x dist/nominal.mjs
+          ./dist/nominal.mjs --version
+          ./dist/nominal.mjs --help | head -5

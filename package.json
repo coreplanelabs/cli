@@ -1,0 +1,57 @@
+{
+  "name": "@coreplane/nominal",
+  "version": "0.1.0",
+  "description": "Agent-focused CLI for the Nominal platform",
+  "keywords": [
+    "nominal",
+    "cli",
+    "agent",
+    "observability",
+    "incident-response",
+    "devops"
+  ],
+  "homepage": "https://nominal.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/coreplanelabs/cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/coreplanelabs/cli/issues"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "bin": {
+    "nominal": "dist/nominal.mjs"
+  },
+  "files": [
+    "dist/nominal.mjs"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env.local --import tsx src/main.ts",
+    "codegen": "node --env-file-if-exists=.env.local --import tsx codegen/index.ts",
+    "build": "node --env-file-if-exists=.env.local --import tsx build.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ codegen/",
+    "test": "node --test --import tsx 'test/**/*.test.ts'",
+    "test:watch": "node --test --watch --import tsx 'test/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.7.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}
