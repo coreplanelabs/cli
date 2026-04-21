@@ -55,28 +55,40 @@ jobs:
           NOMINAL_OAUTH_CLIENT_ID: ${{ secrets.NOMINAL_OAUTH_CLIENT_ID }}
           NOMINAL_OAUTH_CLIENT_SECRET: ${{ secrets.NOMINAL_OAUTH_CLIENT_SECRET }}
 
+      # Pack the tarball ourselves so we own the bytes. `npm publish` then
+      # uploads that exact file — same sha256 as what the registry will serve
+      # to Homebrew. This avoids racing the npm CDN after publish.
+      - name: Pack npm tarball
+        id: pack
+        run: |
+          mkdir -p release-artifacts
+          VERSION="${GITHUB_REF_NAME#v}"
+          # `npm pack` names scoped packages as e.g. coreplane-nominal-0.1.0.tgz;
+          # rename to match the unscoped basename the registry URL uses, so the
+          # local sha lines up with what Homebrew computes after download.
+          npm pack --pack-destination=release-artifacts >/dev/null
+          PACKED="$(ls release-artifacts/*.tgz | head -1)"
+          TARBALL_LOCAL="release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz"
+          mv "$PACKED" "$TARBALL_LOCAL"
+          echo "tarball_local=$TARBALL_LOCAL" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"            >> "$GITHUB_OUTPUT"
+
       - name: Publish to npm
-        run: npm publish --access public --provenance
+        run: npm publish ${{ steps.pack.outputs.tarball_local }} --access public --provenance
 
       # Stage release artifacts. Only nominal.mjs ships now — install.sh and
       # install.ps1 both fetch it directly from the GitHub Release.
       - name: Stage release artifacts
-        run: |
-          mkdir -p release-artifacts
-          cp dist/nominal.mjs release-artifacts/
+        run: cp dist/nominal.mjs release-artifacts/
 
       - name: Capture release metadata
         id: meta
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ steps.pack.outputs.version }}"
           # Scoped npm package — the URL after the scope uses the unscoped
           # basename for the tarball filename.
           TARBALL_URL="https://registry.npmjs.org/${NPM_PACKAGE_NAME}/-/${NPM_TARBALL_BASENAME}-${VERSION}.tgz"
-          # npm publish returns before the registry CDN serves the tarball
-          # URL. Retry on any error (including 404) for up to ~50s.
-          curl -fsSL --retry 10 --retry-delay 5 --retry-all-errors \
-            -o release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz "$TARBALL_URL"
-          TARBALL_SHA="$(sha256sum release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz | awk '{print $1}')"
+          TARBALL_SHA="$(sha256sum ${{ steps.pack.outputs.tarball_local }} | awk '{print $1}')"
           echo "version=$VERSION"            >> "$GITHUB_OUTPUT"
           echo "tarball_url=$TARBALL_URL"    >> "$GITHUB_OUTPUT"
           echo "tarball_sha256=$TARBALL_SHA" >> "$GITHUB_OUTPUT"
