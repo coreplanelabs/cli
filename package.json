@@ -38,8 +38,8 @@
     "build": "node --import tsx build.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ codegen/",
-    "test": "node --test --import tsx 'test/**/*.test.ts'",
-    "test:watch": "node --test --watch --import tsx 'test/**/*.test.ts'"
+    "test": "node --test --import tsx test/*.test.ts",
+    "test:watch": "node --test --watch --import tsx test/*.test.ts"
   },
   "dependencies": {
     "@clack/prompts": "^0.7.0",

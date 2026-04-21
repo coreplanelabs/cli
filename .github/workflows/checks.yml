@@ -1,0 +1,56 @@
+name: Checks
+
+# Reusable workflow. Runs the full matrix of typecheck + lint + test + build
+# verification. Called by ci.yml (push / PR) and release.yml (v* tag gate).
+# Secrets are inherited by the caller via `secrets: inherit` — missing values
+# (e.g. PR from a fork) fall through to source defaults.
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    name: Test & typecheck
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate client from OpenAPI spec
+        run: npm run codegen
+        env:
+          NOMINAL_API_DOMAIN: ${{ secrets.NOMINAL_API_DOMAIN }}
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+        env:
+          NOMINAL_API_DOMAIN: ${{ secrets.NOMINAL_API_DOMAIN }}
+          NOMINAL_OAUTH_CLIENT_ID: ${{ secrets.NOMINAL_OAUTH_CLIENT_ID }}
+          NOMINAL_OAUTH_CLIENT_SECRET: ${{ secrets.NOMINAL_OAUTH_CLIENT_SECRET }}
+
+      - name: Verify build output
+        run: |
+          test -f dist/nominal.mjs
+          test -x dist/nominal.mjs
+          ./dist/nominal.mjs --version
+          ./dist/nominal.mjs --help | head -5

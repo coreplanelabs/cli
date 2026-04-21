@@ -12,8 +12,16 @@ env:
   NPM_TARBALL_BASENAME: 'nominal'   # tarball filename after /-/ on the registry
 
 jobs:
+  # Run the full matrix (typecheck + lint + test + build on Node 18/20/22)
+  # before anything else. If this fails, nothing below runs — no npm publish,
+  # no Homebrew bump, no GitHub release.
+  checks:
+    uses: ./.github/workflows/checks.yml
+    secrets: inherit
+
   release:
     name: Publish to npm + GitHub Release
+    needs: checks
     runs-on: ubuntu-latest
     permissions:
       contents: write
