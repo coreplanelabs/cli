@@ -68,13 +68,15 @@ jobs:
           # local sha lines up with what Homebrew computes after download.
           npm pack --pack-destination=release-artifacts >/dev/null
           PACKED="$(ls release-artifacts/*.tgz | head -1)"
-          TARBALL_LOCAL="release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz"
+          # Prefix with ./ so npm treats the argument as a local file, not a
+          # github shorthand "owner/repo" spec (the / in the path triggers it).
+          TARBALL_LOCAL="./release-artifacts/${NPM_TARBALL_BASENAME}-${VERSION}.tgz"
           mv "$PACKED" "$TARBALL_LOCAL"
           echo "tarball_local=$TARBALL_LOCAL" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION"            >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm
-        run: npm publish ${{ steps.pack.outputs.tarball_local }} --access public --provenance
+        run: npm publish "${{ steps.pack.outputs.tarball_local }}" --access public --provenance
 
       # Stage release artifacts. Only nominal.mjs ships now — install.sh and
       # install.ps1 both fetch it directly from the GitHub Release.
