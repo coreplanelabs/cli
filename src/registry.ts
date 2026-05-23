@@ -16,14 +16,18 @@ export interface ResourceGroup {
 }
 
 const RESOURCE_ORDER: Record<string, ResourceGroup> = {
-  case: { name: 'case', description: 'Cases and investigations', order: 10 },
+  anomaly: { name: 'anomaly', description: 'Detected anomalies (system-flagged issues)', order: 8 },
+  incident: { name: 'incident', description: 'Incident timeline (notes, milestones)', order: 10 },
   service: { name: 'service', description: 'Cloud infrastructure (nodes, logs, metrics, graph)', order: 20 },
   repo: { name: 'repo', description: 'Repositories and code search', order: 30 },
   wiki: { name: 'wiki', description: 'Generated wiki documentation', order: 40 },
   memory: { name: 'memory', description: 'Persistent agent memory', order: 50 },
+  note: { name: 'note', description: 'Daily and global workspace notes', order: 52 },
   thread: { name: 'thread', description: 'Conversation threads', order: 60 },
+  artifact: { name: 'artifact', description: 'Per-thread artifacts (reports, diagrams, PRs)', order: 61 },
   skill: { name: 'skill', description: 'Reusable agent skills (catalog, install, docs)', order: 63 },
   automation: { name: 'automation', description: 'Automations and executions', order: 65 },
+  autofix: { name: 'autofix', description: 'Automated code fixes (read-only)', order: 66 },
   integration: { name: 'integration', description: 'Observability tools and cloud providers', order: 68 },
   cloud: { name: 'cloud', description: 'Cloud accounts (aws, cloudflare, fly, render, vercel)', order: 69 },
   workspace: { name: 'workspace', description: 'Workspaces', order: 70 },
@@ -203,7 +207,7 @@ export function renderRootHelp(
   lines.push('');
   lines.push(bold('Getting help:'));
   lines.push(`  ${dim('Add --help after any command for its options and examples, e.g.')}`);
-  lines.push(`  ${dim('nominal case investigate --help')}`);
+  lines.push(`  ${dim('nominal thread ask --help')}`);
   return lines.join('\n') + '\n';
 }
 

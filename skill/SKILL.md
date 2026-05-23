@@ -146,9 +146,13 @@ nominal automation list
 ### Investigating an incident
 
 ```bash
-nominal cases                                    # open cases
-nominal case show <case-id>                      # with Console / Next footer
-nominal case investigate <case-id> "<prompt>"
+nominal anomaly list --active                    # what's currently flagged
+nominal anomaly show <anomaly-id>                # full body + linked incident
+nominal thread list --type incident              # active incident threads
+nominal thread show <thread-id>                  # the incident thread with Console / Next footer
+nominal incident timeline <thread-id>             # who did what, when
+nominal incident note <thread-id> "rolled back deploy ABC"
+nominal incident milestone <thread-id> "Mitigated"
 
 # Drill into services
 nominal service find "<query>"
@@ -215,7 +219,7 @@ TID=$(nominal thread ask "<prompt>" --no-wait --output json --quiet | jq -r '.id
 nominal thread show "$TID" --output json | jq '.messages[-1]'
 
 # Silence everything but data
-nominal case list --quiet 2>/dev/null
+nominal anomaly list --quiet 2>/dev/null
 ```
 
 ---

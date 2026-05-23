@@ -116,7 +116,7 @@ export const apiCallCommand: Command = {
   ],
   examples: [
     'nominal api call workspaces.list',
-    'nominal api call cases.post --body \'{"workspaceId":"ws_xxx","title":"..."}\' ',
+    'nominal api call anomalies.list --body \'{"kind":"workspace","workspaceId":"ws_xxx","active":true}\'',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const opId = requirePositional(args, 0, 'operation-id');

@@ -12,8 +12,7 @@ type ContextType =
   | 'thread'
   | 'infrastructure_node'
   | 'wiki_document'
-  | 'memory'
-  | 'case';
+  | 'memory';
 
 function inferContextType(id: string): ContextType {
   if (id.startsWith('repo_')) return 'repository';
@@ -21,7 +20,6 @@ function inferContextType(id: string): ContextType {
   if (id.startsWith('thrd_')) return 'thread';
   if (id.startsWith('wiki_doc_')) return 'wiki_document';
   if (id.startsWith('mem_')) return 'memory';
-  if (id.startsWith('case_')) return 'case';
   return 'infrastructure_node';
 }
 
@@ -46,7 +44,7 @@ export const threadAskCommand: Command = {
   options: [
     { flag: '--context <ids>', description: 'Comma-separated resource IDs to attach as context', type: 'string' },
     { flag: '--name <n>', description: 'Name for the thread (default: auto-derived)', type: 'string' },
-    { flag: '--visibility <v>', description: 'workspace | private (default: workspace)', type: 'string' },
+    { flag: '--visibility <v>', description: 'workspace | private | team | unlisted | public (default: workspace)', type: 'string' },
     { flag: '--stream', description: 'Stream assistant tokens as they arrive (requires OAuth)', type: 'boolean' },
     { flag: '--no-wait', description: 'Return immediately after sending', type: 'boolean' },
   ],

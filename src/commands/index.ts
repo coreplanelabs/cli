@@ -3,7 +3,8 @@ import { authCommands } from './auth';
 import { configCommands } from './config';
 import { helpCommand } from './help';
 import { updateCommand } from './update';
-import { caseCommands } from './case';
+import { anomalyCommands } from './anomaly';
+import { incidentCommands } from './incident';
 import { serviceCommands } from './service';
 import { repoCommands } from './repo';
 import { wikiCommands } from './wiki';
@@ -16,6 +17,9 @@ import { workspaceCommands } from './workspace';
 import { apiCommands } from './api';
 import { telemetryCommands } from './telemetry';
 import { skillCommands } from './skill';
+import { noteCommands } from './note';
+import { autofixCommands } from './autofix';
+import { artifactCommands } from './artifact';
 
 let registered = false;
 
@@ -24,7 +28,8 @@ export function registerAllCommands(): void {
   registered = true;
 
   const all = [
-    ...caseCommands,
+    ...anomalyCommands,
+    ...incidentCommands,
     ...serviceCommands,
     ...repoCommands,
     ...wikiCommands,
@@ -35,6 +40,9 @@ export function registerAllCommands(): void {
     ...integrationCommands,
     ...cloudCommands,
     ...workspaceCommands,
+    ...noteCommands,
+    ...autofixCommands,
+    ...artifactCommands,
     ...authCommands,
     ...configCommands,
     ...apiCommands,

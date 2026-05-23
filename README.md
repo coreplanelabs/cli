@@ -13,7 +13,8 @@ Investigate incidents, explore cloud infrastructure, search code and wikis, run 
 
 `nominal` is designed to be driven by AI agents. Top-level commands map to the tasks an agent actually performs:
 
-- **Investigate** cases with hypothesis generation
+- **Triage** anomalies detected across your cloud and observability stack
+- **Drive** incidents — record timeline notes and milestones as you respond
 - **Explore** cloud infrastructure — logs, metrics, dependency graphs
 - **Search** code and wikis
 - **Remember** findings
@@ -73,8 +74,9 @@ nominal integration connect --type <type>        # see `nominal integration conn
 nominal cloud connect --provider <provider>      # see `nominal cloud connect --help`
 
 # 4. Work
-nominal cases                                    # alias for `case list`
-nominal case investigate <case-id> "<prompt>"
+nominal anomaly list --active                    # what the system is flagging
+nominal thread list --type incident              # incident threads
+nominal incident note <thread-id> "rolled back deploy"
 nominal service logs <service> --since 1h --grep error
 nominal thread ask "<prompt>" --stream
 nominal memory save "<finding>"
@@ -88,7 +90,7 @@ For the full API surface not yet exposed as first-class commands:
 
 ```bash
 nominal api list                     # browse every operation
-nominal api list --tag Cases         # filter by tag
+nominal api list --tag Anomalies     # filter by tag
 nominal api describe <operation-id>  # show its shape
 nominal api call <operation-id> [--body '{...}' | --body-file path]
 ```
