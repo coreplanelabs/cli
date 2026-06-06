@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getArgBoolean } from '../helpers';
 import { promptConfirm } from '../../utils/prompt';
@@ -32,7 +32,7 @@ export const integrationDisconnectCommand: Command = {
         return;
       }
     }
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.integrationsDelete(workspaceId, id);
     formatOutput(config, result);
   },

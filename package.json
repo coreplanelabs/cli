@@ -1,16 +1,16 @@
 {
-  "name": "@coreplane/nominal",
+  "name": "@coreplane/polylane",
   "version": "0.1.7",
-  "description": "Agent-focused CLI for the Nominal platform",
+  "description": "Agent-focused CLI for the Polylane platform",
   "keywords": [
-    "nominal",
+    "polylane",
     "cli",
     "agent",
     "observability",
     "incident-response",
     "devops"
   ],
-  "homepage": "https://nominal.dev",
+  "homepage": "https://polylane.com",
   "repository": {
     "type": "git",
     "url": "https://github.com/coreplanelabs/cli.git"
@@ -24,10 +24,10 @@
   },
   "type": "module",
   "bin": {
-    "nominal": "dist/nominal.mjs"
+    "polylane": "dist/polylane.mjs"
   },
   "files": [
-    "dist/nominal.mjs"
+    "dist/polylane.mjs"
   ],
   "engines": {
     "node": ">=18"

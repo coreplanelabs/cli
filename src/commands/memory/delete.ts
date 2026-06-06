@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { requireWorkspace, requirePositional, getArgBoolean } from '../helpers';
 import { promptConfirm } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
@@ -27,7 +27,7 @@ export const memoryDeleteCommand: Command = {
       }
     }
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.memoriesDel(workspaceId, id);
     process.stdout.write(`Deleted ${result.id}\n`);
   },

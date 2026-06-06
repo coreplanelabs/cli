@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional } from '../helpers';
 
@@ -12,7 +12,7 @@ export const integrationShowCommand: Command = {
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const id = requirePositional(args, 0, 'integration-id');
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     // There is no dedicated integrations.get; fetch via list+filter on id.
     const result = await api.integrationsList(workspaceId, { id, perPage: 1 });
     const integration = result.items[0];

@@ -2,7 +2,7 @@ import type { Command, OptionDef } from '../command';
 import type { Config } from '../config/schema';
 import type { GlobalFlags } from '../types/flags';
 import type { OperationMeta } from '../generated/commands';
-import { NominalAPI } from '../generated/client';
+import { PolylaneAPI } from '../generated/client';
 import { OPERATIONS } from '../generated/commands';
 import { formatOutput, formatList } from '../output/formatter';
 import { CLIError } from '../errors/base';
@@ -215,7 +215,7 @@ async function resolveBody(args: Record<string, unknown>): Promise<unknown | und
 }
 
 function callApiMethod(
-  api: NominalAPI,
+  api: PolylaneAPI,
   methodName: string,
   pathArgs: Record<string, string>,
   meta: OperationMeta,
@@ -242,10 +242,10 @@ export function buildGenericCommand(meta: OperationMeta): Command {
     name,
     description: meta.summary || `${meta.method} ${meta.path}`,
     operationId: meta.operationId,
-    usage: `nominal ${name} [options]`,
+    usage: `polylane ${name} [options]`,
     options,
     async execute(config: Config, flags: GlobalFlags, args: Record<string, unknown>): Promise<void> {
-      const api = new NominalAPI(config);
+      const api = new PolylaneAPI(config);
 
       // Auto-fill workspaceId from config if available
       if (meta.pathParams.includes('workspaceId') && !args.workspaceId && config.workspaceId) {

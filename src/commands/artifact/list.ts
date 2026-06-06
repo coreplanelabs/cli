@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { requireWorkspace, requirePositional, getArgString, getArgNumber, getArgBoolean } from '../helpers';
@@ -19,8 +19,8 @@ export const artifactListCommand: Command = {
     { flag: '--full', description: 'Return full objects', type: 'boolean' },
   ],
   examples: [
-    'nominal artifact list thrd_xxx',
-    'nominal artifact list thrd_xxx --type github.pull_request',
+    'polylane artifact list thrd_xxx',
+    'polylane artifact list thrd_xxx --type github.pull_request',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -30,7 +30,7 @@ export const artifactListCommand: Command = {
     const type = getArgString(args, 'type');
     const status = getArgString(args, 'status');
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.artifactsList(workspaceId, threadId, {
       perPage: limit,
       ...(type ? { type } : {}),

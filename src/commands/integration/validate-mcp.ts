@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, getArgString, promptIfMissing, parseJsonArg } from '../helpers';
 
@@ -15,8 +15,8 @@ export const integrationValidateMcpCommand: Command = {
     { flag: '--extra-headers <json>', description: 'Extra headers as JSON object', type: 'string' },
   ],
   examples: [
-    'nominal integration validate-mcp --url https://mcp.example.com/sse',
-    'nominal integration validate-mcp --url https://mcp.example.com/sse --bearer-token ...',
+    'polylane integration validate-mcp --url https://mcp.example.com/sse',
+    'polylane integration validate-mcp --url https://mcp.example.com/sse --bearer-token ...',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -28,7 +28,7 @@ export const integrationValidateMcpCommand: Command = {
       ? (parseJsonArg(extraHeadersRaw, '--extra-headers') as Record<string, string>)
       : undefined;
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.integrationsMcpValidate({
       workspaceId,
       url,

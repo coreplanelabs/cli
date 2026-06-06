@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getArgString } from '../helpers';
 import { CLIError } from '../../errors/base';
@@ -20,7 +20,7 @@ export const wikiReadCommand: Command = {
     const wikiId = requirePositional(args, 0, 'wiki-id');
     const filename = requirePositional(args, 1, 'filename');
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
 
     let version = getArgString(args, 'version');
     if (!version) {

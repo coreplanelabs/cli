@@ -4,7 +4,7 @@ export async function fetchSpec(source: string): Promise<OpenAPISpec> {
   const res = await fetch(source, {
     headers: {
       Accept: 'application/json',
-      'User-Agent': 'nominal-cli-codegen',
+      'User-Agent': 'polylane-cli-codegen',
     },
   });
   if (!res.ok) {
@@ -25,6 +25,6 @@ export async function fetchSpec(source: string): Promise<OpenAPISpec> {
 }
 
 export function resolveSpecSource(): string {
-  const domain = process.env.NOMINAL_API_DOMAIN || 'api.nominal.dev';
+  const domain = process.env.POLYLANE_API_DOMAIN || 'api.polylane.com';
   return `https://${domain}/v1/doc`;
 }

@@ -1,12 +1,12 @@
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 
 export async function resolveRepoId(config: Config, raw: string, workspaceId: string): Promise<string> {
   if (raw.startsWith('repo_')) return raw;
 
-  const api = new NominalAPI(config);
+  const api = new PolylaneAPI(config);
 
   if (raw.includes('/')) {
     const [owner, name] = raw.split('/');
@@ -19,7 +19,7 @@ export async function resolveRepoId(config: Config, raw: string, workspaceId: st
       throw new CLIError(
         `No repository matching "${raw}"`,
         ExitCode.GENERAL,
-        'Use `nominal repo list` to see available repositories'
+        'Use `polylane repo list` to see available repositories'
       );
     }
     if (list.items.length > 1) {
@@ -37,7 +37,7 @@ export async function resolveRepoId(config: Config, raw: string, workspaceId: st
     throw new CLIError(
       `No repository matching "${raw}"`,
       ExitCode.GENERAL,
-      'Use `nominal repo list` to see available repositories'
+      'Use `polylane repo list` to see available repositories'
     );
   }
   if (list.items.length > 1) {

@@ -78,7 +78,7 @@ export async function request(config: Config, opts: RequestOpts): Promise<Respon
   const fullUrl = path + query;
 
   const headers: Record<string, string> = {
-    'User-Agent': `nominal-cli/${getVersion()}`,
+    'User-Agent': `polylane-cli/${getVersion()}`,
     'x-nominal-client': 'cli',
     'x-nominal-client-version': getVersion(),
     ...opts.headers,

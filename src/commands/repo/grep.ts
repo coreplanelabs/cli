@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getAllPositional, getArgNumber } from '../helpers';
 import { resolveRepoId } from './id';
@@ -14,7 +14,7 @@ export const repoGrepCommand: Command = {
     { name: 'prompt', description: 'Search query', variadic: true },
   ],
   options: [{ flag: '--limit <n>', description: 'Max chunks (default 20)', type: 'number' }],
-  examples: ['nominal repo grep cli "http request handler"'],
+  examples: ['polylane repo grep cli "http request handler"'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const repoRaw = requirePositional(args, 0, 'repo-id');
@@ -26,7 +26,7 @@ export const repoGrepCommand: Command = {
     const limit = getArgNumber(args, 'limit') ?? 20;
 
     const repoId = await resolveRepoId(config, repoRaw, workspaceId);
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const chunks = await api.repositoriesCodefilesSearch(
       { workspaceId, id: repoId, prompt },
       { perPage: limit }

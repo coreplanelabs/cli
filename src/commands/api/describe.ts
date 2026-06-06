@@ -10,7 +10,7 @@ export const apiDescribeCommand: Command = {
   name: 'api describe',
   description: 'Show details of an API operation',
   positional: [{ name: 'operation-id', description: 'The operationId (e.g. workspaces.list)' }],
-  examples: ['nominal api describe workspaces.list'],
+  examples: ['polylane api describe workspaces.list'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const opId = requirePositional(args, 0, 'operation-id');
     const ops: OperationMeta[] = Object.values(OPERATIONS);
@@ -19,7 +19,7 @@ export const apiDescribeCommand: Command = {
       throw new CLIError(
         `Unknown operation: ${opId}`,
         ExitCode.USAGE,
-        'Use `nominal api list` to find the right operationId'
+        'Use `polylane api list` to find the right operationId'
       );
     }
     formatOutput(config, op as unknown as Record<string, unknown>);

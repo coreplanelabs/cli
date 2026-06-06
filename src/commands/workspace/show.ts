@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { getPositional } from '../helpers';
 import { CLIError } from '../../errors/base';
@@ -17,10 +17,10 @@ export const workspaceShowCommand: Command = {
       throw new CLIError(
         'No workspace ID provided and none set in config',
         ExitCode.USAGE,
-        'nominal workspace show <id>     or     nominal workspace use <id>'
+        'polylane workspace show <id>     or     polylane workspace use <id>'
       );
     }
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.workspacesGet(id);
     formatOutput(config, result);
   },

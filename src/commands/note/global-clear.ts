@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { requireWorkspace, getArgBoolean } from '../helpers';
 import { promptConfirm } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
@@ -25,7 +25,7 @@ export const noteGlobalClearCommand: Command = {
       }
     }
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     await api.notesGlobalDel(workspaceId);
     process.stdout.write(`Cleared\n`);
   },

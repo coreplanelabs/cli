@@ -14,8 +14,8 @@ export function detectInstallSource(): InstallSource {
   // Local dev / `npm run dev` / `tsx src/main.ts`
   if (haystack.includes(`${sep}src${sep}main.ts`) || haystack.includes('/src/main.ts')) return 'dev';
 
-  // Curl / PowerShell installers write to ~/.nominal/bin
-  if (haystack.includes(`${sep}.nominal${sep}bin`) || haystack.includes('/.nominal/bin')) return 'curl';
+  // Curl / PowerShell installers write to ~/.polylane/bin
+  if (haystack.includes(`${sep}.polylane${sep}bin`) || haystack.includes('/.polylane/bin')) return 'curl';
 
   // Bun's global bin
   if (haystack.includes(`${sep}.bun${sep}`) || haystack.includes('/.bun/')) return 'bun';

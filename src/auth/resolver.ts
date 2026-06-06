@@ -28,8 +28,8 @@ export async function resolveCredential(config: Config): Promise<Credential> {
   }
 
   // 3. Env var
-  if (process.env.NOMINAL_API_KEY) {
-    return { type: 'api-key', key: process.env.NOMINAL_API_KEY, source: 'env' };
+  if (process.env.POLYLANE_API_KEY) {
+    return { type: 'api-key', key: process.env.POLYLANE_API_KEY, source: 'env' };
   }
 
   // 4. Config file
@@ -40,7 +40,7 @@ export async function resolveCredential(config: Config): Promise<Credential> {
   throw new CLIError(
     'Not authenticated',
     ExitCode.AUTH,
-    'Run `nominal auth login` to authenticate'
+    'Run `polylane auth login` to authenticate'
   );
 }
 

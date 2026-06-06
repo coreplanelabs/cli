@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { getArgBoolean } from '../helpers';
@@ -16,7 +16,7 @@ export const automationCatalogCommand: Command = {
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const full = getArgBoolean(args, 'full') === true;
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.automationsPublicCatalog();
 
     if (full) {

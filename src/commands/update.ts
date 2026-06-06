@@ -27,7 +27,7 @@ function getCurrentVersion(): string {
 
 async function fetchLatest(): Promise<string | null> {
   try {
-    const res = await fetch('https://registry.npmjs.org/@coreplane/nominal/latest', {
+    const res = await fetch('https://registry.npmjs.org/@coreplane/polylane/latest', {
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
@@ -71,8 +71,8 @@ export const updateCommand: Command = {
 
     if (compareVersions(latest, current) > 0) {
       process.stderr.write(`Update available: ${latest}\n`);
-      process.stderr.write(`Run: npm install -g @coreplane/nominal@${latest}\n`);
-      process.stderr.write(`  or: brew upgrade nominal\n`);
+      process.stderr.write(`Run: npm install -g @coreplane/polylane@${latest}\n`);
+      process.stderr.write(`  or: brew upgrade polylane\n`);
     } else {
       process.stderr.write(`Already on the latest version\n`);
     }

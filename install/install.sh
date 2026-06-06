@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# nominal CLI installer for macOS / Linux.
+# polylane CLI installer for macOS / Linux.
 #
-#   curl -fsSL https://nominal.dev/install.sh | bash
+#   curl -fsSL https://polylane.com/install.sh | bash
 #
-# Installs the bundled CLI to ~/.nominal/bin/nominal and (if needed) prints the
+# Installs the bundled CLI to ~/.polylane/bin/polylane and (if needed) prints the
 # line to add to your shell RC to put it on $PATH. Node 18+ must be installed.
 # Override the version or install prefix with env vars:
 #
-#   NOMINAL_VERSION=v0.1.0  curl -fsSL https://nominal.dev/install.sh | bash
-#   NOMINAL_PREFIX=/usr/local/bin curl -fsSL https://nominal.dev/install.sh | sudo bash
+#   POLYLANE_VERSION=v0.1.0  curl -fsSL https://polylane.com/install.sh | bash
+#   POLYLANE_PREFIX=/usr/local/bin curl -fsSL https://polylane.com/install.sh | sudo bash
 
 set -euo pipefail
 
 # --- config -----------------------------------------------------------------
 
 REPO="coreplanelabs/cli"                         # GitHub owner/repo
-BIN_NAME="nominal"
-VERSION="${NOMINAL_VERSION:-latest}"
-PREFIX_DIR="${NOMINAL_PREFIX:-$HOME/.nominal/bin}"
-BUNDLE_ASSET="nominal.mjs"
+BIN_NAME="polylane"
+VERSION="${POLYLANE_VERSION:-latest}"
+PREFIX_DIR="${POLYLANE_PREFIX:-$HOME/.polylane/bin}"
+BUNDLE_ASSET="polylane.mjs"
 
 # --- helpers ----------------------------------------------------------------
 
@@ -66,7 +66,7 @@ if ! curl -fsSL --retry 3 --connect-timeout 10 "$DOWNLOAD_URL" -o "$TMP_FILE"; t
 fi
 
 if ! head -1 "$TMP_FILE" | grep -q '^#!'; then
-  die "downloaded file does not look like a nominal CLI bundle"
+  die "downloaded file does not look like a polylane CLI bundle"
 fi
 
 # --- install ---------------------------------------------------------------
@@ -77,7 +77,7 @@ install -m 0755 "$TMP_FILE" "$TARGET"
 ok "installed $TARGET"
 
 INSTALLED_VERSION="$("$TARGET" --version 2>/dev/null || echo unknown)"
-ok "nominal $INSTALLED_VERSION"
+ok "polylane $INSTALLED_VERSION"
 
 # --- PATH hint -------------------------------------------------------------
 
@@ -100,4 +100,4 @@ case ":$PATH:" in
     ;;
 esac
 
-printf '\nRun \033[1mnominal --help\033[0m to get started.\n'
+printf '\nRun \033[1mpolylane --help\033[0m to get started.\n'

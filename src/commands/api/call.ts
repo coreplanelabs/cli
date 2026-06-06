@@ -2,7 +2,7 @@ import { readFileSync, readSync } from 'node:fs';
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { OPERATIONS, type OperationMeta } from '../../generated/commands';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput, formatList } from '../../output/formatter';
 import { requirePositional, getArgString, parseJsonArg } from '../helpers';
 import { CLIError } from '../../errors/base';
@@ -24,7 +24,7 @@ function collectPathArgs(op: OperationMeta, args: Record<string, unknown>, confi
       throw new CLIError(
         `Missing path parameter --${kebab}`,
         ExitCode.USAGE,
-        `Use \`nominal api describe ${op.operationId}\` for details`
+        `Use \`polylane api describe ${op.operationId}\` for details`
       );
     }
     values.push(value);
@@ -89,7 +89,7 @@ async function resolveBody(args: Record<string, unknown>): Promise<unknown> {
 }
 
 function callMethod(
-  api: NominalAPI,
+  api: PolylaneAPI,
   op: OperationMeta,
   pathArgs: string[],
   body: unknown,
@@ -115,8 +115,8 @@ export const apiCallCommand: Command = {
     { flag: '--query <json>', description: 'Query params as JSON object', type: 'string' },
   ],
   examples: [
-    'nominal api call workspaces.list',
-    'nominal api call anomalies.list --body \'{"kind":"workspace","workspaceId":"ws_xxx","active":true}\'',
+    'polylane api call workspaces.list',
+    'polylane api call anomalies.list --body \'{"kind":"workspace","workspaceId":"ws_xxx","active":true}\'',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const opId = requirePositional(args, 0, 'operation-id');
@@ -125,7 +125,7 @@ export const apiCallCommand: Command = {
       throw new CLIError(
         `Unknown operation: ${opId}`,
         ExitCode.USAGE,
-        `Use \`nominal api list\` to find an operation`
+        `Use \`polylane api list\` to find an operation`
       );
     }
 
@@ -139,7 +139,7 @@ export const apiCallCommand: Command = {
       }
     }
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const pathArgs = collectPathArgs(op, args, config);
     const query = collectQueryArg(op, args);
     const body = await resolveBody(args);

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cut a new release of the nominal CLI.
+# Cut a new release of the polylane CLI.
 #
 #   ./release.sh 0.1.0
 #   ./release.sh               # prompts for version
@@ -71,7 +71,7 @@ git add package.json package-lock.json
 git commit -m "chore: release $TAG"
 
 info "tagging $TAG"
-git tag -a "$TAG" -m "nominal $VERSION"
+git tag -a "$TAG" -m "polylane $VERSION"
 
 info "pushing $BRANCH + $TAG to origin"
 git push origin "$BRANCH"

@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { requireWorkspace, requirePositional, getArgBoolean } from '../helpers';
@@ -18,7 +18,7 @@ export const skillDocsCommand: Command = {
     const id = requirePositional(args, 0, 'skill-id');
     const full = getArgBoolean(args, 'full') === true;
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.skillsDocumentsList(workspaceId, id);
 
     if (full) {

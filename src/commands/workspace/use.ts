@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { writeConfigFile } from '../../config/loader';
 import { requirePositional } from '../helpers';
 
@@ -8,10 +8,10 @@ export const workspaceUseCommand: Command = {
   name: 'workspace use',
   description: 'Set the default workspace for future commands',
   positional: [{ name: 'workspace-id', description: 'Workspace ID or slug' }],
-  examples: ['nominal workspace use ws_xxx', 'nominal workspace use acme-inc'],
+  examples: ['polylane workspace use ws_xxx', 'polylane workspace use acme-inc'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const raw = requirePositional(args, 0, 'workspace-id');
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
 
     let workspace;
     if (raw.startsWith('ws_')) {

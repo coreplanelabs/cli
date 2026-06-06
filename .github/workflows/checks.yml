@@ -30,7 +30,7 @@ jobs:
       - name: Generate client from OpenAPI spec
         run: npm run codegen
         env:
-          NOMINAL_API_DOMAIN: ${{ secrets.NOMINAL_API_DOMAIN }}
+          POLYLANE_API_DOMAIN: ${{ secrets.POLYLANE_API_DOMAIN }}
 
       - name: Typecheck
         run: npm run typecheck
@@ -44,13 +44,13 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NOMINAL_API_DOMAIN: ${{ secrets.NOMINAL_API_DOMAIN }}
-          NOMINAL_OAUTH_CLIENT_ID: ${{ secrets.NOMINAL_OAUTH_CLIENT_ID }}
-          NOMINAL_OAUTH_CLIENT_SECRET: ${{ secrets.NOMINAL_OAUTH_CLIENT_SECRET }}
+          POLYLANE_API_DOMAIN: ${{ secrets.POLYLANE_API_DOMAIN }}
+          POLYLANE_OAUTH_CLIENT_ID: ${{ secrets.POLYLANE_OAUTH_CLIENT_ID }}
+          POLYLANE_OAUTH_CLIENT_SECRET: ${{ secrets.POLYLANE_OAUTH_CLIENT_SECRET }}
 
       - name: Verify build output
         run: |
-          test -f dist/nominal.mjs
-          test -x dist/nominal.mjs
-          ./dist/nominal.mjs --version
-          ./dist/nominal.mjs --help | head -5
+          test -f dist/polylane.mjs
+          test -x dist/polylane.mjs
+          ./dist/polylane.mjs --version
+          ./dist/polylane.mjs --help | head -5

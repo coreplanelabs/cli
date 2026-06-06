@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, getArgBoolean, promptIfMissing } from '../helpers';
 import { CLIError } from '../../errors/base';
@@ -8,7 +8,7 @@ import { ExitCode } from '../../errors/codes';
 import { openBrowser } from '../../utils/browser';
 import { isInteractive } from '../../utils/env';
 
-type ConnectBody = Parameters<NominalAPI['cloudAccountsConnect']>[0];
+type ConnectBody = Parameters<PolylaneAPI['cloudAccountsConnect']>[0];
 
 async function openOrPrintInstallUrl(config: Config, url: string, label: string, noBrowser: boolean): Promise<void> {
   if (config.output === 'json') {
@@ -49,11 +49,11 @@ export const cloudConnectCommand: Command = {
     { flag: '--no-browser', description: 'AWS / Vercel: print the install URL instead of opening it', type: 'boolean' },
   ],
   examples: [
-    'nominal cloud connect --provider vercel',
-    'nominal cloud connect --provider cloudflare --token <token>',
-    'nominal cloud connect --provider aws --account 123456789012 --region us-east-1 --create-alarms',
-    'nominal cloud connect --provider fly --token <token>',
-    'nominal cloud connect --provider render --api-key <key>',
+    'polylane cloud connect --provider vercel',
+    'polylane cloud connect --provider cloudflare --token <token>',
+    'polylane cloud connect --provider aws --account 123456789012 --region us-east-1 --create-alarms',
+    'polylane cloud connect --provider fly --token <token>',
+    'polylane cloud connect --provider render --api-key <key>',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -65,7 +65,7 @@ export const cloudConnectCommand: Command = {
       '--provider'
     );
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
 
     // Vercel uses an install URL flow (the OAuth callback comes back into the
     // API directly). Generate the URL and open it like integration github.
@@ -114,7 +114,7 @@ export const cloudConnectCommand: Command = {
       await openOrPrintInstallUrl(config, result.url, 'the AWS CloudFormation stack', noBrowser);
       if (!config.quiet) {
         process.stderr.write(
-          '\nAfter the stack finishes deploying, run `nominal cloud list` to see the account.\n'
+          '\nAfter the stack finishes deploying, run `polylane cloud list` to see the account.\n'
         );
       }
       return;

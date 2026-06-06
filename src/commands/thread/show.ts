@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional } from '../helpers';
 import type { Message } from '../../generated/types';
@@ -14,7 +14,7 @@ export const threadShowCommand: Command = {
     const workspaceId = await requireWorkspace(config);
     const threadId = requirePositional(args, 0, 'thread-id');
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const [threadResult, messages] = await Promise.all([
       api.threadsGet(workspaceId, threadId),
       api.messagesList(workspaceId, threadId, { perPage: 100, order: 'asc' }),

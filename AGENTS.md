@@ -4,7 +4,7 @@ Guidance for AI coding assistants working **on** this repo. For guidance on how 
 
 ## Project overview
 
-- **Name:** `@coreplane/nominal` on npm — binary still invoked as `nominal`
+- **Name:** `@coreplane/polylane` on npm — binary still invoked as `polylane`
 - **Type:** Node.js CLI tool (ESM, bundled with esbuild)
 - **Engine:** Node.js 18+ (ships as a single bundled file; dev tooling needs a recent Node)
 - **Language:** TypeScript, strict mode
@@ -14,14 +14,14 @@ Guidance for AI coding assistants working **on** this repo. For guidance on how 
 
 **This CLI is for agents, not humans.**
 
-- Top-level resources are nouns; each has 2–10 agent-oriented verbs. Verbs are tasks agents actually do, not thin wrappers around HTTP methods. For the current resource/verb surface, run `nominal --help`.
-- `nominal --help` stays short (≤ 35 lines). Compact root help is load-bearing.
+- Top-level resources are nouns; each has 2–10 agent-oriented verbs. Verbs are tasks agents actually do, not thin wrappers around HTTP methods. For the current resource/verb surface, run `polylane --help`.
+- `polylane --help` stays short (≤ 35 lines). Compact root help is load-bearing.
 - List commands return **narrow projections** by default (`--full` to opt out).
 - Single-object reads include a `Console: …` / `Next: …` footer surfacing `_html_url` and `_links`.
 - Positional args for "the obvious thing" (IDs, prompts); flags for everything else.
 - JSON when piped, text in TTY; `--output` always overrides.
 - Every error ends with the exact command that fixes it.
-- The full API surface lives under `nominal api call <operationId>` as an escape hatch — wrap an op only when it earns a first-class command.
+- The full API surface lives under `polylane api call <operationId>` as an escape hatch — wrap an op only when it earns a first-class command.
 
 ## Commands (build, lint, test)
 
@@ -45,11 +45,11 @@ npm run test:watch
 # Dev server (loads .env.local if present)
 npm run dev -- <command> [args...]
 
-# Production-style build (codegen + esbuild → dist/nominal.mjs)
+# Production-style build (codegen + esbuild → dist/polylane.mjs)
 npm run build
 ```
 
-A dev build bakes every `NOMINAL_*` env var it sees (from `.env.local` or shell) into the bundle via esbuild `define`. CI publishes use GitHub Actions secrets the same way. Prod checkouts without a `.env.local` ship source defaults.
+A dev build bakes every `POLYLANE_*` env var it sees (from `.env.local` or shell) into the bundle via esbuild `define`. CI publishes use GitHub Actions secrets the same way. Prod checkouts without a `.env.local` ship source defaults.
 
 ## Code style
 
@@ -85,9 +85,9 @@ Throw `CLIError` (`src/errors/base.ts`) for anything user-actionable. Always pas
 throw new CLIError(
   'No workspace set',
   ExitCode.USAGE,
-  'nominal workspace use <id>\n' +
+  'polylane workspace use <id>\n' +
     'or pass --workspace <id>\n' +
-    'or set NOMINAL_WORKSPACE_ID=<id>'
+    'or set POLYLANE_WORKSPACE_ID=<id>'
 );
 ```
 
@@ -101,7 +101,7 @@ Use the output helpers (`src/output/`). Respect `--output`, `--quiet`, `--verbos
 
 ### Testing
 
-Node's built-in test runner with the tsx loader. Co-locate under `test/`. Clear stateful env (`delete process.env.NOMINAL_*`) in `beforeEach` when touching config / auth. Tests deliberately don't load `.env.local` — they verify defaults.
+Node's built-in test runner with the tsx loader. Co-locate under `test/`. Clear stateful env (`delete process.env.POLYLANE_*`) in `beforeEach` when touching config / auth. Tests deliberately don't load `.env.local` — they verify defaults.
 
 ### Git conventions
 
@@ -135,7 +135,7 @@ Inside `src/`:
 - `utils/` — browser open, TTY detection, clack prompts, etc.
 - `generated/` — **auto-generated, do not edit.** Regenerate with `npm run codegen`.
 
-When in doubt, read the tree (`ls -R src/` or `nominal api list`) and follow the conventions of the files already there.
+When in doubt, read the tree (`ls -R src/` or `polylane api list`) and follow the conventions of the files already there.
 
 ## Key patterns
 
@@ -144,7 +144,7 @@ When in doubt, read the tree (`ls -R src/` or `nominal api list`) and follow the
 ```ts
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional } from '../helpers';
 
@@ -156,7 +156,7 @@ export const serviceShowCommand: Command = {
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const id = requirePositional(args, 0, 'service-id');
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     formatOutput(config, await api.cloudInfraNodesGet(workspaceId, id));
   },
 };
@@ -184,11 +184,11 @@ The API returns `_html_url` (console deep link) and `_links` (next-step operatio
 ### Using the generated client
 
 ```ts
-const api = new NominalAPI(config);
+const api = new PolylaneAPI(config);
 await api.<methodName>(...);
 ```
 
-Discover operation names with `nominal api list` or by searching `src/generated/client.ts`. Method names come from the `operationId` with dots / underscores / hyphens collapsed to camelCase.
+Discover operation names with `polylane api list` or by searching `src/generated/client.ts`. Method names come from the `operationId` with dots / underscores / hyphens collapsed to camelCase.
 
 ### Browser-opening flows
 
@@ -218,7 +218,7 @@ if (shouldOpen) openBrowser(url);    // best-effort open
 
 ### Expose a new API endpoint
 
-**Usually no code change needed.** After the spec updates, `npm run codegen` pulls in new operations — they become callable via `nominal api call <operationId>`.
+**Usually no code change needed.** After the spec updates, `npm run codegen` pulls in new operations — they become callable via `polylane api call <operationId>`.
 
 Promote to a first-class command only if any of:
 

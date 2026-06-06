@@ -11,8 +11,8 @@ const CALLBACK_PATH = '/callback';
 const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`;
 const BROWSER_TIMEOUT_MS = 120_000;
 
-export const DEFAULT_CLIENT_ID = process.env.NOMINAL_OAUTH_CLIENT_ID || 'nominal-cli';
-export const DEFAULT_CLIENT_SECRET = process.env.NOMINAL_OAUTH_CLIENT_SECRET || '';
+export const DEFAULT_CLIENT_ID = process.env.POLYLANE_OAUTH_CLIENT_ID || 'polylane-cli';
+export const DEFAULT_CLIENT_SECRET = process.env.POLYLANE_OAUTH_CLIENT_SECRET || '';
 
 // Full set of permission scopes requested by the CLI.
 export const DEFAULT_SCOPES = [
@@ -116,7 +116,7 @@ function renderShell(title: string, accent: string, headline: string, body: stri
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title} | Nominal</title>
+<title>${title} | Polylane</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -214,7 +214,7 @@ p {
 </style>
 </head>
 <body>
-  <div class="wordmark">Nominal</div>
+  <div class="wordmark">Polylane</div>
   <main class="card">
     <div class="icon">${icon}</div>
     <h1>${headline}</h1>
@@ -321,9 +321,9 @@ async function startCallbackServer(expectedState: string): Promise<BrowserFlowRe
 // necessary, and then POSTs to that API endpoint on their behalf.
 //
 // Convention: API lives at api.<root>, console at console.<root>. Override with
-// NOMINAL_CONSOLE_DOMAIN if that ever diverges.
+// POLYLANE_CONSOLE_DOMAIN if that ever diverges.
 function consoleBaseUrl(config: Config): string {
-  const override = process.env.NOMINAL_CONSOLE_DOMAIN;
+  const override = process.env.POLYLANE_CONSOLE_DOMAIN;
   if (override) return `https://${override}`;
   const host = config.domain.replace(/^api\./, 'console.');
   return `https://${host}`;

@@ -12,13 +12,13 @@ export async function ensureAuth(config: Config): Promise<void> {
     throw new CLIError(
       'Not authenticated',
       ExitCode.AUTH,
-      'Run `nominal auth login` to authenticate'
+      'Run `polylane auth login` to authenticate'
     );
   }
 
   throw new CLIError(
     'Not authenticated',
     ExitCode.AUTH,
-    'Run `nominal auth login` to authenticate'
+    'Run `polylane auth login` to authenticate'
   );
 }

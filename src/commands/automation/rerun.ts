@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional } from '../helpers';
 
@@ -16,7 +16,7 @@ export const automationRerunCommand: Command = {
     const workspaceId = await requireWorkspace(config);
     const automationId = requirePositional(args, 0, 'automation-id');
     const executionId = requirePositional(args, 1, 'execution-id');
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const execution = await api.automationsExecutionsRerun({ workspaceId, automationId, executionId });
     formatOutput(config, execution);
   },

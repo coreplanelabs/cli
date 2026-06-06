@@ -4,7 +4,7 @@ import type { CliTelemetryEvent } from './event';
 const DEFAULT_TELEMETRY_TIMEOUT_MS = 2000;
 
 function getEndpoint(config: Config): string {
-  const override = process.env.NOMINAL_TELEMETRY_ENDPOINT;
+  const override = process.env.POLYLANE_TELEMETRY_ENDPOINT;
   if (override) return override;
   return `https://${config.domain}/v1/telemetry/cli`;
 }
@@ -25,7 +25,7 @@ export async function dispatch(config: Config, event: CliTelemetryEvent): Promis
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent': `nominal-cli/${event.cli.version}`,
+        'User-Agent': `polylane-cli/${event.cli.version}`,
         'x-nominal-client': 'cli',
         'x-nominal-client-version': event.cli.version,
       },

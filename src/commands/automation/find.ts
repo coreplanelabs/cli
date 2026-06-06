@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { requireWorkspace, requirePositional, getAllPositional } from '../helpers';
@@ -17,7 +17,7 @@ export const automationFindCommand: Command = {
     requirePositional(args, 0, 'prompt');
     const prompt = getAllPositional(args).join(' ');
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const items = await api.automationsSearch({ workspaceId, prompt });
     const projected = projectItems(items as unknown as Array<Record<string, unknown>>, FIELDS);
 

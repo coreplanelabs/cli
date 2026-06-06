@@ -1,40 +1,40 @@
 ---
-name: nominal-cli
-description: Use `nominal` to investigate incidents, explore cloud infrastructure (logs / metrics / dependency graphs), search code and wikis, save memories, run automations from a catalog, connect observability tools and cloud accounts, and drive threads with the Nominal agent. Use when the user wants to debug a production issue, look up a service, search their codebase, manage integrations, connect a cloud provider, or talk to the Nominal agent from the terminal.
+name: polylane-cli
+description: Use `polylane` to investigate incidents, explore cloud infrastructure (logs / metrics / dependency graphs), search code and wikis, save memories, run automations from a catalog, connect observability tools and cloud accounts, and drive threads with the Polylane agent. Use when the user wants to debug a production issue, look up a service, search their codebase, manage integrations, connect a cloud provider, or talk to the Polylane agent from the terminal.
 ---
 
-# Nominal CLI — Agent Skill Guide
+# Polylane CLI — Agent Skill Guide
 
-`nominal` wraps the Nominal platform with agent-friendly commands. Top-level commands map to tasks an agent actually performs; the full API surface is available under `nominal api` as an escape hatch.
+`polylane` wraps the Polylane platform with agent-friendly commands. Top-level commands map to tasks an agent actually performs; the full API surface is available under `polylane api` as an escape hatch.
 
 ## Prerequisites
 
 ```bash
 # Install (pick one — see README for the full list)
-npm install -g @coreplane/nominal
-# curl -fsSL https://nominal.dev/install.sh | bash
-# brew install coreplanelabs/nominal
+npm install -g @coreplane/polylane
+# curl -fsSL https://polylane.com/install.sh | bash
+# brew install coreplanelabs/polylane
 
 # Pick ONE auth path:
-nominal auth login --api-key sk_xxxxx                 # API key — scripts / CI
-nominal auth login                                    # OAuth browser (PKCE)
-nominal auth login --no-browser                       # OAuth device code (SSH / headless)
-nominal auth signup --email <email> --password <pw>   # bootstrap an account from an agent
+polylane auth login --api-key sk_xxxxx                 # API key — scripts / CI
+polylane auth login                                    # OAuth browser (PKCE)
+polylane auth login --no-browser                       # OAuth device code (SSH / headless)
+polylane auth signup --email <email> --password <pw>   # bootstrap an account from an agent
 
 # Verify
-nominal auth status
+polylane auth status
 ```
 
-**API key** persists to `~/.nominal/config.json`. **OAuth** credentials persist to `~/.nominal/credentials.json` (mode `0600`) and auto-refresh before expiry. **Signup** stores a server-issued session token under the same OAuth credential shape — for long-lived agent access, create an API key right after signup and switch to it.
+**API key** persists to `~/.polylane/config.json`. **OAuth** credentials persist to `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. **Signup** stores a server-issued session token under the same OAuth credential shape — for long-lived agent access, create an API key right after signup and switch to it.
 
-Account-lifecycle operations beyond signup/login (verify email, reset password, update profile, delete account, notification settings) live in the web console. Reach them from the CLI via `nominal api call <op>` if you must.
+Account-lifecycle operations beyond signup/login (verify email, reset password, update profile, delete account, notification settings) live in the web console. Reach them from the CLI via `polylane api call <op>` if you must.
 
 Every workspace-scoped command needs a workspace. Set one once, then forget:
 
 ```bash
-nominal workspace list
-nominal workspace use <workspace-id-or-slug>
-nominal workspace create --name "My Workspace"   # new + makes default
+polylane workspace list
+polylane workspace use <workspace-id-or-slug>
+polylane workspace create --name "My Workspace"   # new + makes default
 ```
 
 ## Discovering commands
@@ -42,18 +42,18 @@ nominal workspace create --name "My Workspace"   # new + makes default
 Help is authoritative — it reflects the installed version.
 
 ```bash
-nominal --help                                  # resource list
-nominal <resource> --help                       # verbs for a resource
-nominal <resource> <verb> --help                # flags + examples for one command
+polylane --help                                  # resource list
+polylane <resource> --help                       # verbs for a resource
+polylane <resource> <verb> --help                # flags + examples for one command
 ```
 
 For anything not yet a first-class command:
 
 ```bash
-nominal api list                                # every operation
-nominal api list --tag <Tag>                    # filter by OpenAPI tag
-nominal api describe <operation-id>             # show its shape
-nominal api call <operation-id> [--body '{...}' | --body-file path]
+polylane api list                                # every operation
+polylane api list --tag <Tag>                    # filter by OpenAPI tag
+polylane api describe <operation-id>             # show its shape
+polylane api call <operation-id> [--body '{...}' | --body-file path]
 ```
 
 ## Agent flags
@@ -85,7 +85,7 @@ Every API response includes:
 The CLI renders them as a footer when showing a single object:
 
 ```
-Console:  https://console.nominal.dev/…
+Console:  https://console.polylane.com/…
 Next:
   <name>      <path>
   …
@@ -101,44 +101,44 @@ In JSON mode they're kept raw. In narrow list tables they're hidden unless inclu
 Combining patterns:
 
 ```bash
-nominal ... --quiet 2>/dev/null                  # silence everything but data
-nominal ... --output json | jq '...'             # pipe clean JSON
+polylane ... --quiet 2>/dev/null                  # silence everything but data
+polylane ... --output json | jq '...'             # pipe clean JSON
 ```
 
 ---
 
 ## Core workflows
 
-The best way to learn a command is `nominal <resource> <verb> --help`. These workflows show the shape of an agent session.
+The best way to learn a command is `polylane <resource> <verb> --help`. These workflows show the shape of an agent session.
 
 ### Onboarding a new account
 
 ```bash
 # 1. Account
-nominal auth signup --email you@example.com
-# or: nominal auth login
+polylane auth signup --email you@example.com
+# or: polylane auth login
 
 # 2. Workspace
-nominal workspace create --name "Acme"
+polylane workspace create --name "Acme"
 
 # 3. Discover what you can connect
-nominal integration catalog                      # all types
-nominal integration catalog --category tool
-nominal integration catalog --category cloud
+polylane integration catalog                      # all types
+polylane integration catalog --category tool
+polylane integration catalog --category cloud
 
 # 4. Connect — each type has its own required flags
-nominal integration connect --type <type>        # see --help for that type
-nominal cloud connect --provider <provider>      # see --help for that provider
+polylane integration connect --type <type>        # see --help for that type
+polylane cloud connect --provider <provider>      # see --help for that provider
 
 # 5. Add automations from templates
-nominal automation catalog
-nominal automation from-template <slug>
+polylane automation catalog
+polylane automation from-template <slug>
 
 # 6. Verify
-nominal integration list
-nominal cloud list
-nominal service list                             # cloud infra discovered from connected accounts
-nominal automation list
+polylane integration list
+polylane cloud list
+polylane service list                             # cloud infra discovered from connected accounts
+polylane automation list
 ```
 
 `integration connect` and `cloud connect` dispatch on `--type` / `--provider`. Some options open a browser for an install URL; others take API credentials directly. Use `--help` on each to see the required flags and optional `--no-browser`.
@@ -146,43 +146,43 @@ nominal automation list
 ### Investigating an incident
 
 ```bash
-nominal anomaly list --active                    # what's currently flagged
-nominal anomaly show <anomaly-id>                # full body + linked incident
-nominal thread list --type incident              # active incident threads
-nominal thread show <thread-id>                  # the incident thread with Console / Next footer
-nominal incident timeline <thread-id>             # who did what, when
-nominal incident note <thread-id> "rolled back deploy ABC"
-nominal incident milestone <thread-id> "Mitigated"
+polylane anomaly list --active                    # what's currently flagged
+polylane anomaly show <anomaly-id>                # full body + linked incident
+polylane thread list --type incident              # active incident threads
+polylane thread show <thread-id>                  # the incident thread with Console / Next footer
+polylane incident timeline <thread-id>             # who did what, when
+polylane incident note <thread-id> "rolled back deploy ABC"
+polylane incident milestone <thread-id> "Mitigated"
 
 # Drill into services
-nominal service find "<query>"
-nominal service logs <service-id> --since 1h --grep error
-nominal service metrics <service-id> --metric <name> --since 1h
-nominal service graph <service-id> --direction both --depth 1
+polylane service find "<query>"
+polylane service logs <service-id> --since 1h --grep error
+polylane service metrics <service-id> --metric <name> --since 1h
+polylane service graph <service-id> --direction both --depth 1
 
 # Search code and docs
-nominal repo find "<query>"
-nominal repo grep <owner/repo> "<regex>"
-nominal wiki find "<query>"
+polylane repo find "<query>"
+polylane repo grep <owner/repo> "<regex>"
+polylane wiki find "<query>"
 
 # Save what you learned
-nominal memory save "<finding>"
+polylane memory save "<finding>"
 ```
 
 ### Talking to the agent
 
 ```bash
 # Start a thread (blocking — returns the full reply)
-nominal thread ask "<prompt>" [--context <comma-separated-ids>]
+polylane thread ask "<prompt>" [--context <comma-separated-ids>]
 
 # Start a thread (streaming — tokens stream to stdout)
-nominal thread ask "<prompt>" --stream
+polylane thread ask "<prompt>" --stream
 
 # Fire-and-forget — returns 202, poll later
-TID=$(nominal thread ask "<prompt>" --no-wait --output json --quiet | jq -r '.id')
+TID=$(polylane thread ask "<prompt>" --no-wait --output json --quiet | jq -r '.id')
 
 # Follow up
-nominal thread continue <thread-id> "<prompt>"
+polylane thread continue <thread-id> "<prompt>"
 ```
 
 Attach resources as context by passing their IDs — the CLI infers the resource type from the ID prefix.
@@ -190,17 +190,17 @@ Attach resources as context by passing their IDs — the CLI infers the resource
 ### Automations
 
 ```bash
-nominal automation catalog                       # browse templates
-nominal automation from-template <slug>          # one-command create
+polylane automation catalog                       # browse templates
+polylane automation from-template <slug>          # one-command create
 
-nominal automation list
-nominal automation trigger <automation-id>       # manual run
-nominal automation executions <automation-id>    # list runs
-nominal automation execution <automation-id> <execution-id>   # one run + result
-nominal automation rerun <automation-id> <execution-id>
+polylane automation list
+polylane automation trigger <automation-id>       # manual run
+polylane automation executions <automation-id>    # list runs
+polylane automation execution <automation-id> <execution-id>   # one run + result
+polylane automation rerun <automation-id> <execution-id>
 ```
 
-For custom automations beyond the catalog, use `nominal api call automations.post --body-file automation.json`.
+For custom automations beyond the catalog, use `polylane api call automations.post --body-file automation.json`.
 
 ---
 
@@ -208,35 +208,35 @@ For custom automations beyond the catalog, use `nominal api call automations.pos
 
 ```bash
 # Extract a field
-nominal workspace list --output json | jq '.items[0].id'
+polylane workspace list --output json | jq '.items[0].id'
 
 # Chain: find a service → check its logs
-SVC=$(nominal service find "payment lambda" --output json --quiet | jq -r '.items[0].id')
-nominal service logs "$SVC" --since 1h --grep error
+SVC=$(polylane service find "payment lambda" --output json --quiet | jq -r '.items[0].id')
+polylane service logs "$SVC" --since 1h --grep error
 
 # Fire-and-forget + later poll
-TID=$(nominal thread ask "<prompt>" --no-wait --output json --quiet | jq -r '.id')
-nominal thread show "$TID" --output json | jq '.messages[-1]'
+TID=$(polylane thread ask "<prompt>" --no-wait --output json --quiet | jq -r '.id')
+polylane thread show "$TID" --output json | jq '.messages[-1]'
 
 # Silence everything but data
-nominal anomaly list --quiet 2>/dev/null
+polylane anomaly list --quiet 2>/dev/null
 ```
 
 ---
 
 ## Configuration precedence
 
-**CLI flags > environment variables > `~/.nominal/config.json` > defaults.**
+**CLI flags > environment variables > `~/.polylane/config.json` > defaults.**
 
 | Variable | Purpose |
 |---|---|
-| `NOMINAL_API_DOMAIN` | API hostname (no protocol) |
-| `NOMINAL_API_KEY` | API key |
-| `NOMINAL_WORKSPACE_ID` | Default workspace |
-| `NOMINAL_OUTPUT` | `text` or `json` (overrides TTY auto-detect) |
-| `NOMINAL_TIMEOUT` | Request timeout (seconds) |
-| `NOMINAL_VERBOSE` | Verbose HTTP logs |
-| `NOMINAL_TELEMETRY` | `0` / `false` / `off` disables anonymous telemetry |
+| `POLYLANE_API_DOMAIN` | API hostname (no protocol) |
+| `POLYLANE_API_KEY` | API key |
+| `POLYLANE_WORKSPACE_ID` | Default workspace |
+| `POLYLANE_OUTPUT` | `text` or `json` (overrides TTY auto-detect) |
+| `POLYLANE_TIMEOUT` | Request timeout (seconds) |
+| `POLYLANE_VERBOSE` | Verbose HTTP logs |
+| `POLYLANE_TELEMETRY` | `0` / `false` / `off` disables anonymous telemetry |
 | `DO_NOT_TRACK` | `1` — universal opt-out |
 | `NO_COLOR` | Disable ANSI colours |
 
@@ -244,7 +244,7 @@ nominal anomaly list --quiet 2>/dev/null
 
 ## Telemetry
 
-Anonymous usage telemetry is on by default. `nominal telemetry status` prints exactly what gets sent; `nominal telemetry disable` opts out. Agents running in CI can set `NOMINAL_TELEMETRY=0` or `DO_NOT_TRACK=1` in the environment. Full detail in [PRIVACY.md](../PRIVACY.md).
+Anonymous usage telemetry is on by default. `polylane telemetry status` prints exactly what gets sent; `polylane telemetry disable` opts out. Agents running in CI can set `POLYLANE_TELEMETRY=0` or `DO_NOT_TRACK=1` in the environment. Full detail in [PRIVACY.md](../PRIVACY.md).
 
 ---
 

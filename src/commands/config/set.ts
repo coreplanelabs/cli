@@ -23,8 +23,8 @@ export const configSetCommand: Command = {
     { flag: '--value <value>', description: 'Config value', type: 'string', required: true },
   ],
   examples: [
-    'nominal config set --key domain --value api.nominal.dev',
-    'nominal config set --key workspace_id --value ws_xxxxx',
+    'polylane config set --key domain --value api.polylane.com',
+    'polylane config set --key workspace_id --value ws_xxxxx',
   ],
   async execute(config: Config, _flags, args): Promise<void> {
     const key = requireArg(args, 'key', '--key');

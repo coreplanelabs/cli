@@ -14,7 +14,7 @@ export function showStatusBar(config: Config): void {
   const workspace = config.workspaceId ?? '(none)';
 
   const parts = [
-    `nominal`,
+    `polylane`,
     `domain:${config.domain}`,
     `auth:${authSummary}`,
     `ws:${workspace}`,

@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getAllPositional } from '../helpers';
 
@@ -9,13 +9,13 @@ export const wikiFindCommand: Command = {
   description: 'Search wiki documents across the workspace',
   operationId: 'search.global',
   positional: [{ name: 'prompt', description: 'Search query', variadic: true }],
-  examples: ['nominal wiki find "how does auth work"'],
+  examples: ['polylane wiki find "how does auth work"'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     requirePositional(args, 0, 'prompt');
     const prompt = getAllPositional(args).join(' ');
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const results = await api.searchGlobal({ workspaceId, prompt });
     const docs = results.filter((r) => r.type === 'wiki_document');
 

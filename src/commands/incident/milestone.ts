@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getAllPositional, getArgString } from '../helpers';
 import { CLIError } from '../../errors/base';
@@ -18,8 +18,8 @@ export const incidentMilestoneCommand: Command = {
     { flag: '--body <b>', description: 'Optional markdown body', type: 'string' },
   ],
   examples: [
-    'nominal incident milestone thrd_xxx "Mitigated"',
-    'nominal incident milestone thrd_xxx "Resolved" --body "Root cause fixed in PR #123"',
+    'polylane incident milestone thrd_xxx "Mitigated"',
+    'polylane incident milestone thrd_xxx "Resolved" --body "Root cause fixed in PR #123"',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -29,13 +29,13 @@ export const incidentMilestoneCommand: Command = {
       throw new CLIError(
         'Missing <title>',
         ExitCode.USAGE,
-        'nominal incident milestone <thread-id> "<title>"'
+        'polylane incident milestone <thread-id> "<title>"'
       );
     }
     const title = titleParts.join(' ');
     const body = getArgString(args, 'body');
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.incidentsTimelineCreate({
       workspaceId,
       incidentThreadId: threadId,

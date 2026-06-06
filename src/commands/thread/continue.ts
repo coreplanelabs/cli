@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getAllPositional, getArgBoolean } from '../helpers';
 import { CLIError } from '../../errors/base';
@@ -52,8 +52,8 @@ export const threadContinueCommand: Command = {
     { flag: '--no-wait', description: 'Return immediately after sending', type: 'boolean' },
   ],
   examples: [
-    'nominal thread continue thrd_xxx "and what about staging?"',
-    'nominal thread continue thrd_xxx "expand on point 2" --stream',
+    'polylane thread continue thrd_xxx "and what about staging?"',
+    'polylane thread continue thrd_xxx "expand on point 2" --stream',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -66,7 +66,7 @@ export const threadContinueCommand: Command = {
     const stream = getArgBoolean(args, 'stream') === true;
     const noWait = getArgBoolean(args, 'noWait') === true;
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
 
     if (noWait) {
       await api.messagesPost({ workspaceId, threadId, prompt, wait: false });

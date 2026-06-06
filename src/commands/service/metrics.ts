@@ -1,11 +1,11 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getArgString, parseDuration } from '../helpers';
 import { resolveServiceId } from './id';
 
-type NodeTypeArg = Parameters<NominalAPI['cloudInfraNodesMetricsSummary']>[0]['type'];
+type NodeTypeArg = Parameters<PolylaneAPI['cloudInfraNodesMetricsSummary']>[0]['type'];
 
 export const serviceMetricsCommand: Command = {
   name: 'service metrics',
@@ -13,7 +13,7 @@ export const serviceMetricsCommand: Command = {
   operationId: 'cloud_infra.nodes.metrics.summary',
   positional: [{ name: 'service-id', description: 'Service identifier' }],
   options: [{ flag: '--since <dur>', description: 'Window (default 1h)', type: 'string' }],
-  examples: ['nominal service metrics payments --since 24h'],
+  examples: ['polylane service metrics payments --since 24h'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const raw = requirePositional(args, 0, 'service-id');
@@ -24,7 +24,7 @@ export const serviceMetricsCommand: Command = {
     const to = new Date().toISOString();
     const from = new Date(Date.now() - sinceMs).toISOString();
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const metrics = await api.cloudInfraNodesMetricsSummary(
       {
         workspaceId,

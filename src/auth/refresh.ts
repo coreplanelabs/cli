@@ -33,7 +33,7 @@ export async function refreshToken(
     throw new CLIError(
       `Token refresh failed: ${res.status}`,
       ExitCode.AUTH,
-      'Run `nominal auth login` to re-authenticate'
+      'Run `polylane auth login` to re-authenticate'
     );
   }
 

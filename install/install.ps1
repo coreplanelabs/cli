@@ -1,21 +1,21 @@
-# nominal CLI installer for Windows (PowerShell 5.1+ / 7+).
+# polylane CLI installer for Windows (PowerShell 5.1+ / 7+).
 #
-#   irm https://nominal.dev/install.ps1 | iex
+#   irm https://polylane.com/install.ps1 | iex
 #
-# Installs the bundled CLI to $env:USERPROFILE\.nominal\bin\ and (if needed)
+# Installs the bundled CLI to $env:USERPROFILE\.polylane\bin\ and (if needed)
 # prints the line to add to your PATH. Node 18+ must be installed.
 # Override the version or install prefix with env vars:
 #
-#   $env:NOMINAL_VERSION='v0.1.0'; irm https://nominal.dev/install.ps1 | iex
-#   $env:NOMINAL_PREFIX='C:\tools'; irm https://nominal.dev/install.ps1 | iex
+#   $env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/install.ps1 | iex
+#   $env:POLYLANE_PREFIX='C:\tools'; irm https://polylane.com/install.ps1 | iex
 
 $ErrorActionPreference = 'Stop'
 
 $Repo        = 'coreplanelabs/cli'
-$BinName     = 'nominal'
-$Version     = if ($env:NOMINAL_VERSION) { $env:NOMINAL_VERSION } else { 'latest' }
-$PrefixDir   = if ($env:NOMINAL_PREFIX) { $env:NOMINAL_PREFIX } else { Join-Path $env:USERPROFILE '.nominal\bin' }
-$BundleAsset = 'nominal.mjs'
+$BinName     = 'polylane'
+$Version     = if ($env:POLYLANE_VERSION) { $env:POLYLANE_VERSION } else { 'latest' }
+$PrefixDir   = if ($env:POLYLANE_PREFIX) { $env:POLYLANE_PREFIX } else { Join-Path $env:USERPROFILE '.polylane\bin' }
+$BundleAsset = 'polylane.mjs'
 
 function Die([string]$msg) {
   Write-Host "error: $msg" -ForegroundColor Red
@@ -57,7 +57,7 @@ try {
 $firstLine = Get-Content -Path $TmpFile -TotalCount 1
 if (-not $firstLine.StartsWith('#!')) {
   Remove-Item $TmpFile -Force
-  Die "downloaded file does not look like a nominal CLI bundle"
+  Die "downloaded file does not look like a polylane CLI bundle"
 }
 
 # --- install ---------------------------------------------------------------
@@ -68,7 +68,7 @@ $TargetCmd = Join-Path $PrefixDir "$BinName.cmd"
 
 Move-Item -Force -Path $TmpFile -Destination $TargetMjs
 
-# Shim so `nominal` works from CMD / PowerShell without calling node explicitly.
+# Shim so `polylane` works from CMD / PowerShell without calling node explicitly.
 $cmdShim = @"
 @echo off
 node "%~dp0$BinName.mjs" %*
@@ -78,7 +78,7 @@ Set-Content -Path $TargetCmd -Value $cmdShim -Encoding ASCII
 Ok "installed $TargetMjs"
 try {
   $installedVersion = & $TargetCmd --version 2>$null
-  Ok "nominal $installedVersion"
+  Ok "polylane $installedVersion"
 } catch {
   # non-fatal — user can still run it manually
 }
@@ -96,5 +96,5 @@ if ($userPath -notlike "*$PrefixDir*") {
 
 Write-Host ''
 Write-Host "Run " -NoNewline
-Write-Host "nominal --help" -NoNewline -ForegroundColor White
+Write-Host "polylane --help" -NoNewline -ForegroundColor White
 Write-Host " to get started."

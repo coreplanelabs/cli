@@ -16,7 +16,7 @@ export const authRefreshCommand: Command = {
       throw new CLIError(
         'No OAuth credentials found',
         ExitCode.AUTH,
-        'Run `nominal auth login` to authenticate'
+        'Run `polylane auth login` to authenticate'
       );
     }
     if (config.dryRun) {

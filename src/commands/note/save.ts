@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getAllPositional, getArgString } from '../helpers';
 import { CLIError } from '../../errors/base';
@@ -18,7 +18,7 @@ export const noteSaveCommand: Command = {
     { flag: '--date <yyyy-mm-dd>', description: 'Update the note date as well', type: 'string' },
   ],
   examples: [
-    'nominal note save note_xxx "Deployed v0.2 to prod"',
+    'polylane note save note_xxx "Deployed v0.2 to prod"',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -28,13 +28,13 @@ export const noteSaveCommand: Command = {
       throw new CLIError(
         'Missing <content>',
         ExitCode.USAGE,
-        'nominal note save <note-id> "<markdown>"'
+        'polylane note save <note-id> "<markdown>"'
       );
     }
     const content = contentParts.join(' ');
     const date = getArgString(args, 'date');
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.notesPut(workspaceId, id, {
       content,
       ...(date ? { date } : {}),

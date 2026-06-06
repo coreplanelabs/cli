@@ -1,11 +1,11 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getArgNumber, getArgString } from '../helpers';
 import { resolveServiceId, type Provider } from './id';
 
-type NodeTypeArg = Parameters<NominalAPI['cloudInfraNodesListNeighbours']>[0]['params']['type'];
+type NodeTypeArg = Parameters<PolylaneAPI['cloudInfraNodesListNeighbours']>[0]['params']['type'];
 type NeighborsFn = 'inbound' | 'outbound';
 type Direction = NeighborsFn | 'both';
 
@@ -24,7 +24,7 @@ export const serviceGraphCommand: Command = {
     { flag: '--direction <d>', description: 'inbound|outbound|both (default both)', type: 'string' },
     { flag: '--depth <n>', description: 'Traversal depth (default 1)', type: 'number' },
   ],
-  examples: ['nominal service graph payments --direction outbound --depth 2'],
+  examples: ['polylane service graph payments --direction outbound --depth 2'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const raw = requirePositional(args, 0, 'service-id');
@@ -36,7 +36,7 @@ export const serviceGraphCommand: Command = {
     }
     const depth = getArgNumber(args, 'depth') ?? 1;
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const start = {
       id: service.id,
       provider: service.provider as Provider,

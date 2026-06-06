@@ -25,9 +25,9 @@ export interface RawConfig {
   telemetry?: boolean;
 }
 
-// process.env.NOMINAL_API_DOMAIN is replaced at build time via esbuild define
+// process.env.POLYLANE_API_DOMAIN is replaced at build time via esbuild define
 // when a .env.local override is present; otherwise it's read at runtime.
-export const DEFAULT_DOMAIN = process.env.NOMINAL_API_DOMAIN || 'api.nominal.dev';
+export const DEFAULT_DOMAIN = process.env.POLYLANE_API_DOMAIN || 'api.polylane.com';
 export const DEFAULT_TIMEOUT = 300;
 
 const HOSTNAME_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
@@ -41,7 +41,7 @@ export function validateDomain(v: string): void {
     throw new CLIError(
       `Domain must not include a protocol: got "${v}"`,
       ExitCode.USAGE,
-      'Use the hostname only, e.g. "api.nominal.dev"'
+      'Use the hostname only, e.g. "api.polylane.com"'
     );
   }
   if (!HOSTNAME_PATTERN.test(v)) {

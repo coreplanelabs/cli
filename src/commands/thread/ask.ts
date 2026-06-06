@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getAllPositional, getArgString, getArgBoolean } from '../helpers';
 import { Spinner } from '../../output/progress';
@@ -49,9 +49,9 @@ export const threadAskCommand: Command = {
     { flag: '--no-wait', description: 'Return immediately after sending', type: 'boolean' },
   ],
   examples: [
-    'nominal thread ask "explain how the auth service works"',
-    'nominal thread ask "what does this service do?" --context repo_xxx,wiki_doc_yyy',
-    'nominal thread ask "summarize last week" --stream',
+    'polylane thread ask "explain how the auth service works"',
+    'polylane thread ask "what does this service do?" --context repo_xxx,wiki_doc_yyy',
+    'polylane thread ask "summarize last week" --stream',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -66,9 +66,9 @@ export const threadAskCommand: Command = {
 
     const context = contextIds.map((id) => ({ id, type: inferContextType(id) }));
 
-    type Visibility = Parameters<NominalAPI['threadsPost']>[0]['visibility'];
+    type Visibility = Parameters<PolylaneAPI['threadsPost']>[0]['visibility'];
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const thread = await api.threadsPost({
       workspaceId,
       prompt,

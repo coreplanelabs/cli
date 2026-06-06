@@ -1,11 +1,11 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getArgString, getArgNumber, parseDuration } from '../helpers';
 import { resolveServiceId } from './id';
 
-type NodeTypeArg = Parameters<NominalAPI['cloudInfraNodesLogs']>[0]['type'];
+type NodeTypeArg = Parameters<PolylaneAPI['cloudInfraNodesLogs']>[0]['type'];
 
 export const serviceLogsCommand: Command = {
   name: 'service logs',
@@ -18,8 +18,8 @@ export const serviceLogsCommand: Command = {
     { flag: '--grep <q>', description: 'Full-text search within the logs', type: 'string' },
   ],
   examples: [
-    'nominal service logs payments',
-    'nominal service logs payments --since 24h --grep error',
+    'polylane service logs payments',
+    'polylane service logs payments --since 24h --grep error',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -34,7 +34,7 @@ export const serviceLogsCommand: Command = {
     const now = Math.floor(Date.now() / 1000);
     const from = Math.floor((Date.now() - sinceMs) / 1000);
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.cloudInfraNodesLogs({
       workspaceId,
       id: service.id,

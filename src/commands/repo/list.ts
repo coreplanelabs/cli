@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { requireWorkspace, getArgNumber, getArgBoolean } from '../helpers';
@@ -15,13 +15,13 @@ export const repoListCommand: Command = {
     { flag: '--limit <n>', description: 'Max items (default 20)', type: 'number' },
     { flag: '--full', description: 'Return full objects', type: 'boolean' },
   ],
-  examples: ['nominal repo list'],
+  examples: ['polylane repo list'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const limit = getArgNumber(args, 'limit') ?? 20;
     const full = getArgBoolean(args, 'full') === true;
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.repositoriesList(workspaceId, { perPage: limit });
 
     if (full) {

@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, getArgString, getArgBoolean, promptIfMissing, parseJsonArg } from '../helpers';
 import { CLIError } from '../../errors/base';
@@ -9,7 +9,7 @@ import { openBrowser } from '../../utils/browser';
 import { isInteractive } from '../../utils/env';
 import { promptSelect, promptPassword } from '../../utils/prompt';
 
-type ConnectBody = Parameters<NominalAPI['integrationsConnect']>[0];
+type ConnectBody = Parameters<PolylaneAPI['integrationsConnect']>[0];
 
 async function openOrPrintInstallUrl(config: Config, url: string, label: string, noBrowser: boolean): Promise<void> {
   if (config.output === 'json') {
@@ -53,13 +53,13 @@ export const integrationConnectCommand: Command = {
     { flag: '--no-browser', description: 'GitHub / MCP OAuth: print the URL instead of opening it', type: 'boolean' },
   ],
   examples: [
-    'nominal integration connect --type github',
-    'nominal integration connect --type datadog --site us5.datadoghq.com --api-key ... --app-key ...',
-    'nominal integration connect --type honeycomb --region us --api-key ...',
-    'nominal integration connect --type axiom --region us-east-1 --api-token ...',
-    'nominal integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP"',
-    'nominal integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP" --bearer-token ...',
-    'nominal integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP" --oauth',
+    'polylane integration connect --type github',
+    'polylane integration connect --type datadog --site us5.datadoghq.com --api-key ... --app-key ...',
+    'polylane integration connect --type honeycomb --region us --api-key ...',
+    'polylane integration connect --type axiom --region us-east-1 --api-token ...',
+    'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP"',
+    'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP" --bearer-token ...',
+    'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP" --oauth',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -71,7 +71,7 @@ export const integrationConnectCommand: Command = {
       '--type'
     );
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
 
     // --- GitHub: install-URL flow ---
     if (type === 'github') {
@@ -122,7 +122,7 @@ export const integrationConnectCommand: Command = {
         await openOrPrintInstallUrl(config, result.authorizeUrl, 'the MCP server authorization page', noBrowser);
         if (!config.quiet && config.output !== 'json') {
           process.stderr.write(`\nPending integration: ${result.pendingId}\n`);
-          process.stderr.write('After authorizing, run `nominal integration list` to see the connected server.\n');
+          process.stderr.write('After authorizing, run `polylane integration list` to see the connected server.\n');
         }
         return;
       }
@@ -178,7 +178,7 @@ export const integrationConnectCommand: Command = {
       throw new CLIError(
         `Unknown integration type: ${type}`,
         ExitCode.USAGE,
-        'Use github | datadog | honeycomb | axiom | mcp (see `nominal integration catalog`)'
+        'Use github | datadog | honeycomb | axiom | mcp (see `polylane integration catalog`)'
       );
     }
 

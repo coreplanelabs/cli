@@ -83,7 +83,7 @@ export interface CliTelemetryEvent {
 const SESSION_ID = randomUUID();
 
 function getCliVersion(): string {
-  return process.env.NOMINAL_CLI_VERSION ?? '0.0.0';
+  return process.env.POLYLANE_CLI_VERSION ?? '0.0.0';
 }
 
 function authMethodOf(cred: Credential | null): CliTelemetryEvent['authMethod'] {

@@ -59,36 +59,36 @@ export function loadConfig(flags: GlobalFlags): Config {
 
   const domain =
     flags.domain ??
-    env.NOMINAL_API_DOMAIN ??
+    env.POLYLANE_API_DOMAIN ??
     file.domain ??
     DEFAULT_DOMAIN;
   validateDomain(domain);
 
-  const apiKey = flags.apiKey ?? env.NOMINAL_API_KEY ?? file.api_key;
+  const apiKey = flags.apiKey ?? env.POLYLANE_API_KEY ?? file.api_key;
   if (apiKey !== undefined) validateApiKey(apiKey);
 
-  const workspaceId = flags.workspace ?? env.NOMINAL_WORKSPACE_ID ?? file.workspace_id;
+  const workspaceId = flags.workspace ?? env.POLYLANE_WORKSPACE_ID ?? file.workspace_id;
   if (workspaceId !== undefined) validateWorkspaceId(workspaceId);
 
   const timeout =
-    flags.timeout ?? parseEnvNumber(env.NOMINAL_TIMEOUT) ?? file.timeout ?? DEFAULT_TIMEOUT;
+    flags.timeout ?? parseEnvNumber(env.POLYLANE_TIMEOUT) ?? file.timeout ?? DEFAULT_TIMEOUT;
   validateTimeout(timeout);
 
-  const output = detectOutputFormat(flags.output, env.NOMINAL_OUTPUT, file.output);
+  const output = detectOutputFormat(flags.output, env.POLYLANE_OUTPUT, file.output);
   validateOutput(output);
 
-  const verbose = flags.verbose ?? parseEnvBoolean(env.NOMINAL_VERBOSE) ?? false;
+  const verbose = flags.verbose ?? parseEnvBoolean(env.POLYLANE_VERBOSE) ?? false;
   const quiet = flags.quiet ?? false;
   const noColor = flags.noColor ?? Boolean(env.NO_COLOR);
   const dryRun = flags.dryRun ?? false;
   const nonInteractive = flags.nonInteractive ?? false;
 
-  // Telemetry precedence: DO_NOT_TRACK (universal opt-out) → NOMINAL_TELEMETRY
+  // Telemetry precedence: DO_NOT_TRACK (universal opt-out) → POLYLANE_TELEMETRY
   // env var → config file → default on. No CLI flag; telemetry is a per-install
   // choice, not a per-invocation one.
   const telemetry = ((): boolean => {
     if (parseEnvBoolean(env.DO_NOT_TRACK) === true) return false;
-    const fromEnv = parseEnvBoolean(env.NOMINAL_TELEMETRY);
+    const fromEnv = parseEnvBoolean(env.POLYLANE_TELEMETRY);
     if (fromEnv !== undefined) return fromEnv;
     if (file.telemetry !== undefined) return file.telemetry;
     return true;

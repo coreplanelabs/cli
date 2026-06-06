@@ -5,7 +5,7 @@ import { CLIError } from '../src/errors/base';
 
 describe('validateDomain', () => {
   it('accepts valid hostnames', () => {
-    validateDomain('api.nominal.dev');
+    validateDomain('api.polylane.com');
     validateDomain('localhost');
     validateDomain('api.staging.example.com');
   });

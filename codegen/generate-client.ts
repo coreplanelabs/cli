@@ -11,7 +11,7 @@ export function generateClient(spec: ParsedSpec): string {
   lines.push(`import type * as T from './types';`);
   lines.push('');
 
-  lines.push('export class NominalAPI {');
+  lines.push('export class PolylaneAPI {');
   lines.push('  constructor(private readonly config: Config) {}');
   lines.push('');
 

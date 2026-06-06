@@ -1,7 +1,7 @@
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 
 export type Provider = 'aws' | 'vercel' | 'cloudflare' | 'fly' | 'render' | 'unknown';
 
@@ -47,7 +47,7 @@ export async function resolveServiceId(
   const strict = parseServiceIdStrict(raw);
   if (strict) return strict;
 
-  const api = new NominalAPI(config);
+  const api = new PolylaneAPI(config);
   const matches = await api.cloudInfraNodesSearch({ workspaceId, prompt: raw });
 
   if (matches.length === 0) {

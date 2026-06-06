@@ -7,11 +7,11 @@ function disabledReason(): string {
   if (process.env.DO_NOT_TRACK && process.env.DO_NOT_TRACK !== '0' && process.env.DO_NOT_TRACK !== 'false') {
     return 'DO_NOT_TRACK env var';
   }
-  const v = process.env.NOMINAL_TELEMETRY;
+  const v = process.env.POLYLANE_TELEMETRY;
   if (v !== undefined && (v === '' || v === '0' || v === 'false' || v === 'no')) {
-    return 'NOMINAL_TELEMETRY env var';
+    return 'POLYLANE_TELEMETRY env var';
   }
-  return 'config file (~/.nominal/config.json)';
+  return 'config file (~/.polylane/config.json)';
 }
 
 export const telemetryStatusCommand: Command = {
@@ -22,7 +22,7 @@ export const telemetryStatusCommand: Command = {
       enabled: config.telemetry,
       ...(config.telemetry ? {} : { disabledBy: disabledReason() }),
       installId: getInstallId(),
-      endpoint: process.env.NOMINAL_TELEMETRY_ENDPOINT ?? `https://${config.domain}/v1/telemetry/cli`,
+      endpoint: process.env.POLYLANE_TELEMETRY_ENDPOINT ?? `https://${config.domain}/v1/telemetry/cli`,
       collects: {
         identity: [
           'anonymous install ID (UUID, generated once, not linked to user)',
@@ -63,7 +63,7 @@ export const telemetryStatusCommand: Command = {
         'file paths, stdin contents, command output',
         'full error messages or stack traces (only the category and HTTP status)',
       ],
-      disable: 'nominal telemetry disable',
+      disable: 'polylane telemetry disable',
     });
   },
 };

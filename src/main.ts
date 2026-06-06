@@ -84,7 +84,7 @@ async function run(): Promise<void> {
   const argv = process.argv.slice(2);
 
   if (argv[0] === '--version' || argv[0] === '-v') {
-    process.stdout.write(`nominal ${readVersion()}\n`);
+    process.stdout.write(`polylane ${readVersion()}\n`);
     return;
   }
 
@@ -102,7 +102,7 @@ async function run(): Promise<void> {
 
   const resolved = registry.resolve(commandPath);
   if (!resolved) {
-    // Maybe it's a group path (e.g. `nominal case --help`)
+    // Maybe it's a group path (e.g. `polylane case --help`)
     const node = registry.resolveNode(commandPath);
     if (node && node.children.size > 0) {
       const commands = registry.getSubcommands(node);
@@ -113,7 +113,7 @@ async function run(): Promise<void> {
     }
     const { flags } = parseFlags(argv, [], GLOBAL_OPTIONS);
     const config = loadConfig(flags as GlobalFlags);
-    process.stderr.write(`Unknown command: nominal ${commandPath.join(' ')}\n\n`);
+    process.stderr.write(`Unknown command: polylane ${commandPath.join(' ')}\n\n`);
     await printRootHelp(config.noColor);
     process.exit(ExitCode.USAGE);
   }
@@ -159,9 +159,9 @@ async function run(): Promise<void> {
         throw new CLIError(
           'Not logged in.',
           ExitCode.AUTH,
-          'nominal auth login --api-key sk_xxxxx         (API key)\n' +
-            '        nominal auth login                            (OAuth browser flow)\n' +
-            '        NOMINAL_API_KEY=sk_xxxxx                      (environment variable)'
+          'polylane auth login --api-key sk_xxxxx         (API key)\n' +
+            '        polylane auth login                            (OAuth browser flow)\n' +
+            '        POLYLANE_API_KEY=sk_xxxxx                      (environment variable)'
         );
       }
     }
@@ -221,8 +221,8 @@ function maybeShowTelemetryNotice(config: Config, isTelemetryCommand: boolean): 
   if (isTelemetryCommand) return;
   if (hasShownFirstRunNotice()) return;
   process.stderr.write(
-    'Anonymous usage telemetry is enabled. Run `nominal telemetry status` to see what\n' +
-      'gets sent, or `nominal telemetry disable` to opt out.\n\n'
+    'Anonymous usage telemetry is enabled. Run `polylane telemetry status` to see what\n' +
+      'gets sent, or `polylane telemetry disable` to opt out.\n\n'
   );
   markFirstRunNoticeShown();
 }

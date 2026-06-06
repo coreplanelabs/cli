@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { requireWorkspace, requirePositional, getArgString } from '../helpers';
 
 type Format = 'md' | 'pdf';
@@ -21,7 +21,7 @@ export const threadExportCommand: Command = {
     const format = (getArgString(args, 'format') ?? 'md') as Format;
     const out = getArgString(args, 'out');
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.threadsExport({ workspaceId, id: threadId, format });
 
     const buffer = Buffer.from(result.base64, 'base64');

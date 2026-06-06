@@ -91,7 +91,7 @@ async function buildConnection(
   const headers: Record<string, string> = {
     ...getAuthHeader(cred),
     'x-nominal-client': 'cli',
-    'x-nominal-client-version': process.env.NOMINAL_CLI_VERSION ?? '0.0.0',
+    'x-nominal-client-version': process.env.POLYLANE_CLI_VERSION ?? '0.0.0',
   };
   return { url, headers };
 }

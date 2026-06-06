@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 
 export const authWhoamiCommand: Command = {
@@ -8,7 +8,7 @@ export const authWhoamiCommand: Command = {
   description: 'Show the currently authenticated user',
   operationId: 'auth.whoami',
   async execute(config: Config): Promise<void> {
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const user = await api.authWhoami();
     formatOutput(config, user);
   },

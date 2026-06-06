@@ -1,12 +1,12 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { requireWorkspace, getArgString, getArgNumber, getArgBoolean } from '../helpers';
 import type { Provider } from './id';
 import type { InfrastructureNode } from '../../generated/types';
 
-type NodeType = Parameters<NominalAPI['cloudInfraNodesList']>[0] extends { filters?: { type?: infer T } }
+type NodeType = Parameters<PolylaneAPI['cloudInfraNodesList']>[0] extends { filters?: { type?: infer T } }
   ? T
   : never;
 
@@ -23,12 +23,12 @@ export const serviceListCommand: Command = {
     { flag: '--full', description: 'Return full objects', type: 'boolean' },
   ],
   examples: [
-    'nominal service list --provider aws --limit 50',
-    'nominal service list --type aws.lambda.function',
+    'polylane service list --provider aws --limit 50',
+    'polylane service list --type aws.lambda.function',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
 
     const provider = getArgString(args, 'provider') as Provider | undefined;
     const account = getArgString(args, 'account');

@@ -24,18 +24,18 @@ interface SignupEnvelope {
 
 export const authSignupCommand: Command = {
   name: 'auth signup',
-  description: 'Bootstrap a new Nominal account with email + password',
+  description: 'Bootstrap a new Polylane account with email + password',
   operationId: 'auth.signup',
   options: [
     { flag: '--email <email>', description: 'Email address', type: 'string' },
     { flag: '--password <password>', description: 'Password (prompted if omitted)', type: 'string' },
   ],
   examples: [
-    'nominal auth signup --email agent@example.com --password "$PW"',
-    'nominal auth signup --email agent@example.com   # prompts for password',
+    'polylane auth signup --email agent@example.com --password "$PW"',
+    'polylane auth signup --email agent@example.com   # prompts for password',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
-    intro('Create a Nominal account');
+    intro('Create a Polylane account');
     const email = await promptIfMissing(config, args, 'email', 'Email', '--email');
     const password =
       getArgString(args, 'password') ??
@@ -83,35 +83,35 @@ export const authSignupCommand: Command = {
           `Onboarding (in order):`,
           ``,
           `  1. Create a workspace`,
-          `     nominal workspace create --name "My Workspace"`,
+          `     polylane workspace create --name "My Workspace"`,
           ``,
           `  2. Browse what you can connect`,
-          `     nominal integration catalog`,
+          `     polylane integration catalog`,
           ``,
           `  3. Connect an integration`,
-          `     nominal integration connect --type <type>    # see --help`,
+          `     polylane integration connect --type <type>    # see --help`,
           ``,
           `  4. Connect a cloud account`,
-          `     nominal cloud connect --provider <provider>  # see --help`,
+          `     polylane cloud connect --provider <provider>  # see --help`,
           ``,
           `  5. Add an automation from the catalog`,
-          `     nominal automation catalog`,
-          `     nominal automation from-template <slug>`,
+          `     polylane automation catalog`,
+          `     polylane automation from-template <slug>`,
           ``,
           `  6. Verify what's wired up`,
-          `     nominal integration list`,
-          `     nominal cloud list`,
-          `     nominal service list`,
-          `     nominal automation list`,
+          `     polylane integration list`,
+          `     polylane cloud list`,
+          `     polylane service list`,
+          `     polylane automation list`,
           ``,
           `Once things are connected, try:`,
-          `  nominal thread ask "summarise production"`,
+          `  polylane thread ask "summarise production"`,
         ].join('\n'),
         'Next steps'
       );
       outro('Signed in.');
     } else {
-      outro('Signup accepted but no session returned. Run `nominal auth login` to authenticate.');
+      outro('Signup accepted but no session returned. Run `polylane auth login` to authenticate.');
     }
   },
 };

@@ -135,7 +135,7 @@ function color(s: string, code: string, useColor: boolean): string {
 }
 
 function buildUsage(cmd: Command): string {
-  const parts = [`nominal ${cmd.name}`];
+  const parts = [`polylane ${cmd.name}`];
   for (const p of cmd.positional ?? []) {
     const token = p.required === false ? `[${p.name}]` : `<${p.name}>`;
     parts.push(p.variadic ? `${token}...` : token);
@@ -181,9 +181,9 @@ export function renderRootHelp(
     lines.push(dim(statusMessage));
     lines.push('');
   }
-  lines.push(`${bold('nominal')} — CLI for the Nominal platform`);
+  lines.push(`${bold('polylane')} — CLI for the Polylane platform`);
   lines.push('');
-  lines.push(`${bold('Usage:')} nominal <resource> <command> [options]`);
+  lines.push(`${bold('Usage:')} polylane <resource> <command> [options]`);
   lines.push('');
   lines.push(bold('Resources:'));
 
@@ -197,7 +197,7 @@ export function renderRootHelp(
   lines.push(bold('Global flags:'));
   lines.push(`  ${cyan('--api-key <key>')}        API key`);
   lines.push(`  ${cyan('--workspace <id>')}       Workspace ID`);
-  lines.push(`  ${cyan('--domain <host>')}        API hostname (default: api.nominal.dev)`);
+  lines.push(`  ${cyan('--domain <host>')}        API hostname (default: api.polylane.com)`);
   lines.push(`  ${cyan('--output <text|json>')}   Output format (default: text in TTY, json when piped)`);
   lines.push(`  ${cyan('--verbose')}              Log HTTP requests`);
   lines.push(`  ${cyan('--dry-run')}              Show the request without sending`);
@@ -207,7 +207,7 @@ export function renderRootHelp(
   lines.push('');
   lines.push(bold('Getting help:'));
   lines.push(`  ${dim('Add --help after any command for its options and examples, e.g.')}`);
-  lines.push(`  ${dim('nominal thread ask --help')}`);
+  lines.push(`  ${dim('polylane thread ask --help')}`);
   return lines.join('\n') + '\n';
 }
 
@@ -219,7 +219,7 @@ export function renderGroupHelp(path: string[], commands: Command[], noColor: bo
 
   const lines: string[] = [];
   const prefix = path.join(' ');
-  lines.push(`${bold('Usage:')} nominal ${prefix} <command> [options]`);
+  lines.push(`${bold('Usage:')} polylane ${prefix} <command> [options]`);
   lines.push('');
   lines.push(bold('Commands:'));
   const pad = Math.max(...commands.map((c) => c.name.length)) + 2;
@@ -227,7 +227,7 @@ export function renderGroupHelp(path: string[], commands: Command[], noColor: bo
     lines.push(`  ${cyan(cmd.name.padEnd(pad))} ${dim(cmd.description)}`);
   }
   lines.push('');
-  lines.push(dim('Run nominal <command> --help for full options and examples.'));
+  lines.push(dim('Run polylane <command> --help for full options and examples.'));
   return lines.join('\n') + '\n';
 }
 
@@ -270,7 +270,7 @@ export function renderCommandHelp(cmd: Command, noColor: boolean): string {
   }
 
   lines.push('');
-  lines.push(dim('Run nominal --help for global flags.'));
+  lines.push(dim('Run polylane --help for global flags.'));
   return lines.join('\n') + '\n';
 }
 

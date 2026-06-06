@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional } from '../helpers';
 
@@ -16,7 +16,7 @@ export const artifactShowCommand: Command = {
     const workspaceId = await requireWorkspace(config);
     const threadId = requirePositional(args, 0, 'thread-id');
     const id = requirePositional(args, 1, 'artifact-id');
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.artifactsGet(workspaceId, threadId, id);
     formatOutput(config, result);
   },

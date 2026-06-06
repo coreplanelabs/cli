@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { writeConfigFile } from '../../config/loader';
 import { getArgString, promptIfMissing } from '../helpers';
@@ -16,8 +16,8 @@ export const workspaceCreateCommand: Command = {
     { flag: '--no-default', description: 'Do not set this workspace as default', type: 'boolean' },
   ],
   examples: [
-    'nominal workspace create --name "Acme Inc"',
-    'nominal workspace create --name Acme --slug acme --description "Infra"',
+    'polylane workspace create --name "Acme Inc"',
+    'polylane workspace create --name Acme --slug acme --description "Infra"',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const name = await promptIfMissing(config, args, 'name', 'Workspace name', '--name');
@@ -25,11 +25,11 @@ export const workspaceCreateCommand: Command = {
     const slug = getArgString(args, 'slug');
     const noDefault = args.noDefault === true;
 
-    const body: Parameters<NominalAPI['workspacesPost']>[0] = { name };
+    const body: Parameters<PolylaneAPI['workspacesPost']>[0] = { name };
     if (description !== undefined) body.description = description;
     if (slug !== undefined) body.slug = slug;
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const workspace = await api.workspacesPost(body);
 
     if (!noDefault) {

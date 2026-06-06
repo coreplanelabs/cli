@@ -24,8 +24,8 @@ function loadState(): TelemetryState | null {
 }
 
 // Stable, anonymous per-install ID. Generated once on first invocation and
-// cached in ~/.nominal/telemetry.json. NOT tied to the user; users on the same
-// machine see the same ID, and each fresh `~/.nominal` wipe produces a new one.
+// cached in ~/.polylane/telemetry.json. NOT tied to the user; users on the same
+// machine see the same ID, and each fresh `~/.polylane` wipe produces a new one.
 export function getInstallId(): string {
   const existing = loadState();
   if (existing) return existing.installId;

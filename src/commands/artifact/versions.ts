@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList, formatOutput } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { requireWorkspace, requirePositional, getArgNumber, getArgBoolean } from '../helpers';
@@ -20,8 +20,8 @@ export const artifactVersionsCommand: Command = {
     { flag: '--full', description: 'Return full objects', type: 'boolean' },
   ],
   examples: [
-    'nominal artifact versions thrd_xxx art_xxx',
-    'nominal artifact versions thrd_xxx art_xxx --version 2',
+    'polylane artifact versions thrd_xxx art_xxx',
+    'polylane artifact versions thrd_xxx art_xxx --version 2',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -29,7 +29,7 @@ export const artifactVersionsCommand: Command = {
     const artifactId = requirePositional(args, 1, 'artifact-id');
     const version = getArgNumber(args, 'version');
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
 
     if (version !== undefined) {
       const result = await api.artifactsGetVersion(workspaceId, threadId, artifactId, version);

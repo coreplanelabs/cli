@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getAllPositional, getArgString } from '../helpers';
 
@@ -14,7 +14,7 @@ export const memorySaveCommand: Command = {
     { flag: '--labels <a,b,c>', description: 'Comma-separated labels', type: 'string' },
     { flag: '--source-type <t>', description: 'investigation | change_analysis | observation', type: 'string' },
   ],
-  examples: ['nominal memory save "The auth service uses Redis for sessions"'],
+  examples: ['polylane memory save "The auth service uses Redis for sessions"'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     requirePositional(args, 0, 'content');
@@ -34,7 +34,7 @@ export const memorySaveCommand: Command = {
       | 'observation'
       | undefined;
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.memoriesPost({
       workspaceId,
       title,

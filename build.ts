@@ -16,19 +16,19 @@ async function main(): Promise<void> {
 
   // Step 3: bundle with esbuild
   mkdirSync('dist', { recursive: true });
-  const outfile = join('dist', 'nominal.mjs');
+  const outfile = join('dist', 'polylane.mjs');
 
   const define: Record<string, string> = {
-    'process.env.NOMINAL_CLI_VERSION': JSON.stringify(pkg.version),
+    'process.env.POLYLANE_CLI_VERSION': JSON.stringify(pkg.version),
   };
-  // Bake every NOMINAL_* env var visible at build time into the bundle, so the
+  // Bake every POLYLANE_* env var visible at build time into the bundle, so the
   // produced binary works without needing those vars set at runtime.
   // - Locally: comes from .env.local (gitignored — your dev domain / dev OAuth)
   // - In CI release: comes from GitHub repo secrets exposed in the workflow
   // - Clean checkout with no env: bundle uses the prod fallbacks in source
   const baked: string[] = [];
   for (const [k, v] of Object.entries(process.env)) {
-    if (!k.startsWith('NOMINAL_') || v === undefined) continue;
+    if (!k.startsWith('POLYLANE_') || v === undefined) continue;
     define[`process.env.${k}`] = JSON.stringify(v);
     baked.push(k);
   }
@@ -44,8 +44,8 @@ async function main(): Promise<void> {
     sourcemap: false,
     banner: {
       js: `#!/usr/bin/env node
-import { createRequire as __nominalCreateRequire } from 'node:module';
-const require = __nominalCreateRequire(import.meta.url);`,
+import { createRequire as __polylaneCreateRequire } from 'node:module';
+const require = __polylaneCreateRequire(import.meta.url);`,
     },
     define,
     logLevel: 'error',

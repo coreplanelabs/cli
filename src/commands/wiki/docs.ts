@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { requireWorkspace, requirePositional, getArgBoolean, getArgNumber } from '../helpers';
@@ -22,7 +22,7 @@ export const wikiDocsCommand: Command = {
     const limit = getArgNumber(args, 'limit') ?? 50;
     const full = getArgBoolean(args, 'full') === true;
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.wikisDocsList(workspaceId, wikiId, { perPage: limit });
 
     if (full) {

@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { requireWorkspace, getArgNumber, getArgBoolean } from '../helpers';
@@ -19,7 +19,7 @@ export const cloudListCommand: Command = {
     const workspaceId = await requireWorkspace(config);
     const limit = getArgNumber(args, 'limit') ?? 20;
     const full = getArgBoolean(args, 'full') === true;
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.cloudAccountsList(workspaceId, { perPage: limit });
 
     if (full) {

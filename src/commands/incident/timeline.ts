@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { requireWorkspace, requirePositional, getArgString, getArgNumber, getArgBoolean } from '../helpers';
@@ -20,8 +20,8 @@ export const incidentTimelineCommand: Command = {
     { flag: '--full', description: 'Return full objects', type: 'boolean' },
   ],
   examples: [
-    'nominal incident timeline thrd_xxx',
-    'nominal incident timeline thrd_xxx --types note,milestone',
+    'polylane incident timeline thrd_xxx',
+    'polylane incident timeline thrd_xxx --types note,milestone',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -32,7 +32,7 @@ export const incidentTimelineCommand: Command = {
     const from = getArgNumber(args, 'from');
     const to = getArgNumber(args, 'to');
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.incidentsTimelineList({
       workspaceId,
       incidentThreadId: threadId,

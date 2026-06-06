@@ -10,10 +10,10 @@ export async function requireWorkspace(config: Config): Promise<string> {
   throw new CLIError(
     'No workspace set',
     ExitCode.USAGE,
-    'nominal workspace use <id>                     (set default)\n' +
+    'polylane workspace use <id>                     (set default)\n' +
       '        --workspace <id>                              (one-shot)\n' +
-      '        NOMINAL_WORKSPACE_ID=<id>                     (environment variable)\n' +
-      'List workspaces with: nominal workspace list'
+      '        POLYLANE_WORKSPACE_ID=<id>                     (environment variable)\n' +
+      'List workspaces with: polylane workspace list'
   );
 }
 

@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getAllPositional, getArgString } from '../helpers';
 import { CLIError } from '../../errors/base';
@@ -18,8 +18,8 @@ export const incidentNoteCommand: Command = {
     { flag: '--title <t>', description: 'Optional short title', type: 'string' },
   ],
   examples: [
-    'nominal incident note thrd_xxx "rolled back deploy abc123"',
-    'nominal incident note thrd_xxx --title "Workaround" "increased lambda concurrency to 200"',
+    'polylane incident note thrd_xxx "rolled back deploy abc123"',
+    'polylane incident note thrd_xxx --title "Workaround" "increased lambda concurrency to 200"',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -29,13 +29,13 @@ export const incidentNoteCommand: Command = {
       throw new CLIError(
         'Missing <body>',
         ExitCode.USAGE,
-        'nominal incident note <thread-id> "<markdown body>"'
+        'polylane incident note <thread-id> "<markdown body>"'
       );
     }
     const body = bodyParts.join(' ');
     const title = getArgString(args, 'title');
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.incidentsTimelineCreate({
       workspaceId,
       incidentThreadId: threadId,

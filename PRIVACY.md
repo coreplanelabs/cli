@@ -1,12 +1,12 @@
 # Telemetry & Privacy
 
-The nominal CLI sends anonymous usage telemetry by default. This document is the authoritative source of truth for what we collect, what we don't, and how to opt out. The `nominal telemetry status` command prints the same information live.
+The polylane CLI sends anonymous usage telemetry by default. This document is the authoritative source of truth for what we collect, what we don't, and how to opt out. The `polylane telemetry status` command prints the same information live.
 
 ## Quick links
 
-- **Disable:** `nominal telemetry disable` (persists to `~/.nominal/config.json`)
-- **Inspect:** `nominal telemetry status`
-- **Re-enable:** `nominal telemetry enable`
+- **Disable:** `polylane telemetry disable` (persists to `~/.polylane/config.json`)
+- **Inspect:** `polylane telemetry status`
+- **Re-enable:** `polylane telemetry enable`
 
 ## What we collect
 
@@ -87,7 +87,7 @@ One event per command invocation, fired after the command finishes (success or f
 
 ## Where events go
 
-`POST https://<api-domain>/v1/telemetry/cli`. Override with `NOMINAL_TELEMETRY_ENDPOINT=<url>`.
+`POST https://<api-domain>/v1/telemetry/cli`. Override with `POLYLANE_TELEMETRY_ENDPOINT=<url>`.
 
 Requests are fire-and-forget with a **2-second timeout** and silently fail on network / server errors. Telemetry cannot break a command.
 
@@ -97,22 +97,22 @@ Any of these switches telemetry off:
 
 | Method | Scope |
 |---|---|
-| `nominal telemetry disable` | Persistent — writes `telemetry: false` to `~/.nominal/config.json` |
-| `nominal config set --key telemetry --value false` | Same (alt command) |
-| `NOMINAL_TELEMETRY=0` (or `false`, `no`, `off`) | Per-invocation / per-shell |
+| `polylane telemetry disable` | Persistent — writes `telemetry: false` to `~/.polylane/config.json` |
+| `polylane config set --key telemetry --value false` | Same (alt command) |
+| `POLYLANE_TELEMETRY=0` (or `false`, `no`, `off`) | Per-invocation / per-shell |
 | `DO_NOT_TRACK=1` | Universal — respects the [DO_NOT_TRACK](https://consoledonottrack.com/) standard |
 
-Precedence: `DO_NOT_TRACK` > `NOMINAL_TELEMETRY` env var > config file > default (on).
+Precedence: `DO_NOT_TRACK` > `POLYLANE_TELEMETRY` env var > config file > default (on).
 
 When disabled, no events are sent. The install ID stays on disk (so re-enabling works), but nothing leaves your machine.
 
 ## First-run notice
 
-The first time you run a command with telemetry enabled, the CLI writes a one-line notice to stderr pointing you at this document. It records that the notice has been shown in `~/.nominal/telemetry.json` and does not repeat.
+The first time you run a command with telemetry enabled, the CLI writes a one-line notice to stderr pointing you at this document. It records that the notice has been shown in `~/.polylane/telemetry.json` and does not repeat.
 
 ## State files
 
-- `~/.nominal/telemetry.json` — install ID + first-run notice flag
-- `~/.nominal/config.json` — `telemetry: false` (if opted out)
+- `~/.polylane/telemetry.json` — install ID + first-run notice flag
+- `~/.polylane/config.json` — `telemetry: false` (if opted out)
 
 Both are mode `0600`.

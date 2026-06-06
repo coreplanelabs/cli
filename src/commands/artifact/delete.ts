@@ -1,6 +1,6 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
-import { NominalAPI } from '../../generated/client';
+import { PolylaneAPI } from '../../generated/client';
 import { requireWorkspace, requirePositional, getArgBoolean } from '../helpers';
 import { promptConfirm } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
@@ -31,7 +31,7 @@ export const artifactDeleteCommand: Command = {
       }
     }
 
-    const api = new NominalAPI(config);
+    const api = new PolylaneAPI(config);
     const result = await api.artifactsDelete(workspaceId, threadId, id);
     process.stdout.write(`Deleted ${result.id}\n`);
   },

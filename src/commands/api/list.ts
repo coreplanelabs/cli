@@ -11,7 +11,7 @@ export const apiListCommand: Command = {
     { flag: '--tag <t>', description: 'Filter by tag', type: 'string' },
     { flag: '--query <q>', description: 'Filter by substring match in path or summary', type: 'string' },
   ],
-  examples: ['nominal api list --tag Cases', 'nominal api list --query workspace'],
+  examples: ['polylane api list --tag Cases', 'polylane api list --query workspace'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const tag = getArgString(args, 'tag')?.toLowerCase();
     const query = getArgString(args, 'query')?.toLowerCase();

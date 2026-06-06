@@ -7,12 +7,12 @@ describe('loadConfig', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    delete process.env.NOMINAL_API_DOMAIN;
-    delete process.env.NOMINAL_API_KEY;
-    delete process.env.NOMINAL_WORKSPACE_ID;
-    delete process.env.NOMINAL_TIMEOUT;
-    delete process.env.NOMINAL_OUTPUT;
-    delete process.env.NOMINAL_VERBOSE;
+    delete process.env.POLYLANE_API_DOMAIN;
+    delete process.env.POLYLANE_API_KEY;
+    delete process.env.POLYLANE_WORKSPACE_ID;
+    delete process.env.POLYLANE_TIMEOUT;
+    delete process.env.POLYLANE_OUTPUT;
+    delete process.env.POLYLANE_VERBOSE;
   });
 
   afterEach(() => {
@@ -21,23 +21,23 @@ describe('loadConfig', () => {
 
   it('uses default domain when nothing is set', () => {
     const config = loadConfig({} as GlobalFlags);
-    assert.equal(config.domain, 'api.nominal.dev');
+    assert.equal(config.domain, 'api.polylane.com');
   });
 
   it('prefers env var over default', () => {
-    process.env.NOMINAL_API_DOMAIN = 'api.staging.example.com';
+    process.env.POLYLANE_API_DOMAIN = 'api.staging.example.com';
     const config = loadConfig({} as GlobalFlags);
     assert.equal(config.domain, 'api.staging.example.com');
   });
 
   it('prefers flag over env var', () => {
-    process.env.NOMINAL_API_DOMAIN = 'api.staging.example.com';
+    process.env.POLYLANE_API_DOMAIN = 'api.staging.example.com';
     const config = loadConfig({ domain: 'api.prod.example.com' } as GlobalFlags);
     assert.equal(config.domain, 'api.prod.example.com');
   });
 
   it('parses timeout from env', () => {
-    process.env.NOMINAL_TIMEOUT = '60';
+    process.env.POLYLANE_TIMEOUT = '60';
     const config = loadConfig({} as GlobalFlags);
     assert.equal(config.timeout, 60);
   });

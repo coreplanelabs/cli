@@ -1,6 +1,6 @@
-# Nominal CLI Error Reference
+# Polylane CLI Error Reference
 
-Categories of errors the CLI can emit, their exit codes, and what to do about them. For command-specific error messages, the authoritative source is always `nominal <command> --help` and the command's actual stderr output — this document lists the **shapes** and **categories** an agent can branch on.
+Categories of errors the CLI can emit, their exit codes, and what to do about them. For command-specific error messages, the authoritative source is always `polylane <command> --help` and the command's actual stderr output — this document lists the **shapes** and **categories** an agent can branch on.
 
 - [Exit codes](#exit-codes)
 - [Error envelope](#error-envelope)
@@ -12,7 +12,7 @@ Categories of errors the CLI can emit, their exit codes, and what to do about th
 
 ## Exit codes
 
-Exit codes are part of the CLI contract — they change rarely. Branch on `$?` after any `nominal` call to decide whether to retry, re-auth, or surface to the user.
+Exit codes are part of the CLI contract — they change rarely. Branch on `$?` after any `polylane` call to decide whether to retry, re-auth, or surface to the user.
 
 | Code | Name | Meaning |
 |---|---|---|
@@ -94,18 +94,18 @@ When the current command is workspace-scoped and no workspace is available:
 
 ```
 Error: No workspace set
-Hint: nominal workspace use <id>
+Hint: polylane workspace use <id>
         --workspace <id>
-        NOMINAL_WORKSPACE_ID=<id>
+        POLYLANE_WORKSPACE_ID=<id>
 ```
 
 ### Config / credentials file corruption
 
 | Scenario | Behaviour |
 |---|---|
-| `~/.nominal/config.json` unparseable | Treated as empty config; warning to stderr |
-| `~/.nominal/credentials.json` unparseable | Treated as no credentials; warning to stderr |
-| `~/.nominal/credentials.json` mode not `0600` | Warning printed; file is still read |
+| `~/.polylane/config.json` unparseable | Treated as empty config; warning to stderr |
+| `~/.polylane/credentials.json` unparseable | Treated as no credentials; warning to stderr |
+| `~/.polylane/credentials.json` mode not `0600` | Warning printed; file is still read |
 
 ### Signals
 
@@ -148,9 +148,9 @@ Commands that generate an install / consent URL (`auth login`, `integration conn
 - `auth signup` returns a server-issued session token. The actual expiry is read from the response `Set-Cookie` `Expires=` attribute and honoured by `auth status`.
 - After expiry the next call exits `3` with a hint to re-authenticate (re-run `auth signup` with the same credentials, or switch to an API key).
 
-### Invalid operation IDs for `nominal api call` / `nominal api describe`
+### Invalid operation IDs for `polylane api call` / `polylane api describe`
 
-Exit `2` with `Unknown operation: <id>` and a hint pointing at `nominal api list`.
+Exit `2` with `Unknown operation: <id>` and a hint pointing at `polylane api list`.
 
 ---
 
@@ -158,14 +158,14 @@ Exit `2` with `Unknown operation: <id>` and a hint pointing at `nominal api list
 
 ```bash
 # Show HTTP method/URL and response status
-nominal <command> --verbose
+polylane <command> --verbose
 
 # Preview the request without sending
-nominal <command> --dry-run --verbose
+polylane <command> --dry-run --verbose
 
 # Inspect your live config + auth state
-nominal config show
-nominal auth status
+polylane config show
+polylane auth status
 ```
 
-When reporting a bug, include the `--verbose` trace and the redacted output of `nominal config show`.
+When reporting a bug, include the `--verbose` trace and the redacted output of `polylane config show`.

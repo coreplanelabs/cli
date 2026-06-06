@@ -17,7 +17,7 @@ export function mapApiError(status: number, error: ApiErrorPayload | null): CLIE
       return new CLIError(
         detail || 'Unauthorized - check your API key',
         ExitCode.AUTH,
-        'Run `nominal auth login`'
+        'Run `polylane auth login`'
       );
     case 403:
       return new CLIError(

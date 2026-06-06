@@ -114,7 +114,7 @@ async function apiKeyLogin(config: Config, key: string): Promise<void> {
     ...(wsId ? { workspace_id: wsId } : {}),
   });
 
-  outro(`API key saved to ~/.nominal/config.json`);
+  outro(`API key saved to ~/.polylane/config.json`);
 }
 
 async function oauthLogin(config: Config, useBrowser: boolean): Promise<void> {
@@ -157,24 +157,24 @@ async function oauthLogin(config: Config, useBrowser: boolean): Promise<void> {
     // non-fatal
   }
 
-  outro(`Credentials saved to ~/.nominal/credentials.json`);
+  outro(`Credentials saved to ~/.polylane/credentials.json`);
 }
 
 export const authLoginCommand: Command = {
   name: 'auth login',
-  description: 'Authenticate with Nominal',
+  description: 'Authenticate with Polylane',
   operationId: 'auth.login',
   options: [
     { flag: '--api-key <key>', description: 'Authenticate with an API key directly', type: 'string' },
     { flag: '--no-browser', description: 'Use device code OAuth flow (for SSH/headless)', type: 'boolean' },
   ],
   examples: [
-    'nominal auth login',
-    'nominal auth login --api-key sk_...',
-    'nominal auth login --no-browser',
+    'polylane auth login',
+    'polylane auth login --api-key sk_...',
+    'polylane auth login --no-browser',
   ],
   async execute(config: Config, flags: GlobalFlags, args: Record<string, unknown>): Promise<void> {
-    intro('Nominal login');
+    intro('Polylane login');
 
     const apiKey = typeof args.apiKey === 'string' ? args.apiKey : config.apiKey;
     const noBrowser = args.noBrowser === true || flags.nonInteractive === true;
