@@ -14,7 +14,7 @@ export const anomalyShowCommand: Command = {
     const workspaceId = await requireWorkspace(config);
     const id = requirePositional(args, 0, 'anomaly-id');
     const api = new PolylaneAPI(config);
-    const result = await api.anomaliesGet({ workspaceId, id });
+    const result = await api.anomaliesGet(workspaceId, id);
     formatOutput(config, result);
   },
 };

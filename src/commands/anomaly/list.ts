@@ -47,9 +47,7 @@ export const anomalyListCommand: Command = {
     const full = getArgBoolean(args, 'full') === true;
 
     const api = new PolylaneAPI(config);
-    const result = await api.anomaliesList({
-      kind: 'workspace',
-      workspaceId,
+    const result = await api.anomaliesList(workspaceId, {
       limit,
       ...(severityRaw ? { severity: severityRaw as Severity } : {}),
       ...(getArgBoolean(args, 'active') === true ? { active: true } : {}),
