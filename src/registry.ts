@@ -208,6 +208,8 @@ export function renderRootHelp(
   lines.push(bold('Getting help:'));
   lines.push(`  ${dim('Add --help after any command for its options and examples, e.g.')}`);
   lines.push(`  ${dim('polylane thread ask --help')}`);
+  lines.push('');
+  lines.push(`  ${dim('Docs: https://docs.polylane.com  ·  agent index: https://docs.polylane.com/llms.txt')}`);
   return lines.join('\n') + '\n';
 }
 

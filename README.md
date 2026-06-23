@@ -3,6 +3,8 @@
 <p><strong>Agent-focused CLI for the <a href="https://polylane.com">Polylane</a> platform.</strong><br>
 Investigate incidents, explore cloud infrastructure, search code and wikis, run automations, and drive threads — from any agent or terminal.</p>
 
+<p>📚 <strong>Docs: <a href="https://docs.polylane.com">docs.polylane.com</a></strong> · <a href="https://docs.polylane.com/getting-started">Getting started</a> · <a href="https://docs.polylane.com/llms.txt">llms.txt</a> (agent index)</p>
+
 <p>
   <a href="https://www.npmjs.com/package/@coreplane/polylane"><img src="https://img.shields.io/npm/v/@coreplane/polylane.svg" alt="npm version"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>

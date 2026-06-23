@@ -7,6 +7,7 @@ import { automationExecutionCommand } from './execution';
 import { automationRerunCommand } from './rerun';
 import { automationCatalogCommand } from './catalog';
 import { automationFromTemplateCommand } from './from-template';
+import { automationCreateCommand } from './create';
 
 export const automationCommands = [
   automationListCommand,
@@ -17,5 +18,6 @@ export const automationCommands = [
   automationExecutionCommand,
   automationRerunCommand,
   automationCatalogCommand,
+  automationCreateCommand,
   automationFromTemplateCommand,
 ];

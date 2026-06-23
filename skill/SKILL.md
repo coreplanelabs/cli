@@ -7,6 +7,12 @@ description: Use `polylane` to investigate incidents, explore cloud infrastructu
 
 `polylane` wraps the Polylane platform with agent-friendly commands. Top-level commands map to tasks an agent actually performs; the full API surface is available under `polylane api` as an escape hatch.
 
+> **Full docs: <https://docs.polylane.com>** (model-readable, no auth required). Start at
+> <https://docs.polylane.com/getting-started>, and see <https://docs.polylane.com/llms.txt> for an
+> agent-oriented index. This skill is the quick reference; the docs are the source of truth for
+> concepts, the automation schema (triggers / actions / destinations), and the full API. When a task
+> goes beyond what's below, read the docs rather than guessing.
+
 ## Prerequisites
 
 ```bash
@@ -189,9 +195,16 @@ Attach resources as context by passing their IDs — the CLI infers the resource
 
 ### Automations
 
+An automation is **trigger → instructions → tools → actions**: a typed event fires, an agent runs
+with your instructions and a set of skills (tools), and optional actions apply side-effects (open an
+incident, roll back a deploy, open a PR) — each gated by a `mode` (`smart` = act only when warranted,
+`always`). Full schema and every trigger/action type: <https://docs.polylane.com/fix-and-automate/automations>.
+
 ```bash
-polylane automation catalog                       # browse templates
-polylane automation from-template <slug>          # one-command create
+polylane automation catalog                       # browse prebuilt templates
+polylane automation from-template <slug>          # create from a template
+polylane automation from-template <slug> --pass-count 2 --provider cloudflare
+polylane automation create ...                    # create an ARBITRARY automation (see below)
 
 polylane automation list
 polylane automation trigger <automation-id>       # manual run
@@ -200,7 +213,37 @@ polylane automation execution <automation-id> <execution-id>   # one run + resul
 polylane automation rerun <automation-id> <execution-id>
 ```
 
-For custom automations beyond the catalog, use `polylane api call automations.post --body-file automation.json`.
+**Templates vs. custom.** Use `from-template` when a catalog entry matches as-is. Use
+`automation create` for anything else — a scoped trigger, custom instructions, a combination no
+template covers. `automation create` is a first-class command; you do **not** need `polylane api call`.
+
+```bash
+# Build from flags. --trigger/--action take JSON, or a bare type for filterless ones (e.g. `webhook`).
+# --tool attaches a skill by slug (repeatable); see `polylane skill list`.
+polylane automation create \
+  --name "Triage Datadog alerts" \
+  --trigger '{"type":"alert","filters":{"sources":["datadog"]}}' \
+  --instructions "Correlate the alert with recent deploys and open an incident with the findings." \
+  --tool investigate-errors --tool investigate-latency \
+  --action '{"type":"openIncident","mode":"smart","defaultSeverity":"high"}' \
+  --delay 600000            # wait 10m (e.g. let a deploy settle) before the run
+
+# Or pass a full JSON body (--body-file '-' reads stdin); flags layer on top.
+polylane automation create --body-file automation.json
+
+# Scope a template's broad trigger: crib its body, then narrow the trigger.
+polylane automation catalog --output json                       # find the slug + shape
+polylane automation create --body-file template.json \
+  --trigger '{"type":"cloudflare.deployment","filters":{"environments":["production"]}}'
+```
+
+Run `polylane automation create --help` for every flag. Common trigger types: `alert`, `cron`
+(`{"type":"cron","expression":"0 9 * * *"}`), `webhook`, `github.*` (push/pull_request/deployment/…),
+`{cloudflare,vercel,render,fly}.deployment`, `slack.message`, `polylane.*` (cloud_account.synced,
+codebase.synced, …). Actions include `openIncident`, `rollback{Cloudflare,Vercel,Render,Fly}Deployment`,
+`submitPr`, `commentPr`, `mergePr`, `createIssue`, `autofix`, `handoffTo{Devin,Cursor}`. The
+authoritative, always-current list of types and filters is in the docs and in
+`polylane api describe automations.post`.
 
 ---
 
