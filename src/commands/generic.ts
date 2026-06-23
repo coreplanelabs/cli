@@ -25,7 +25,6 @@ const SAFE_TAG_TO_GROUP: Record<string, string> = {
   Threads: 'thread',
   Messages: 'message',
   Cases: 'case',
-  Wikis: 'wiki',
   Memories: 'memory',
   Integrations: 'integration',
   'Service Catalog': 'service-catalog',

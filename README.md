@@ -1,7 +1,7 @@
 # polylane
 
 <p><strong>Agent-focused CLI for the <a href="https://polylane.com">Polylane</a> platform.</strong><br>
-Investigate incidents, explore cloud infrastructure, search code and wikis, run automations, and drive threads — from any agent or terminal.</p>
+Investigate incidents, explore cloud infrastructure, search code, run automations, and drive threads — from any agent or terminal.</p>
 
 <p>📚 <strong>Docs: <a href="https://docs.polylane.com">docs.polylane.com</a></strong> · <a href="https://docs.polylane.com/getting-started">Getting started</a> · <a href="https://docs.polylane.com/llms.txt">llms.txt</a> (agent index)</p>
 
@@ -18,7 +18,7 @@ Investigate incidents, explore cloud infrastructure, search code and wikis, run 
 - **Triage** anomalies detected across your cloud and observability stack
 - **Drive** incidents — record timeline notes and milestones as you respond
 - **Explore** cloud infrastructure — logs, metrics, dependency graphs
-- **Search** code and wikis
+- **Search** code
 - **Remember** findings
 - **Converse** with the Polylane agent (streaming supported)
 - **Automate** workflows from a catalog

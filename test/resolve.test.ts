@@ -58,7 +58,6 @@ describe('command resolution', () => {
       'telemetry',
       'thread',
       'update',
-      'wiki',
       'workspace',
     ]);
   });

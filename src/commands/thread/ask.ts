@@ -11,14 +11,12 @@ type ContextType =
   | 'cloud_account'
   | 'thread'
   | 'infrastructure_node'
-  | 'wiki_document'
   | 'memory';
 
 function inferContextType(id: string): ContextType {
   if (id.startsWith('repo_')) return 'repository';
   if (id.startsWith('acc_')) return 'cloud_account';
   if (id.startsWith('thrd_')) return 'thread';
-  if (id.startsWith('wiki_doc_')) return 'wiki_document';
   if (id.startsWith('mem_')) return 'memory';
   return 'infrastructure_node';
 }
@@ -50,7 +48,7 @@ export const threadAskCommand: Command = {
   ],
   examples: [
     'polylane thread ask "explain how the auth service works"',
-    'polylane thread ask "what does this service do?" --context repo_xxx,wiki_doc_yyy',
+    'polylane thread ask "what does this service do?" --context repo_xxx,acc_yyy',
     'polylane thread ask "summarize last week" --stream',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {

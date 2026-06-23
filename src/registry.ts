@@ -20,7 +20,6 @@ const RESOURCE_ORDER: Record<string, ResourceGroup> = {
   incident: { name: 'incident', description: 'Incident timeline (notes, milestones)', order: 10 },
   service: { name: 'service', description: 'Cloud infrastructure (nodes, logs, metrics, graph)', order: 20 },
   repo: { name: 'repo', description: 'Repositories and code search', order: 30 },
-  wiki: { name: 'wiki', description: 'Generated wiki documentation', order: 40 },
   memory: { name: 'memory', description: 'Persistent agent memory', order: 50 },
   note: { name: 'note', description: 'Daily and global workspace notes', order: 52 },
   thread: { name: 'thread', description: 'Conversation threads', order: 60 },

@@ -7,7 +7,6 @@ import { anomalyCommands } from './anomaly';
 import { incidentCommands } from './incident';
 import { serviceCommands } from './service';
 import { repoCommands } from './repo';
-import { wikiCommands } from './wiki';
 import { memoryCommands } from './memory';
 import { threadCommands } from './thread';
 import { automationCommands } from './automation';
@@ -32,7 +31,6 @@ export function registerAllCommands(): void {
     ...incidentCommands,
     ...serviceCommands,
     ...repoCommands,
-    ...wikiCommands,
     ...memoryCommands,
     ...threadCommands,
     ...skillCommands,
