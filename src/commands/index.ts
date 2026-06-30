@@ -3,6 +3,7 @@ import { authCommands } from './auth';
 import { configCommands } from './config';
 import { helpCommand } from './help';
 import { updateCommand } from './update';
+import { feedCommands } from './feed';
 import { anomalyCommands } from './anomaly';
 import { incidentCommands } from './incident';
 import { serviceCommands } from './service';
@@ -27,6 +28,7 @@ export function registerAllCommands(): void {
   registered = true;
 
   const all = [
+    ...feedCommands,
     ...anomalyCommands,
     ...incidentCommands,
     ...serviceCommands,

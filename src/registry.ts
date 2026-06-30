@@ -16,6 +16,7 @@ export interface ResourceGroup {
 }
 
 const RESOURCE_ORDER: Record<string, ResourceGroup> = {
+  feed: { name: 'feed', description: 'Workspace activity feed (what just happened)', order: 6 },
   anomaly: { name: 'anomaly', description: 'Detected anomalies (system-flagged issues)', order: 8 },
   incident: { name: 'incident', description: 'Incident timeline (notes, milestones)', order: 10 },
   service: { name: 'service', description: 'Cloud infrastructure (nodes, logs, metrics, graph)', order: 20 },

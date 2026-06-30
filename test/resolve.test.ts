@@ -47,6 +47,7 @@ describe('command resolution', () => {
       'automation',
       'cloud',
       'config',
+      'feed',
       'help',
       'incident',
       'integration',
