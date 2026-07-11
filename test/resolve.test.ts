@@ -6,10 +6,10 @@ import { registerAllCommands } from '../src/commands';
 registerAllCommands();
 
 describe('command resolution', () => {
-  it('resolves anomaly list', () => {
-    const r = registry.resolve(['anomaly', 'list']);
+  it('resolves issue list', () => {
+    const r = registry.resolve(['issue', 'list']);
     assert.ok(r);
-    assert.equal(r.command.name, 'anomaly list');
+    assert.equal(r.command.name, 'issue list');
   });
 
   it('resolves incident note', () => {
@@ -32,14 +32,13 @@ describe('command resolution', () => {
 
   it('returns null for unknown paths', () => {
     assert.equal(registry.resolve(['unknown']), null);
-    assert.equal(registry.resolve(['anomaly', 'nope']), null);
+    assert.equal(registry.resolve(['issue', 'nope']), null);
   });
 
   it('has all resource groups', () => {
     const groups = registry.getResourceGroups();
     const names = groups.map((g) => g.resource).sort();
     assert.deepEqual(names, [
-      'anomaly',
       'api',
       'artifact',
       'auth',
@@ -51,6 +50,7 @@ describe('command resolution', () => {
       'help',
       'incident',
       'integration',
+      'issue',
       'memory',
       'note',
       'repo',
@@ -58,13 +58,14 @@ describe('command resolution', () => {
       'skill',
       'telemetry',
       'thread',
+      'tools',
       'update',
       'workspace',
     ]);
   });
 
-  it('anomaly group has 2 commands', () => {
-    const node = registry.resolveNode(['anomaly']);
+  it('issue group has 2 commands', () => {
+    const node = registry.resolveNode(['issue']);
     assert.ok(node);
     const subs = registry.getSubcommands(node);
     assert.equal(subs.length, 2);

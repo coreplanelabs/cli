@@ -5,12 +5,12 @@ import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { getArgBoolean } from '../helpers';
 
-const FIELDS = ['slug', 'name', 'category', 'triggerType', 'description', '_html_url'];
+const FIELDS = ['slug', 'name', 'category', 'triggerTypes', 'description', '_html_url'];
 
 export const automationCatalogCommand: Command = {
   name: 'automation catalog',
   description: 'List public automation templates',
-  operationId: 'automations.public_catalog',
+  operationId: 'automations.public.catalog',
   options: [
     { flag: '--full', description: 'Return full objects', type: 'boolean' },
   ],
@@ -32,12 +32,12 @@ export const automationCatalogCommand: Command = {
       config,
       { items: projected, count: projected.length },
       {
-        headers: ['Slug', 'Name', 'Category', 'Trigger', 'Description', 'Console'],
+        headers: ['Slug', 'Name', 'Category', 'Triggers', 'Description', 'Console'],
         rows: (item) => [
           String(item.slug ?? ''),
           String(item.name ?? ''),
           String(item.category ?? ''),
-          String(item.triggerType ?? ''),
+          Array.isArray(item.triggerTypes) ? item.triggerTypes.join(',') : '',
           truncate(String(item.description ?? ''), 60),
           String(item._html_url ?? ''),
         ],

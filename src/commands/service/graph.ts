@@ -18,7 +18,7 @@ interface GraphRow extends Record<string, unknown> {
 export const serviceGraphCommand: Command = {
   name: 'service graph',
   description: 'Show services connected to a given service',
-  operationId: 'cloud_infra.nodes.neighbours',
+  operationId: 'cloud_infra.nodes.list_neighbours',
   positional: [{ name: 'service-id', description: 'Service identifier' }],
   options: [
     { flag: '--direction <d>', description: 'inbound|outbound|both (default both)', type: 'string' },

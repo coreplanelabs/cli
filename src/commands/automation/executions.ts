@@ -5,7 +5,7 @@ import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { requireWorkspace, requirePositional, getArgNumber, getArgBoolean } from '../helpers';
 
-const FIELDS = ['id', 'status', 'threadId', 'caseId', 'durationMs', 'triggeredAt'];
+const FIELDS = ['id', 'status', 'summary', 'passThreadIds', 'durationMs', 'triggeredAt'];
 
 export const automationExecutionsCommand: Command = {
   name: 'automation executions',
@@ -37,12 +37,12 @@ export const automationExecutionsCommand: Command = {
         count: result.count,
       },
       {
-        headers: ['ID', 'Status', 'Thread', 'Case', 'Duration (ms)', 'Triggered'],
+        headers: ['ID', 'Status', 'Summary', 'Threads', 'Duration (ms)', 'Triggered'],
         rows: (item) => [
           String(item.id ?? ''),
           String(item.status ?? ''),
-          String(item.threadId ?? ''),
-          String(item.caseId ?? ''),
+          String(item.summary ?? ''),
+          Array.isArray(item.passThreadIds) ? item.passThreadIds.join(',') : '',
           item.durationMs === null || item.durationMs === undefined ? '' : String(item.durationMs),
           String(item.triggeredAt ?? ''),
         ],

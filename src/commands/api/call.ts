@@ -116,7 +116,7 @@ export const apiCallCommand: Command = {
   ],
   examples: [
     'polylane api call workspaces.list',
-    'polylane api call anomalies.list --body \'{"kind":"workspace","workspaceId":"ws_xxx","active":true}\'',
+    'polylane api call issues.list --query \'{"active":true,"severity":"critical"}\'',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const opId = requirePositional(args, 0, 'operation-id');

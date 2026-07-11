@@ -5,7 +5,7 @@ import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { requireWorkspace, requirePositional, getAllPositional } from '../helpers';
 
-const FIELDS = ['id', 'name', 'triggerType', 'disabled', 'source', 'created'];
+const FIELDS = ['id', 'name', 'triggerTypes', 'disabled', 'source', 'created'];
 
 export const automationFindCommand: Command = {
   name: 'automation find',
@@ -25,11 +25,11 @@ export const automationFindCommand: Command = {
       config,
       { items: projected, count: projected.length },
       {
-        headers: ['ID', 'Name', 'Trigger', 'Disabled', 'Source', 'Created'],
+        headers: ['ID', 'Name', 'Triggers', 'Disabled', 'Source', 'Created'],
         rows: (item) => [
           String(item.id ?? ''),
           String(item.name ?? ''),
-          String(item.triggerType ?? ''),
+          Array.isArray(item.triggerTypes) ? item.triggerTypes.join(',') : '',
           item.disabled ? 'yes' : 'no',
           String(item.source ?? ''),
           String(item.created ?? ''),

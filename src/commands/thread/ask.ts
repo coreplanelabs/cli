@@ -21,19 +21,6 @@ function inferContextType(id: string): ContextType {
   return 'infrastructure_node';
 }
 
-function extractText(parts: unknown): string {
-  if (!Array.isArray(parts)) return '';
-  const out: string[] = [];
-  for (const p of parts) {
-    if (p === null || typeof p !== 'object') continue;
-    const rec = p as Record<string, unknown>;
-    if (rec.type === 'text' && typeof rec.text === 'string') {
-      out.push(rec.text);
-    }
-  }
-  return out.join('\n\n');
-}
-
 export const threadAskCommand: Command = {
   name: 'thread ask',
   description: 'Start a new conversation thread and wait for the reply',
@@ -76,7 +63,7 @@ export const threadAskCommand: Command = {
     });
 
     if (noWait) {
-      await api.messagesPost({ workspaceId, threadId: thread.id, prompt, wait: false });
+      await api.messagesPost({ workspaceId, threadId: thread.id, prompt });
       formatOutput(config, { id: thread.id, name: thread.name, status: 'accepted' });
       return;
     }
@@ -104,21 +91,11 @@ export const threadAskCommand: Command = {
     if (spinner) spinner.start();
 
     try {
-      const response = await api.messagesPost({
-        workspaceId,
-        threadId: thread.id,
-        prompt,
-        wait: true,
-      });
+      const result = await sendThreadMessage(config, workspaceId, thread.id, [], prompt);
       if (spinner) spinner.stop();
 
-      if ('status' in response) {
-        formatOutput(config, { id: thread.id, name: thread.name, status: 'accepted' });
-        return;
-      }
-
-      const message = response;
-      const text = extractText(message.parts);
+      const message = result.assistantMessage;
+      const text = extractStreamedText(message);
 
       if (config.output === 'json') {
         formatOutput(config, { thread: { id: thread.id, name: thread.name }, message, text });

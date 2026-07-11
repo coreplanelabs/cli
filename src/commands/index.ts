@@ -4,7 +4,7 @@ import { configCommands } from './config';
 import { helpCommand } from './help';
 import { updateCommand } from './update';
 import { feedCommands } from './feed';
-import { anomalyCommands } from './anomaly';
+import { issueCommands } from './issue';
 import { incidentCommands } from './incident';
 import { serviceCommands } from './service';
 import { repoCommands } from './repo';
@@ -20,6 +20,7 @@ import { skillCommands } from './skill';
 import { noteCommands } from './note';
 import { autofixCommands } from './autofix';
 import { artifactCommands } from './artifact';
+import { toolsCommands } from './tools';
 
 let registered = false;
 
@@ -29,7 +30,7 @@ export function registerAllCommands(): void {
 
   const all = [
     ...feedCommands,
-    ...anomalyCommands,
+    ...issueCommands,
     ...incidentCommands,
     ...serviceCommands,
     ...repoCommands,
@@ -43,6 +44,7 @@ export function registerAllCommands(): void {
     ...noteCommands,
     ...autofixCommands,
     ...artifactCommands,
+    ...toolsCommands,
     ...authCommands,
     ...configCommands,
     ...apiCommands,

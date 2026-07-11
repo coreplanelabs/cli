@@ -15,10 +15,11 @@ Investigate incidents, explore cloud infrastructure, search code, run automation
 
 `polylane` is designed to be driven by AI agents. Top-level commands map to the tasks an agent actually performs:
 
-- **Triage** anomalies detected across your cloud and observability stack
+- **Triage** issues — anomalies and alerts detected across your cloud and observability stack
 - **Drive** incidents — record timeline notes and milestones as you respond
 - **Explore** cloud infrastructure — logs, metrics, dependency graphs
 - **Search** code
+- **Run** the platform's agent tools directly (`tools search` / `tools run` / `tools code`)
 - **Remember** findings
 - **Converse** with the Polylane agent (streaming supported)
 - **Automate** workflows from a catalog
@@ -76,10 +77,11 @@ polylane integration connect --type <type>        # see `polylane integration co
 polylane cloud connect --provider <provider>      # see `polylane cloud connect --help`
 
 # 4. Work
-polylane anomaly list --active                    # what the system is flagging
+polylane issue list --active                      # what the system is flagging
 polylane thread list --type incident              # incident threads
 polylane incident note <thread-id> "rolled back deploy"
 polylane service logs <service> --since 1h --grep error
+polylane tools run findNodes --params '{"query":"api"}'
 polylane thread ask "<prompt>" --stream
 polylane memory save "<finding>"
 ```
@@ -92,7 +94,7 @@ For the full API surface not yet exposed as first-class commands:
 
 ```bash
 polylane api list                     # browse every operation
-polylane api list --tag Anomalies     # filter by tag
+polylane api list --tag Issues        # filter by tag
 polylane api describe <operation-id>  # show its shape
 polylane api call <operation-id> [--body '{...}' | --body-file path]
 ```

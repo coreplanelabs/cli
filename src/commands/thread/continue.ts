@@ -26,19 +26,6 @@ function toUIMessage(m: Message): UIMessage {
   return { id: m.id, role: m.role, parts };
 }
 
-function extractText(parts: unknown): string {
-  if (!Array.isArray(parts)) return '';
-  const out: string[] = [];
-  for (const p of parts) {
-    if (p === null || typeof p !== 'object') continue;
-    const rec = p as Record<string, unknown>;
-    if (rec.type === 'text' && typeof rec.text === 'string') {
-      out.push(rec.text);
-    }
-  }
-  return out.join('\n\n');
-}
-
 export const threadContinueCommand: Command = {
   name: 'thread continue',
   description: 'Send a message to an existing thread and wait for the reply',
@@ -69,7 +56,7 @@ export const threadContinueCommand: Command = {
     const api = new PolylaneAPI(config);
 
     if (noWait) {
-      await api.messagesPost({ workspaceId, threadId, prompt, wait: false });
+      await api.messagesPost({ workspaceId, threadId, prompt });
       formatOutput(config, { id: threadId, status: 'accepted' });
       return;
     }
@@ -100,21 +87,17 @@ export const threadContinueCommand: Command = {
     if (spinner) spinner.start();
 
     try {
-      const response = await api.messagesPost({
-        workspaceId,
-        threadId,
-        prompt,
-        wait: true,
+      const existing = await api.messagesList(workspaceId, threadId, {
+        perPage: 100,
+        order: 'asc',
       });
+      const history = existing.items.map((m) => toUIMessage(m as unknown as Message));
+
+      const result = await sendThreadMessage(config, workspaceId, threadId, history, prompt);
       if (spinner) spinner.stop();
 
-      if ('status' in response) {
-        formatOutput(config, { id: threadId, status: 'accepted' });
-        return;
-      }
-
-      const message = response;
-      const text = extractText(message.parts);
+      const message = result.assistantMessage;
+      const text = extractStreamedText(message);
 
       if (config.output === 'json') {
         formatOutput(config, { thread: { id: threadId }, message, text });

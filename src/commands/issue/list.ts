@@ -7,17 +7,20 @@ import { requireWorkspace, getArgString, getArgNumber, getArgBoolean } from '../
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 
-const FIELDS = ['id', 'severity', 'title', 'resourceKind', 'resourceId', 'detectedAt', 'incidentThreadId'];
+const FIELDS = ['id', 'severity', 'status', 'title', 'resourceKind', 'resourceId', 'detectedAt', 'incidentThreadId'];
 const VALID_SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const;
 type Severity = (typeof VALID_SEVERITIES)[number];
+const VALID_STATUSES = ['new', 'triaging', 'incident', 'no_incident', 'failed', 'triage_skipped'] as const;
+type Status = (typeof VALID_STATUSES)[number];
 
-export const anomalyListCommand: Command = {
-  name: 'anomaly list',
-  description: 'List anomalies (system-detected issues)',
-  operationId: 'anomalies.list',
+export const issueListCommand: Command = {
+  name: 'issue list',
+  description: 'List issues (detected anomalies and received alerts)',
+  operationId: 'issues.list',
   options: [
     { flag: '--severity <s>', description: 'critical | high | medium | low | info', type: 'string' },
-    { flag: '--active', description: 'Only currently active (unresolved) anomalies', type: 'boolean' },
+    { flag: '--status <s>', description: VALID_STATUSES.join(' | '), type: 'string' },
+    { flag: '--active', description: 'Only currently active (unresolved) issues', type: 'boolean' },
     { flag: '--since <ms>', description: 'Detected at or after (unix ms)', type: 'number' },
     { flag: '--until <ms>', description: 'Detected at or before (unix ms)', type: 'number' },
     { flag: '--provider <p>', description: 'Cloud provider (aws, gcp, …)', type: 'string' },
@@ -28,9 +31,10 @@ export const anomalyListCommand: Command = {
     { flag: '--full', description: 'Return full objects', type: 'boolean' },
   ],
   examples: [
-    'polylane anomaly list',
-    'polylane anomaly list --active --severity critical',
-    'polylane anomaly list --provider aws --account 123456789012',
+    'polylane issue list',
+    'polylane issue list --active --severity critical',
+    'polylane issue list --status incident',
+    'polylane issue list --provider aws --account 123456789012',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -42,14 +46,23 @@ export const anomalyListCommand: Command = {
         `Must be one of: ${VALID_SEVERITIES.join(', ')}`
       );
     }
+    const statusRaw = getArgString(args, 'status');
+    if (statusRaw && !VALID_STATUSES.includes(statusRaw as Status)) {
+      throw new CLIError(
+        `Invalid --status: ${statusRaw}`,
+        ExitCode.USAGE,
+        `Must be one of: ${VALID_STATUSES.join(', ')}`
+      );
+    }
 
     const limit = getArgNumber(args, 'limit') ?? 20;
     const full = getArgBoolean(args, 'full') === true;
 
     const api = new PolylaneAPI(config);
-    const result = await api.anomaliesList(workspaceId, {
+    const result = await api.issuesList(workspaceId, {
       limit,
       ...(severityRaw ? { severity: severityRaw as Severity } : {}),
+      ...(statusRaw ? { status: statusRaw as Status } : {}),
       ...(getArgBoolean(args, 'active') === true ? { active: true } : {}),
       ...(getArgNumber(args, 'since') !== undefined ? { since: getArgNumber(args, 'since') } : {}),
       ...(getArgNumber(args, 'until') !== undefined ? { until: getArgNumber(args, 'until') } : {}),
@@ -71,10 +84,11 @@ export const anomalyListCommand: Command = {
         count: result.count,
       },
       {
-        headers: ['ID', 'Severity', 'Title', 'Kind', 'Resource', 'Detected', 'Incident'],
+        headers: ['ID', 'Severity', 'Status', 'Title', 'Kind', 'Resource', 'Detected', 'Incident'],
         rows: (item) => [
           String(item.id ?? ''),
           String(item.severity ?? ''),
+          String(item.status ?? ''),
           truncate(String(item.title ?? ''), 50),
           String(item.resourceKind ?? ''),
           truncate(String(item.resourceId ?? ''), 40),

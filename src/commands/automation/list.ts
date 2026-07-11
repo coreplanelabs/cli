@@ -5,7 +5,7 @@ import { formatList } from '../../output/formatter';
 import { projectItems } from '../../output/project';
 import { requireWorkspace, getArgNumber, getArgBoolean } from '../helpers';
 
-const FIELDS = ['id', 'name', 'triggerType', 'disabled', 'source', 'created'];
+const FIELDS = ['id', 'name', 'triggerTypes', 'disabled', 'source', 'created'];
 
 export const automationListCommand: Command = {
   name: 'automation list',
@@ -35,11 +35,11 @@ export const automationListCommand: Command = {
         count: result.count,
       },
       {
-        headers: ['ID', 'Name', 'Trigger', 'Disabled', 'Source', 'Created'],
+        headers: ['ID', 'Name', 'Triggers', 'Disabled', 'Source', 'Created'],
         rows: (item) => [
           String(item.id ?? ''),
           truncate(String(item.name ?? ''), 40),
-          String(item.triggerType ?? ''),
+          Array.isArray(item.triggerTypes) ? item.triggerTypes.join(',') : '',
           item.disabled ? 'yes' : 'no',
           String(item.source ?? ''),
           String(item.created ?? ''),

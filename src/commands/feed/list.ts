@@ -23,6 +23,9 @@ const VALID_CATEGORIES = [
   'deploy',
   'change',
   'release',
+  'alert',
+  'issue',
+  'digest',
 ] as const;
 type Category = (typeof VALID_CATEGORIES)[number];
 

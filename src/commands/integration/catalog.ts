@@ -10,7 +10,7 @@ const FIELDS = ['type', 'category', 'subcategory', 'name', 'comingSoon', '_html_
 export const integrationCatalogCommand: Command = {
   name: 'integration catalog',
   description: 'Browse available integrations and cloud providers',
-  operationId: 'integrations.public_catalog',
+  operationId: 'integrations.public.catalog',
   options: [
     { flag: '--category <cat>', description: 'Filter by category: tool | cloud', type: 'string' },
     { flag: '--full', description: 'Return full objects', type: 'boolean' },

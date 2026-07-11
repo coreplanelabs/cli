@@ -152,8 +152,8 @@ polylane automation list
 ### Investigating an incident
 
 ```bash
-polylane anomaly list --active                    # what's currently flagged
-polylane anomaly show <anomaly-id>                # full body + linked incident
+polylane issue list --active                      # what's currently flagged
+polylane issue show <issue-id>                    # full body + linked incident
 polylane thread list --type incident              # active incident threads
 polylane thread show <thread-id>                  # the incident thread with Console / Next footer
 polylane incident timeline <thread-id>             # who did what, when
@@ -173,6 +173,26 @@ polylane repo grep <owner/repo> "<regex>"
 # Save what you learned
 polylane memory save "<finding>"
 ```
+
+### Running agent tools directly
+
+Polylane exposes the same tools its own agent uses — observability queries across every connected provider, infra-graph traversal, code and change-record search, deployments, audit logs. Discover them, then run them, without opening a thread.
+
+```bash
+# Discover tools available to this workspace (filtered to your credential's scopes)
+polylane tools search                              # browse everything
+polylane tools search "cloudflare logs" --full     # keyword search + full JSON schemas
+
+# Run one tool by name (args as a JSON object matching its schema)
+polylane tools run findNodes --params '{"query":"api"}'
+polylane tools run cloudflareRunTelemetryQuery --params '{"account":"...","dataset":"..."}'
+
+# Chain several tools in one call
+polylane tools code 'async () => { const n = await tools.findNodes({ query: "api" }); return n; }'
+polylane tools code --file query.ts
+```
+
+Read-only by default. Write-capable tools need a key/token with the `agent_tools:write` scope plus the `--write` flag; each write is screened by a safety model.
 
 ### Talking to the agent
 
@@ -261,7 +281,7 @@ TID=$(polylane thread ask "<prompt>" --no-wait --output json --quiet | jq -r '.i
 polylane thread show "$TID" --output json | jq '.messages[-1]'
 
 # Silence everything but data
-polylane anomaly list --quiet 2>/dev/null
+polylane issue list --quiet 2>/dev/null
 ```
 
 ---

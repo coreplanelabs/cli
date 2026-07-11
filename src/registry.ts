@@ -17,10 +17,11 @@ export interface ResourceGroup {
 
 const RESOURCE_ORDER: Record<string, ResourceGroup> = {
   feed: { name: 'feed', description: 'Workspace activity feed (what just happened)', order: 6 },
-  anomaly: { name: 'anomaly', description: 'Detected anomalies (system-flagged issues)', order: 8 },
+  issue: { name: 'issue', description: 'Detected issues (anomalies + alerts)', order: 8 },
   incident: { name: 'incident', description: 'Incident timeline (notes, milestones)', order: 10 },
   service: { name: 'service', description: 'Cloud infrastructure (nodes, logs, metrics, graph)', order: 20 },
   repo: { name: 'repo', description: 'Repositories and code search', order: 30 },
+  tools: { name: 'tools', description: 'Run Polylane agent tools (observability, infra graph, code search)', order: 40 },
   memory: { name: 'memory', description: 'Persistent agent memory', order: 50 },
   note: { name: 'note', description: 'Daily and global workspace notes', order: 52 },
   thread: { name: 'thread', description: 'Conversation threads', order: 60 },
