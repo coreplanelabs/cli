@@ -33,17 +33,20 @@ async function openOrPrintInstallUrl(config: Config, url: string, label: string,
 
 export const cloudConnectCommand: Command = {
   name: 'cloud connect',
-  description: 'Connect a cloud account (aws | cloudflare | fly | render | vercel)',
+  description: 'Connect a cloud account (aws | cloudflare | fly | planetscale | render | vercel)',
   operationId: 'cloud_accounts.connect',
   options: [
-    { flag: '--provider <p>', description: 'aws | cloudflare | fly | render | vercel', type: 'string' },
+    { flag: '--provider <p>', description: 'aws | cloudflare | fly | planetscale | render | vercel', type: 'string' },
     // AWS
     { flag: '--account <id>', description: 'AWS 12-digit account ID', type: 'string' },
     { flag: '--region <region>', description: 'AWS region (e.g. us-east-1)', type: 'string' },
     { flag: '--create-alarms', description: 'AWS: create monitoring alarms', type: 'boolean' },
     { flag: '--subscribe-alarms', description: 'AWS: subscribe to existing alarms', type: 'boolean' },
-    // Cloudflare / Fly
-    { flag: '--token <token>', description: 'Cloudflare API token or Fly token', type: 'string' },
+    // Cloudflare / Fly / PlanetScale
+    { flag: '--token <token>', description: 'Cloudflare API token, Fly token, or PlanetScale service token', type: 'string' },
+    // PlanetScale
+    { flag: '--token-id <id>', description: 'PlanetScale service token ID', type: 'string' },
+    { flag: '--organization <org>', description: 'PlanetScale organization', type: 'string' },
     // Render
     { flag: '--api-key <key>', description: 'Render API key', type: 'string' },
     { flag: '--no-browser', description: 'AWS / Vercel: print the install URL instead of opening it', type: 'boolean' },
@@ -54,6 +57,7 @@ export const cloudConnectCommand: Command = {
     'polylane cloud connect --provider aws --account 123456789012 --region us-east-1 --create-alarms',
     'polylane cloud connect --provider fly --token <token>',
     'polylane cloud connect --provider render --api-key <key>',
+    'polylane cloud connect --provider planetscale --token-id <id> --token <token> --organization <org>',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -61,7 +65,7 @@ export const cloudConnectCommand: Command = {
       config,
       args,
       'provider',
-      'Provider (aws | cloudflare | fly | render | vercel)',
+      'Provider (aws | cloudflare | fly | planetscale | render | vercel)',
       '--provider'
     );
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
@@ -98,11 +102,16 @@ export const cloudConnectCommand: Command = {
     } else if (provider === 'render') {
       const apiKey = await promptIfMissing(config, args, 'apiKey', 'Render API key', '--api-key');
       body = { workspaceId, provider: 'render', apiKey };
+    } else if (provider === 'planetscale') {
+      const tokenId = await promptIfMissing(config, args, 'tokenId', 'PlanetScale service token ID', '--token-id');
+      const token = await promptIfMissing(config, args, 'token', 'PlanetScale service token', '--token');
+      const organization = await promptIfMissing(config, args, 'organization', 'PlanetScale organization', '--organization');
+      body = { workspaceId, provider: 'planetscale', tokenId, token, organization };
     } else {
       throw new CLIError(
         `Unknown provider: ${provider}`,
         ExitCode.USAGE,
-        'Use aws | cloudflare | fly | render | vercel'
+        'Use aws | cloudflare | fly | planetscale | render | vercel'
       );
     }
 

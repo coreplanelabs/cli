@@ -1,9 +1,9 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { PolylaneAPI } from '../../generated/client';
-import { formatOutput } from '../../output/formatter';
-import { requireWorkspace, requirePositional, getArgString, getArgNumber, parseDuration } from '../helpers';
-import { resolveServiceId } from './id';
+import { formatOutput, formatList } from '../../output/formatter';
+import { requireWorkspace, requirePositional, getArgString, getArgNumber, getArgBoolean, parseDuration } from '../helpers';
+import { resolveServiceId, type ServiceId } from './id';
 
 type NodeTypeArg = Parameters<PolylaneAPI['cloudInfraNodesLogs']>[0]['type'];
 
@@ -16,15 +16,22 @@ export const serviceLogsCommand: Command = {
     { flag: '--since <dur>', description: 'How far back (default 1h). e.g. 15m, 1h, 24h, 7d', type: 'string' },
     { flag: '--limit <n>', description: 'Max log events (default 100)', type: 'number' },
     { flag: '--grep <q>', description: 'Full-text search within the logs', type: 'string' },
+    { flag: '--templates', description: 'Recurring log patterns with historical rates instead of raw events', type: 'boolean' },
   ],
   examples: [
     'polylane service logs payments',
     'polylane service logs payments --since 24h --grep error',
+    'polylane service logs payments --templates',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const raw = requirePositional(args, 0, 'service-id');
     const service = await resolveServiceId(config, raw, workspaceId);
+
+    if (getArgBoolean(args, 'templates') === true) {
+      await showTemplates(config, workspaceId, service);
+      return;
+    }
 
     const sinceStr = getArgString(args, 'since') ?? '1h';
     const sinceMs = parseDuration(sinceStr);
@@ -65,6 +72,41 @@ export const serviceLogsCommand: Command = {
     }
   },
 };
+
+async function showTemplates(config: Config, workspaceId: string, service: ServiceId): Promise<void> {
+  const api = new PolylaneAPI(config);
+  const result = await api.cloudInfraNodesLogTemplates({
+    workspaceId,
+    id: service.id,
+    provider: service.provider,
+    account: service.account,
+    region: service.region,
+    type: service.type,
+  });
+
+  const items = result.templates.map((t) => ({
+    severity: t.severity,
+    count: t.totalCount,
+    ratePerHour: Math.round(t.ewmaRatePerHour * 100) / 100,
+    lastSeen: new Date(t.lastSeenMs).toISOString(),
+    template: t.template,
+  }));
+
+  formatList(
+    config,
+    { items, count: items.length },
+    {
+      headers: ['Severity', 'Count', 'Rate/h', 'Last seen', 'Template'],
+      rows: (item) => [
+        String(item.severity ?? ''),
+        String(item.count ?? ''),
+        String(item.ratePerHour ?? ''),
+        String(item.lastSeen ?? ''),
+        String(item.template ?? ''),
+      ],
+    }
+  );
+}
 
 function extractMessage(event: Record<string, unknown>): string {
   for (const key of ['message', 'msg', 'body', 'log', 'event']) {

@@ -75,10 +75,8 @@ jobs:
           echo "tarball_local=$TARBALL_LOCAL" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION"            >> "$GITHUB_OUTPUT"
 
-      # No --provenance: npm rejects provenance attestations from private
-      # source repositories, and this repo went private after v0.1.12.
       - name: Publish to npm
-        run: npm publish "${{ steps.pack.outputs.tarball_local }}" --access public
+        run: npm publish "${{ steps.pack.outputs.tarball_local }}" --access public --provenance
 
       # Stage release artifacts. Only polylane.mjs ships now — install.sh and
       # install.ps1 both fetch it directly from the GitHub Release.

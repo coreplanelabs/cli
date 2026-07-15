@@ -3,9 +3,26 @@ import { ExitCode } from '../../errors/codes';
 import type { Config } from '../../config/schema';
 import { PolylaneAPI } from '../../generated/client';
 
-export type Provider = 'aws' | 'vercel' | 'cloudflare' | 'fly' | 'render' | 'unknown';
+export type Provider =
+  | 'aws'
+  | 'vercel'
+  | 'cloudflare'
+  | 'fly'
+  | 'render'
+  | 'planetscale'
+  | 'kubernetes'
+  | 'unknown';
 
-const VALID_PROVIDERS: Provider[] = ['aws', 'vercel', 'cloudflare', 'fly', 'render', 'unknown'];
+const VALID_PROVIDERS: Provider[] = [
+  'aws',
+  'vercel',
+  'cloudflare',
+  'fly',
+  'render',
+  'planetscale',
+  'kubernetes',
+  'unknown',
+];
 
 export interface ServiceId {
   provider: Provider;
