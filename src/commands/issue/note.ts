@@ -6,39 +6,39 @@ import { requireWorkspace, requirePositional, getAllPositional, getArgString } f
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 
-export const incidentNoteCommand: Command = {
-  name: 'incident note',
-  description: 'Append a note to an incident timeline',
-  operationId: 'incidents.timeline.create',
+export const issueNoteCommand: Command = {
+  name: 'issue note',
+  description: 'Append a note to an issue timeline',
+  operationId: 'issues.timeline.create',
   positional: [
-    { name: 'thread-id', description: 'Incident thread ID (thrd_…)' },
+    { name: 'issue-id', description: 'Issue ID (iss_…)' },
     { name: 'body', description: 'Markdown body of the note', variadic: true },
   ],
   options: [
     { flag: '--title <t>', description: 'Optional short title', type: 'string' },
   ],
   examples: [
-    'polylane incident note thrd_xxx "rolled back deploy abc123"',
-    'polylane incident note thrd_xxx --title "Workaround" "increased lambda concurrency to 200"',
+    'polylane issue note iss_xxx "rolled back deploy abc123"',
+    'polylane issue note iss_xxx --title "Workaround" "increased lambda concurrency to 200"',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
-    const threadId = requirePositional(args, 0, 'thread-id');
+    const issueId = requirePositional(args, 0, 'issue-id');
     const bodyParts = getAllPositional(args).slice(1);
     if (bodyParts.length === 0) {
       throw new CLIError(
         'Missing <body>',
         ExitCode.USAGE,
-        'polylane incident note <thread-id> "<markdown body>"'
+        'polylane issue note <issue-id> "<markdown body>"'
       );
     }
     const body = bodyParts.join(' ');
     const title = getArgString(args, 'title');
 
     const api = new PolylaneAPI(config);
-    const result = await api.incidentsTimelineCreate({
+    const result = await api.issuesTimelineCreate({
       workspaceId,
-      incidentThreadId: threadId,
+      issueId,
       type: 'note',
       body,
       ...(title ? { title } : {}),

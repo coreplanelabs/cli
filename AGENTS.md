@@ -6,7 +6,7 @@ Guidance for AI coding assistants working **on** this repo. For guidance on how 
 
 - **Name:** `@coreplane/polylane` on npm — binary still invoked as `polylane`
 - **Type:** Node.js CLI tool (ESM, bundled with esbuild)
-- **Engine:** Node.js 18+ (ships as a single bundled file; dev tooling needs a recent Node)
+- **Engine:** Node.js 20+ (ships as a single bundled file; dev tooling needs a recent Node)
 - **Language:** TypeScript, strict mode
 - Runtime deps are intentionally minimal — check `package.json` before adding a new one.
 

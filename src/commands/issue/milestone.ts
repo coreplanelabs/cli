@@ -6,39 +6,39 @@ import { requireWorkspace, requirePositional, getAllPositional, getArgString } f
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 
-export const incidentMilestoneCommand: Command = {
-  name: 'incident milestone',
-  description: 'Append a milestone event to an incident timeline',
-  operationId: 'incidents.timeline.create',
+export const issueMilestoneCommand: Command = {
+  name: 'issue milestone',
+  description: 'Append a milestone event to an issue timeline',
+  operationId: 'issues.timeline.create',
   positional: [
-    { name: 'thread-id', description: 'Incident thread ID (thrd_…)' },
+    { name: 'issue-id', description: 'Issue ID (iss_…)' },
     { name: 'title', description: 'Short milestone title (e.g. "Mitigated")', variadic: true },
   ],
   options: [
     { flag: '--body <b>', description: 'Optional markdown body', type: 'string' },
   ],
   examples: [
-    'polylane incident milestone thrd_xxx "Mitigated"',
-    'polylane incident milestone thrd_xxx "Resolved" --body "Root cause fixed in PR #123"',
+    'polylane issue milestone iss_xxx "Mitigated"',
+    'polylane issue milestone iss_xxx "Resolved" --body "Root cause fixed in PR #123"',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
-    const threadId = requirePositional(args, 0, 'thread-id');
+    const issueId = requirePositional(args, 0, 'issue-id');
     const titleParts = getAllPositional(args).slice(1);
     if (titleParts.length === 0) {
       throw new CLIError(
         'Missing <title>',
         ExitCode.USAGE,
-        'polylane incident milestone <thread-id> "<title>"'
+        'polylane issue milestone <issue-id> "<title>"'
       );
     }
     const title = titleParts.join(' ');
     const body = getArgString(args, 'body');
 
     const api = new PolylaneAPI(config);
-    const result = await api.incidentsTimelineCreate({
+    const result = await api.issuesTimelineCreate({
       workspaceId,
-      incidentThreadId: threadId,
+      issueId,
       type: 'milestone',
       title,
       ...(body ? { body } : {}),

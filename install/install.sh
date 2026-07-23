@@ -4,7 +4,7 @@
 #   curl -fsSL https://polylane.com/install.sh | bash
 #
 # Installs the bundled CLI to ~/.polylane/bin/polylane and (if needed) prints the
-# line to add to your shell RC to put it on $PATH. Node 18+ must be installed.
+# line to add to your shell RC to put it on $PATH. Node 20+ must be installed.
 # Override the version or install prefix with env vars:
 #
 #   POLYLANE_VERSION=v0.1.0  curl -fsSL https://polylane.com/install.sh | bash
@@ -36,13 +36,13 @@ require_cmd curl
 require_cmd uname
 
 if ! command -v node >/dev/null 2>&1; then
-  die "Node.js 18+ is required but 'node' was not found.
+  die "Node.js 20+ is required but 'node' was not found.
   Install from https://nodejs.org or with your package manager, then re-run."
 fi
 
 NODE_MAJOR="$(node -e 'process.stdout.write(String(process.versions.node.split(".")[0]))')"
-if [ "$NODE_MAJOR" -lt 18 ]; then
-  die "Node.js 18+ is required (found $(node -v))."
+if [ "$NODE_MAJOR" -lt 20 ]; then
+  die "Node.js 20+ is required (found $(node -v))."
 fi
 
 # --- resolve download URL ---------------------------------------------------

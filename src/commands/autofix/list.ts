@@ -13,7 +13,7 @@ export const autofixListCommand: Command = {
   operationId: 'autofixes.list',
   options: [
     { flag: '--status <s>', description: 'Filter by status (started, branch_pushed, pr_opened, merged, failed, no_fix_needed)', type: 'string' },
-    { flag: '--origin <o>', description: 'Filter by origin (automation, chat, incident)', type: 'string' },
+    { flag: '--origin <o>', description: 'Filter by origin (automation, chat, investigation, system)', type: 'string' },
     { flag: '--repo <r>', description: 'Filter by repo name', type: 'string' },
     { flag: '--limit <n>', description: 'Max items (default 20)', type: 'number' },
     { flag: '--full', description: 'Return full objects', type: 'boolean' },
@@ -21,7 +21,7 @@ export const autofixListCommand: Command = {
   examples: [
     'polylane autofix list',
     'polylane autofix list --status pr_opened',
-    'polylane autofix list --origin incident --repo my-service',
+    'polylane autofix list --origin investigation --repo my-service',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);

@@ -9,7 +9,7 @@ export const issueShowCommand: Command = {
   description: 'Show an issue with reasoning, metrics, and logs',
   operationId: 'issues.get',
   positional: [{ name: 'issue-id', description: 'The issue ID' }],
-  examples: ['polylane issue show issue_xxx'],
+  examples: ['polylane issue show iss_xxx'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const id = requirePositional(args, 0, 'issue-id');

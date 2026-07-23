@@ -7,10 +7,10 @@ import { requireWorkspace, getArgString, getArgNumber, getArgBoolean } from '../
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 
-const FIELDS = ['id', 'severity', 'status', 'title', 'resourceKind', 'resourceId', 'detectedAt', 'incidentThreadId'];
+const FIELDS = ['id', 'severity', 'status', 'title', 'resourceKind', 'resourceId', 'detectedAt', 'investigationThreadId'];
 const VALID_SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const;
 type Severity = (typeof VALID_SEVERITIES)[number];
-const VALID_STATUSES = ['new', 'triaging', 'incident', 'no_incident', 'failed', 'triage_skipped'] as const;
+const VALID_STATUSES = ['new', 'triaging', 'confirmed', 'dismissed', 'failed', 'skipped'] as const;
 type Status = (typeof VALID_STATUSES)[number];
 
 export const issueListCommand: Command = {
@@ -33,7 +33,7 @@ export const issueListCommand: Command = {
   examples: [
     'polylane issue list',
     'polylane issue list --active --severity critical',
-    'polylane issue list --status incident',
+    'polylane issue list --status confirmed',
     'polylane issue list --provider aws --account 123456789012',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
@@ -84,7 +84,7 @@ export const issueListCommand: Command = {
         count: result.count,
       },
       {
-        headers: ['ID', 'Severity', 'Status', 'Title', 'Kind', 'Resource', 'Detected', 'Incident'],
+        headers: ['ID', 'Severity', 'Status', 'Title', 'Kind', 'Resource', 'Detected', 'Investigation'],
         rows: (item) => [
           String(item.id ?? ''),
           String(item.severity ?? ''),
@@ -93,7 +93,7 @@ export const issueListCommand: Command = {
           String(item.resourceKind ?? ''),
           truncate(String(item.resourceId ?? ''), 40),
           String(item.detectedAt ?? ''),
-          String(item.incidentThreadId ?? ''),
+          String(item.investigationThreadId ?? ''),
         ],
       }
     );

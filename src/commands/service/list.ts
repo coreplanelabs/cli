@@ -24,6 +24,7 @@ const CATEGORIES: NodeCategory[] = [
   'security',
   'observability',
   'code',
+  'identity',
   'other',
 ];
 
@@ -36,7 +37,7 @@ export const serviceListCommand: Command = {
     { flag: '--account <a>', description: 'Cloud account ID/slug', type: 'string' },
     { flag: '--region <r>', description: 'Cloud region', type: 'string' },
     { flag: '--type <t>', description: 'Resource type (e.g. aws.lambda.function)', type: 'string' },
-    { flag: '--category <c>', description: 'compute|storage|database|networking|messaging|security|observability|code|other', type: 'string' },
+    { flag: '--category <c>', description: 'compute|storage|database|networking|messaging|security|observability|code|identity|other', type: 'string' },
     { flag: '--limit <n>', description: 'Max items (default 20)', type: 'number' },
     { flag: '--full', description: 'Return full objects', type: 'boolean' },
   ],

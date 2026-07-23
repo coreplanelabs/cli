@@ -12,10 +12,10 @@ describe('command resolution', () => {
     assert.equal(r.command.name, 'issue list');
   });
 
-  it('resolves incident note', () => {
-    const r = registry.resolve(['incident', 'note']);
+  it('resolves issue note', () => {
+    const r = registry.resolve(['issue', 'note']);
     assert.ok(r);
-    assert.equal(r.command.name, 'incident note');
+    assert.equal(r.command.name, 'issue note');
   });
 
   it('resolves service logs', () => {
@@ -48,7 +48,6 @@ describe('command resolution', () => {
       'config',
       'feed',
       'help',
-      'incident',
       'integration',
       'issue',
       'memory',
@@ -64,10 +63,10 @@ describe('command resolution', () => {
     ]);
   });
 
-  it('issue group has 2 commands', () => {
+  it('issue group has 5 commands', () => {
     const node = registry.resolveNode(['issue']);
     assert.ok(node);
     const subs = registry.getSubcommands(node);
-    assert.equal(subs.length, 2);
+    assert.equal(subs.length, 5);
   });
 });

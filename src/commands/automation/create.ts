@@ -74,7 +74,7 @@ export const automationCreateCommand: Command = {
     { flag: '--name <name>', description: 'Automation name', type: 'string' },
     { flag: '--instructions <text>', description: 'Agent instructions (the system prompt for the run)', type: 'string' },
     { flag: '--trigger <json>', description: 'Trigger as JSON, or a bare type for filterless triggers (repeatable). e.g. \'{"type":"alert","filters":{"sources":["datadog"]}}\' or webhook', type: 'array' },
-    { flag: '--action <json>', description: 'Action as JSON, or a bare type (repeatable). e.g. \'{"type":"openIncident","mode":"smart"}\'', type: 'array' },
+    { flag: '--action <json>', description: 'Action as JSON, or a bare type (repeatable). e.g. \'{"type":"openIssue","mode":"smart"}\'', type: 'array' },
     { flag: '--destination <json>', description: 'Notification destination as JSON (repeatable). e.g. \'{"type":"slack","name":"ops","channelId":"C123"}\'', type: 'array' },
     { flag: '--tool <slug>', description: 'Skill slug to attach as a tool (repeatable). Alias: --skill', type: 'array' },
     { flag: '--skill <slug>', description: 'Alias for --tool', type: 'array' },
@@ -85,7 +85,7 @@ export const automationCreateCommand: Command = {
     { flag: '--body-file <path>', description: 'Full automation body from a file ("-" for stdin); flags layer on top', type: 'string' },
   ],
   examples: [
-    'polylane automation create --name "Triage Datadog alerts" --trigger \'{"type":"alert","filters":{"sources":["datadog"]}}\' --instructions "Correlate the alert with recent deploys and open an incident with findings." --action \'{"type":"openIncident","mode":"smart"}\' --tool investigate-errors',
+    'polylane automation create --name "Triage Datadog alerts" --trigger \'{"type":"alert","filters":{"sources":["datadog"]}}\' --instructions "Correlate the alert with recent deploys and open an issue with findings." --action \'{"type":"openIssue","mode":"smart"}\' --tool investigate-errors',
     'polylane automation catalog --output json | jq \'...\'   # crib a template body, then:',
     'polylane automation create --body-file my-automation.json',
     'polylane automation create --body-file template.json --trigger \'{"type":"cloudflare.deployment","filters":{"environments":["production"]}}\'   # take a template body, narrow the trigger',

@@ -5,7 +5,6 @@ import { helpCommand } from './help';
 import { updateCommand } from './update';
 import { feedCommands } from './feed';
 import { issueCommands } from './issue';
-import { incidentCommands } from './incident';
 import { serviceCommands } from './service';
 import { repoCommands } from './repo';
 import { memoryCommands } from './memory';
@@ -31,7 +30,6 @@ export function registerAllCommands(): void {
   const all = [
     ...feedCommands,
     ...issueCommands,
-    ...incidentCommands,
     ...serviceCommands,
     ...repoCommands,
     ...memoryCommands,

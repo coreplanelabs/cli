@@ -1,14 +1,14 @@
 # polylane
 
 <p><strong>Agent-focused CLI for the <a href="https://polylane.com">Polylane</a> platform.</strong><br>
-Investigate incidents, explore cloud infrastructure, search code, run automations, and drive threads — from any agent or terminal.</p>
+Investigate production issues, explore cloud infrastructure, search code, run automations, and drive threads — from any agent or terminal.</p>
 
 <p>📚 <strong>Docs: <a href="https://docs.polylane.com">docs.polylane.com</a></strong> · <a href="https://docs.polylane.com/getting-started">Getting started</a> · <a href="https://docs.polylane.com/llms.txt">llms.txt</a> (agent index)</p>
 
 <p>
   <a href="https://www.npmjs.com/package/@coreplane/polylane"><img src="https://img.shields.io/npm/v/@coreplane/polylane.svg" alt="npm version"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg" alt="Node.js >= 18"></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg" alt="Node.js >= 20"></a>
 </p>
 
 ## What this is
@@ -16,7 +16,7 @@ Investigate incidents, explore cloud infrastructure, search code, run automation
 `polylane` is designed to be driven by AI agents. Top-level commands map to the tasks an agent actually performs:
 
 - **Triage** issues — anomalies and alerts detected across your cloud and observability stack
-- **Drive** incidents — record timeline notes and milestones as you respond
+- **Drive** issue timelines — record notes and milestones as you respond
 - **Explore** cloud infrastructure — logs, metrics, dependency graphs
 - **Search** code
 - **Run** the platform's agent tools directly (`tools search` / `tools run` / `tools code`)
@@ -29,7 +29,7 @@ The full API surface is available behind `polylane api call <op>` as an escape h
 
 ## Install
 
-Pick whichever channel fits your system. All install the same Node-based bundle and require Node 18+ (Homebrew pulls Node in as a dependency; the curl + PowerShell installers check for it).
+Pick whichever channel fits your system. All install the same Node-based bundle and require Node 20+ (Homebrew pulls Node in as a dependency; the curl + PowerShell installers check for it).
 
 ```bash
 # macOS / Linux — curl
@@ -39,7 +39,7 @@ curl -fsSL https://polylane.com/install.sh | bash
 irm https://polylane.com/install.ps1 | iex
 
 # Homebrew (tap: coreplanelabs/polylane)
-brew install coreplanelabs/polylane
+brew install coreplanelabs/polylane/polylane
 
 # npm
 npm install -g @coreplane/polylane
@@ -48,7 +48,7 @@ npm install -g @coreplane/polylane
 bun add -g @coreplane/polylane
 ```
 
-> Requires [Node.js](https://nodejs.org) 18+ at runtime.
+> Requires [Node.js](https://nodejs.org) 20+ at runtime.
 
 Version-pin the curl / PowerShell installers with:
 
@@ -61,8 +61,9 @@ $env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/install.ps1 | iex
 
 ```bash
 # 1. Authenticate (pick one)
-polylane auth login                            # OAuth browser (humans at a terminal)
-polylane auth login --api-key sk_xxxxx         # API key (CI / agents)
+polylane auth login                            # OAuth browser (the default)
+polylane auth login --no-browser               # OAuth device code (SSH / headless)
+polylane auth login --api-key sk_xxxxx         # API key (CI / scripts where OAuth is impossible)
 polylane auth signup --email agent@example.com # bootstrap a fresh account
                                               # (returns a session token; create an
                                               # API key after step 2 for long-lived use)
@@ -78,8 +79,8 @@ polylane cloud connect --provider <provider>      # see `polylane cloud connect 
 
 # 4. Work
 polylane issue list --active                      # what the system is flagging
-polylane thread list --type incident              # incident threads
-polylane incident note <thread-id> "rolled back deploy"
+polylane thread list --type investigation         # investigation threads
+polylane issue note <issue-id> "rolled back deploy"
 polylane service logs <service> --since 1h --grep error
 polylane tools run findNodes --params '{"query":"api"}'
 polylane thread ask "<prompt>" --stream
@@ -167,11 +168,13 @@ Manage with `polylane config show` and `polylane config set --key <key> --value 
 
 ## Authentication
 
+OAuth is the default way to connect — including for agents. Use an API key only where a browser sign-in is impossible.
+
 | Command | When |
 |---|---|
-| `polylane auth login --api-key sk_...` | Scripts / CI / machines |
-| `polylane auth login` | Interactive OAuth (browser, PKCE) |
+| `polylane auth login` | Interactive OAuth (browser, PKCE) — the default |
 | `polylane auth login --no-browser` | OAuth device code (SSH / headless) |
+| `polylane auth login --api-key sk_...` | Scripts / CI / machines that cannot complete OAuth |
 | `polylane auth signup --email … --password …` | Bootstrap a fresh account from an agent (no browser, no human) |
 
 OAuth credentials live at `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. `polylane auth status` reports the active source.

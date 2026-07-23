@@ -19,13 +19,13 @@ const VALID_CATEGORIES = [
   'autofix',
   'automation',
   'anomaly',
-  'incident',
   'deploy',
   'change',
   'release',
   'alert',
   'issue',
   'digest',
+  'tier',
 ] as const;
 type Category = (typeof VALID_CATEGORIES)[number];
 
@@ -45,7 +45,7 @@ const FIELDS = [
 
 export const feedListCommand: Command = {
   name: 'feed list',
-  description: 'Workspace agent activity feed (chat, investigations, autofixes, incidents, deploys…)',
+  description: 'Workspace agent activity feed (chat, investigations, autofixes, issues, deploys…)',
   operationId: 'feed.list',
   options: [
     { flag: '--category <c>', description: VALID_CATEGORIES.join(' | '), type: 'string' },
@@ -59,7 +59,7 @@ export const feedListCommand: Command = {
   examples: [
     'polylane feed list',
     'polylane feed list --since 24h',
-    'polylane feed list --category incident --limit 50',
+    'polylane feed list --category issue --limit 50',
     'polylane feed list --cursor <nextCursor>',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
