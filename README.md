@@ -57,6 +57,28 @@ POLYLANE_VERSION=v0.1.0 curl -fsSL https://polylane.com/install.sh | bash
 $env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/install.ps1 | iex
 ```
 
+### Wire it into your coding agents
+
+```bash
+polylane setup                            # configure every detected agent
+polylane setup --agent claude --agent cursor   # target specific agents
+polylane setup --project                  # this project instead of the home directory
+```
+
+`setup` detects installed coding agents and configures each one: it installs the bundled [agent skill](skill/SKILL.md) where the agent supports skills, and registers the Polylane MCP server (`https://mcp.polylane.com/mcp`) in the agent's own config format.
+
+| Agent | Agent skill | MCP server |
+|---|---|---|
+| Claude Code | `~/.claude/skills/polylane-cli/` | `~/.claude.json` |
+| Cursor | `~/.cursor/skills/polylane-cli/` | `~/.cursor/mcp.json` |
+| OpenCode | `~/.config/opencode/skills/polylane-cli/` | `~/.config/opencode/opencode.json` |
+| Codex CLI | `~/.codex/skills/polylane-cli/` | `~/.codex/config.toml` |
+| Windsurf | — | `~/.codeium/windsurf/mcp_config.json` |
+| Zed | — | `~/.config/zed/settings.json` |
+| VS Code | — | user profile `mcp.json` |
+
+It is idempotent: the skill is overwritten with the version bundled in the CLI, an existing MCP entry is left untouched, and unreadable config files are skipped with a manual pointer instead of clobbered. The curl installer runs it automatically after install (opt out with `--no-setup`).
+
 ## Quick start
 
 ```bash

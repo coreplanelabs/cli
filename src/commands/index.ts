@@ -2,6 +2,7 @@ import { registry } from '../registry';
 import { authCommands } from './auth';
 import { configCommands } from './config';
 import { helpCommand } from './help';
+import { setupCommand } from './setup';
 import { updateCommand } from './update';
 import { feedCommands } from './feed';
 import { issueCommands } from './issue';
@@ -48,6 +49,7 @@ export function registerAllCommands(): void {
     ...apiCommands,
     ...telemetryCommands,
     helpCommand,
+    setupCommand,
     updateCommand,
   ];
 

@@ -54,6 +54,7 @@ describe('command resolution', () => {
       'note',
       'repo',
       'service',
+      'setup',
       'skill',
       'telemetry',
       'thread',

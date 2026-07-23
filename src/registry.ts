@@ -32,6 +32,7 @@ const RESOURCE_ORDER: Record<string, ResourceGroup> = {
   cloud: { name: 'cloud', description: 'Cloud accounts (aws, cloudflare, fly, render, vercel)', order: 69 },
   workspace: { name: 'workspace', description: 'Workspaces', order: 70 },
   auth: { name: 'auth', description: 'Authentication (login, status, logout)', order: 80 },
+  setup: { name: 'setup', description: 'Wire the CLI into coding agents (agent skill + MCP server)', order: 85 },
   config: { name: 'config', description: 'CLI configuration', order: 90 },
   telemetry: { name: 'telemetry', description: 'Anonymous usage telemetry (status/enable/disable)', order: 95 },
   api: { name: 'api', description: 'Raw API access (advanced)', order: 100 },

@@ -5,6 +5,7 @@ import { parseSpec } from './parse-spec';
 import { generateTypes } from './generate-types';
 import { generateClient } from './generate-client';
 import { generateCommandMeta } from './generate-commands';
+import { generateSkill } from './generate-skill';
 import { loadEnvLocal } from './env-local';
 
 loadEnvLocal();
@@ -14,6 +15,11 @@ const GENERATED_DIR = join(process.cwd(), 'src', 'generated');
 export async function generateAll(source?: string): Promise<void> {
   const specSource = source ?? resolveSpecSource();
   const start = Date.now();
+
+  mkdirSync(GENERATED_DIR, { recursive: true });
+  writeFileSync(join(GENERATED_DIR, 'skill.ts'), generateSkill(), 'utf-8');
+  process.stderr.write(`[codegen] wrote skill.ts (from skill/SKILL.md)\n`);
+
   process.stderr.write(`[codegen] fetching spec: ${specSource}\n`);
   const spec = await fetchSpec(specSource);
   process.stderr.write(`[codegen] parsed ${Object.keys(spec.paths).length} paths\n`);
