@@ -57,6 +57,15 @@ POLYLANE_VERSION=v0.1.0 curl -fsSL https://polylane.com/install.sh | bash
 $env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/install.ps1 | iex
 ```
 
+### Wire it into your coding agent
+
+```bash
+polylane setup             # home directory: ~/.claude/skills + ~/.claude.json
+polylane setup --project   # this project only: ./.claude/skills + ./.mcp.json
+```
+
+`setup` installs the bundled [agent skill](skill/SKILL.md) and registers the Polylane MCP server (`https://mcp.polylane.com/mcp`) so agents like Claude Code can drive the platform. It is idempotent: the skill is overwritten with the version bundled in the CLI, and an existing MCP entry is left untouched. The curl installer runs it automatically after install (opt out with `--no-setup`).
+
 ## Quick start
 
 ```bash
