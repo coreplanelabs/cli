@@ -1,6 +1,6 @@
 ---
 name: polylane-cli
-description: Use `polylane` to investigate incidents, explore cloud infrastructure (logs / metrics / dependency graphs), search code, save memories, run automations from a catalog, connect observability tools and cloud accounts, and drive threads with the Polylane agent. Use when the user wants to debug a production issue, look up a service, search their codebase, manage integrations, connect a cloud provider, or talk to the Polylane agent from the terminal.
+description: Use `polylane` to investigate production issues, explore cloud infrastructure (logs / metrics / dependency graphs), search code, save memories, run automations from a catalog, connect observability tools and cloud accounts, and drive threads with the Polylane agent. Use when the user wants to debug a production issue, look up a service, search their codebase, manage integrations, connect a cloud provider, or talk to the Polylane agent from the terminal.
 ---
 
 # Polylane CLI — Agent Skill Guide
@@ -19,12 +19,12 @@ description: Use `polylane` to investigate incidents, explore cloud infrastructu
 # Install (pick one — see README for the full list)
 npm install -g @coreplane/polylane
 # curl -fsSL https://polylane.com/install.sh | bash
-# brew install coreplanelabs/polylane
+# brew install coreplanelabs/polylane/polylane
 
-# Pick ONE auth path:
-polylane auth login --api-key sk_xxxxx                 # API key — scripts / CI
-polylane auth login                                    # OAuth browser (PKCE)
+# Pick ONE auth path (OAuth is the default; use an API key only where a browser sign-in is impossible):
+polylane auth login                                    # OAuth browser (PKCE) — the default
 polylane auth login --no-browser                       # OAuth device code (SSH / headless)
+polylane auth login --api-key sk_xxxxx                 # API key — scripts / CI without OAuth
 polylane auth signup --email <email> --password <pw>   # bootstrap an account from an agent
 
 # Verify
@@ -149,16 +149,16 @@ polylane automation list
 
 `integration connect` and `cloud connect` dispatch on `--type` / `--provider`. Some options open a browser for an install URL; others take API credentials directly. Use `--help` on each to see the required flags and optional `--no-browser`.
 
-### Investigating an incident
+### Investigating an issue
 
 ```bash
 polylane issue list --active                      # what's currently flagged
-polylane issue show <issue-id>                    # full body + linked incident
-polylane thread list --type incident              # active incident threads
-polylane thread show <thread-id>                  # the incident thread with Console / Next footer
-polylane incident timeline <thread-id>             # who did what, when
-polylane incident note <thread-id> "rolled back deploy ABC"
-polylane incident milestone <thread-id> "Mitigated"
+polylane issue show <issue-id>                    # full body + linked investigation
+polylane thread list --type investigation         # active investigation threads
+polylane thread show <thread-id>                  # the investigation thread with Console / Next footer
+polylane issue timeline <issue-id>                # who did what, when
+polylane issue note <issue-id> "rolled back deploy ABC"
+polylane issue milestone <issue-id> "Mitigated"
 
 # Drill into services
 polylane service find "<query>"
@@ -216,7 +216,7 @@ Attach resources as context by passing their IDs — the CLI infers the resource
 
 An automation is **trigger → instructions → tools → actions**: a typed event fires, an agent runs
 with your instructions and a set of skills (tools), and optional actions apply side-effects (open an
-incident, roll back a deploy, open a PR) — each gated by a `mode` (`smart` = act only when warranted,
+issue, roll back a deploy, open a PR) — each gated by a `mode` (`smart` = act only when warranted,
 `always`). Full schema and every trigger/action type: <https://docs.polylane.com/fix-and-automate/automations>.
 
 ```bash
@@ -242,9 +242,9 @@ template covers. `automation create` is a first-class command; you do **not** ne
 polylane automation create \
   --name "Triage Datadog alerts" \
   --trigger '{"type":"alert","filters":{"sources":["datadog"]}}' \
-  --instructions "Correlate the alert with recent deploys and open an incident with the findings." \
+  --instructions "Correlate the alert with recent deploys and open an issue with the findings." \
   --tool investigate-errors --tool investigate-latency \
-  --action '{"type":"openIncident","mode":"smart","defaultSeverity":"high"}' \
+  --action '{"type":"openIssue","mode":"smart","defaultSeverity":"high"}' \
   --delay 600000            # wait 10m (e.g. let a deploy settle) before the run
 
 # Or pass a full JSON body (--body-file '-' reads stdin); flags layer on top.
@@ -258,9 +258,10 @@ polylane automation create --body-file template.json \
 
 Run `polylane automation create --help` for every flag. Common trigger types: `alert`, `cron`
 (`{"type":"cron","expression":"0 9 * * *"}`), `webhook`, `github.*` (push/pull_request/deployment/…),
-`{cloudflare,vercel,render,fly}.deployment`, `slack.message`, `polylane.*` (cloud_account.synced,
-codebase.synced, …). Actions include `openIncident`, `rollback{Cloudflare,Vercel,Render,Fly}Deployment`,
-`submitPr`, `commentPr`, `mergePr`, `createIssue`, `autofix`, `handoffTo{Devin,Cursor}`. The
+`{cloudflare,vercel,render,fly}.deployment`, `slack.message`, `polylane.*` (issue.triaged,
+cloud_account.synced, codebase.synced, …). Actions include `openIssue`,
+`rollback{Cloudflare,Vercel,Render,Fly}Deployment`, `submitPr`, `commentPr`, `mergePr`,
+`commentGithubIssue`, `createGithubIssue`, `autofix`, `handoffTo{Devin,Cursor,Factory}`. The
 authoritative, always-current list of types and filters is in the docs and in
 `polylane api describe automations.post`.
 
