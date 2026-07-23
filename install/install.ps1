@@ -3,7 +3,7 @@
 #   irm https://polylane.com/install.ps1 | iex
 #
 # Installs the bundled CLI to $env:USERPROFILE\.polylane\bin\ and (if needed)
-# prints the line to add to your PATH. Node 18+ must be installed.
+# prints the line to add to your PATH. Node 20+ must be installed.
 # Override the version or install prefix with env vars:
 #
 #   $env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/install.ps1 | iex
@@ -28,12 +28,12 @@ function Ok([string]$msg)   { Write-Host "✓ $msg" -ForegroundColor Green }
 
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) {
-  Die "Node.js 18+ is required but 'node' was not found.`nInstall from https://nodejs.org, then re-run."
+  Die "Node.js 20+ is required but 'node' was not found.`nInstall from https://nodejs.org, then re-run."
 }
 $nodeVersion = (& node -v) -replace '^v', ''
 $nodeMajor = [int]($nodeVersion.Split('.')[0])
-if ($nodeMajor -lt 18) {
-  Die "Node.js 18+ is required (found v$nodeVersion)."
+if ($nodeMajor -lt 20) {
+  Die "Node.js 20+ is required (found v$nodeVersion)."
 }
 
 # --- resolve download URL ---------------------------------------------------

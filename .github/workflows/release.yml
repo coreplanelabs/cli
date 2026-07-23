@@ -37,7 +37,7 @@ jobs:
       # (OIDC). We intentionally don't run `npm install -g npm@latest` — the
       # npm bundled with some Node 22.x patch releases has a broken
       # node_modules (missing `promise-retry`) that makes self-upgrade fail.
-      # ci.yml still runs the test matrix against 18/20/22 for runtime compat.
+      # ci.yml still runs the test matrix against 20/22/24 for runtime compat.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

@@ -30,7 +30,7 @@
     "dist/polylane.mjs"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env.local --import tsx src/main.ts",
@@ -44,14 +44,14 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.7.0",
-    "ws": "^8.20.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/ws": "^8.18.1",
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.25.0",
     "eslint": "^9.0.0",
-    "tsx": "^4.0.0",
+    "tsx": "^4.23.1",
     "typescript": "^5.8.0",
     "typescript-eslint": "^8.0.0"
   }
