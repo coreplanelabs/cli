@@ -17,8 +17,7 @@ export interface ResourceGroup {
 
 const RESOURCE_ORDER: Record<string, ResourceGroup> = {
   feed: { name: 'feed', description: 'Workspace activity feed (what just happened)', order: 6 },
-  issue: { name: 'issue', description: 'Detected issues (anomalies + alerts)', order: 8 },
-  incident: { name: 'incident', description: 'Incident timeline (notes, milestones)', order: 10 },
+  issue: { name: 'issue', description: 'Detected issues (anomalies + alerts) and their timelines', order: 8 },
   service: { name: 'service', description: 'Cloud infrastructure (nodes, logs, metrics, graph)', order: 20 },
   repo: { name: 'repo', description: 'Repositories and code search', order: 30 },
   tools: { name: 'tools', description: 'Run Polylane agent tools (observability, infra graph, code search)', order: 40 },

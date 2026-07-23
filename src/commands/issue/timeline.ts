@@ -7,11 +7,11 @@ import { requireWorkspace, requirePositional, getArgString, getArgNumber, getArg
 
 const FIELDS = ['id', 'at', 'type', 'title', 'createdBy'];
 
-export const incidentTimelineCommand: Command = {
-  name: 'incident timeline',
-  description: 'Show the timeline of events for an incident thread',
-  operationId: 'incidents.timeline.list',
-  positional: [{ name: 'thread-id', description: 'Incident thread ID (thrd_…)' }],
+export const issueTimelineCommand: Command = {
+  name: 'issue timeline',
+  description: 'Show the timeline of events for an issue',
+  operationId: 'issues.timeline.list',
+  positional: [{ name: 'issue-id', description: 'Issue ID (iss_…)' }],
   options: [
     { flag: '--types <a,b,c>', description: 'Filter by event types (comma-separated)', type: 'string' },
     { flag: '--from <ms>', description: 'Lower bound (unix ms)', type: 'number' },
@@ -20,12 +20,12 @@ export const incidentTimelineCommand: Command = {
     { flag: '--full', description: 'Return full objects', type: 'boolean' },
   ],
   examples: [
-    'polylane incident timeline thrd_xxx',
-    'polylane incident timeline thrd_xxx --types note,milestone',
+    'polylane issue timeline iss_xxx',
+    'polylane issue timeline iss_xxx --types note,milestone',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
-    const threadId = requirePositional(args, 0, 'thread-id');
+    const issueId = requirePositional(args, 0, 'issue-id');
     const limit = getArgNumber(args, 'limit') ?? 100;
     const full = getArgBoolean(args, 'full') === true;
     const types = getArgString(args, 'types');
@@ -33,9 +33,9 @@ export const incidentTimelineCommand: Command = {
     const to = getArgNumber(args, 'to');
 
     const api = new PolylaneAPI(config);
-    const result = await api.incidentsTimelineList({
+    const result = await api.issuesTimelineList({
       workspaceId,
-      incidentThreadId: threadId,
+      issueId,
       perPage: limit,
       ...(types ? { types } : {}),
       ...(from !== undefined ? { from } : {}),
