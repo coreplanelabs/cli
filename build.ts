@@ -11,15 +11,17 @@ async function main(): Promise<void> {
 
   await generateAll();
 
-  // Step 2: read version
+  // Step 2: resolve version — an explicit POLYLANE_CLI_VERSION (e.g. the tag
+  // in the release workflow) wins over package.json.
   const pkg = JSON.parse(readFileSync('package.json', 'utf-8')) as { version: string };
+  const version = process.env.POLYLANE_CLI_VERSION ?? pkg.version;
 
   // Step 3: bundle with esbuild
   mkdirSync('dist', { recursive: true });
   const outfile = join('dist', 'polylane.mjs');
 
   const define: Record<string, string> = {
-    'process.env.POLYLANE_CLI_VERSION': JSON.stringify(pkg.version),
+    'process.env.POLYLANE_CLI_VERSION': JSON.stringify(version),
   };
   // Bake every POLYLANE_* env var visible at build time into the bundle, so the
   // produced binary works without needing those vars set at runtime.

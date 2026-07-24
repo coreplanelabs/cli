@@ -6,6 +6,7 @@ import { isCI, getCIName, isStdoutTTY, isStderrTTY } from '../utils/env';
 import { getInstallId, recordRun } from './state';
 import { detectInstallSource, detectEnvironment, type InstallSource } from './environment';
 import { getHttpStats } from './http-counter';
+import { getCliVersion } from '../version';
 
 // The set of fields shipped to the telemetry endpoint. Everything here is
 // intentionally non-sensitive — see PRIVACY.md for the full inventory.
@@ -81,10 +82,6 @@ export interface CliTelemetryEvent {
 }
 
 const SESSION_ID = randomUUID();
-
-function getCliVersion(): string {
-  return process.env.POLYLANE_CLI_VERSION ?? '0.0.0';
-}
 
 function authMethodOf(cred: Credential | null): CliTelemetryEvent['authMethod'] {
   if (!cred) return null;

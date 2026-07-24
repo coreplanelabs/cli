@@ -1,7 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-
 import { parseFlags, scanCommandPath } from './args';
 import { GLOBAL_OPTIONS } from './command';
 import type { GlobalFlags } from './types/flags';
@@ -20,6 +16,7 @@ import {
 import type { Config } from './config/schema';
 import type { Credential } from './auth/types';
 import { buildEvent, dispatch, hasShownFirstRunNotice, markFirstRunNoticeShown } from './telemetry';
+import { getCliVersion } from './version';
 
 const NO_AUTH_COMMANDS = new Set([
   'auth login',
@@ -39,17 +36,6 @@ const NO_AUTH_COMMANDS = new Set([
   'api list',
   'api describe',
 ]);
-
-function readVersion(): string {
-  try {
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const pkgPath = join(__dirname, '..', 'package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
-    return pkg.version;
-  } catch {
-    return '0.0.0';
-  }
-}
 
 function setupSignalHandlers(): void {
   process.on('SIGINT', () => {
@@ -85,7 +71,7 @@ async function run(): Promise<void> {
   const argv = process.argv.slice(2);
 
   if (argv[0] === '--version' || argv[0] === '-v') {
-    process.stdout.write(`polylane ${readVersion()}\n`);
+    process.stdout.write(`polylane ${getCliVersion()}\n`);
     return;
   }
 
