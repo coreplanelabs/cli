@@ -1,9 +1,9 @@
 # Homebrew formula for the Polylane CLI.
 #
-# This file belongs in the tap repository (github.com/coreplanelabs/homebrew-polylane)
+# This file belongs in the tap repository (github.com/coreplanelabs/homebrew-tap)
 # at Formula/polylane.rb so users can install via:
 #
-#   brew install coreplanelabs/polylane
+#   brew install coreplanelabs/tap/polylane
 #
 # The release pipeline bumps `url` / `sha256` / `version` on every new release —
 # see the update-homebrew job in .github/workflows/release.yml.

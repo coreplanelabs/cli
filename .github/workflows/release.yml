@@ -123,7 +123,7 @@ jobs:
         if: steps.gate.outputs.skip == 'false'
         uses: actions/checkout@v4
         with:
-          repository: coreplanelabs/homebrew-polylane
+          repository: coreplanelabs/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
 
