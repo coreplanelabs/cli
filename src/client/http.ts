@@ -106,7 +106,7 @@ export async function request(config: Config, opts: RequestOpts): Promise<Respon
   } catch (err) {
     recordHttpRequest(Date.now() - httpStart);
     if (err instanceof Error && err.name === 'TimeoutError') {
-      throw new CLIError('Request timed out', ExitCode.TIMEOUT, 'Try increasing --timeout');
+      throw new CLIError('Request timed out', ExitCode.TIMEOUT, 'Raise --timeout');
     }
     if (err instanceof Error && err.name === 'AbortError') {
       throw new CLIError('Request aborted', ExitCode.TIMEOUT);

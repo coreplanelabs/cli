@@ -27,6 +27,6 @@ export const noteGlobalClearCommand: Command = {
 
     const api = new PolylaneAPI(config);
     await api.notesGlobalDel(workspaceId);
-    process.stdout.write(`Cleared\n`);
+    process.stdout.write(`Cleared global note\n`);
   },
 };

@@ -100,7 +100,7 @@ export const integrationConnectCommand: Command = {
       } else if (isInteractive(config.nonInteractive)) {
         authMethod = await promptSelect<'none' | 'bearer' | 'oauth'>(
           { nonInteractive: config.nonInteractive },
-          'How should this MCP server be authenticated?',
+          'Authentication',
           [
             { value: 'none', label: 'No authentication', hint: 'Public server' },
             { value: 'bearer', label: 'Bearer token', hint: 'API key / token' },

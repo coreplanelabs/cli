@@ -20,7 +20,7 @@ export const integrationDisconnectCommand: Command = {
     const yes = getArgBoolean(args, 'yes') === true;
     if (!yes) {
       if (!isInteractive(config.nonInteractive)) {
-        throw new CLIError('Refusing to disconnect without --yes in non-interactive mode', ExitCode.USAGE);
+        throw new CLIError('Confirmation required', ExitCode.USAGE, `Re-run with --yes to disconnect ${id}`);
       }
       const confirmed = await promptConfirm(
         { nonInteractive: config.nonInteractive },

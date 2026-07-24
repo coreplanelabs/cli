@@ -316,7 +316,7 @@ export const setupCommand: Command = {
 
     if (selected.length === 0) {
       say('No coding agents detected.');
-      say(`Target one explicitly with --agent <id> (${AGENTS.map((a) => a.id).join(', ')}).`);
+      say(`Configure one anyway with --agent <id> (${AGENTS.map((a) => a.id).join(', ')}).`);
       return;
     }
 
@@ -350,9 +350,9 @@ export const setupCommand: Command = {
 
     const credential = await tryResolveCredential(config);
     if (credential) {
-      say('Authentication: signed in.');
+      say('Signed in.');
     } else {
-      say('Authentication: not signed in. Run `polylane auth login` to authenticate.');
+      say('Not signed in. Run `polylane auth login`.');
     }
   },
 };

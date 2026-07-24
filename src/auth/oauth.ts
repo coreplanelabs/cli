@@ -344,8 +344,8 @@ export async function oauthBrowserFlow(config: Config): Promise<OAuthTokenRespon
   authUrl.searchParams.set('code_challenge_method', 'S256');
   authUrl.searchParams.set('response_type', 'code');
 
-  process.stderr.write(`Opening browser to authenticate...\n`);
-  process.stderr.write(`If the browser does not open, visit:\n  ${authUrl.toString()}\n\n`);
+  process.stderr.write(`Opening your browser to sign in…\n`);
+  process.stderr.write(`If it doesn't open, visit:\n  ${authUrl.toString()}\n\n`);
 
   const serverPromise = startCallbackServer(state);
   openBrowser(authUrl.toString());
@@ -402,10 +402,10 @@ export async function oauthDeviceCodeFlow(config: Config): Promise<OAuthTokenRes
     interval: number;
   };
 
-  process.stderr.write(`\nTo authenticate, visit:\n`);
+  process.stderr.write(`\nTo sign in, visit:\n`);
   process.stderr.write(`  ${deviceData.verification_uri}\n\n`);
   process.stderr.write(`And enter the code: ${deviceData.user_code}\n\n`);
-  process.stderr.write(`Waiting for authorization...\n`);
+  process.stderr.write(`Waiting for authorization…\n`);
 
   let interval = deviceData.interval * 1000;
   const deadline = Date.now() + deviceData.expires_in * 1000;
@@ -435,7 +435,7 @@ export async function oauthDeviceCodeFlow(config: Config): Promise<OAuthTokenRes
       continue;
     }
     if (errBody.error === 'expired_token') {
-      throw new CLIError('Device code expired', ExitCode.AUTH, 'Try again');
+      throw new CLIError('Device code expired', ExitCode.AUTH, 'Run `polylane auth login` again');
     }
     throw new CLIError(
       `Device code flow failed: ${errBody.error ?? 'unknown error'}`,

@@ -87,7 +87,7 @@ export const threadAskCommand: Command = {
     }
 
     const useSpinner = !config.quiet && config.output !== 'json';
-    const spinner = useSpinner ? new Spinner(`Waiting for assistant on ${thread.id}`) : null;
+    const spinner = useSpinner ? new Spinner(`Waiting for reply on ${thread.id}…`) : null;
     if (spinner) spinner.start();
 
     try {

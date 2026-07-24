@@ -3,6 +3,8 @@ import type { Config } from '../../config/schema';
 import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional } from '../helpers';
+import { CLIError } from '../../errors/base';
+import { ExitCode } from '../../errors/codes';
 
 export const integrationShowCommand: Command = {
   name: 'integration show',
@@ -17,8 +19,11 @@ export const integrationShowCommand: Command = {
     const result = await api.integrationsList(workspaceId, { id, perPage: 1 });
     const integration = result.items[0];
     if (!integration) {
-      process.stderr.write(`No integration with id ${id}\n`);
-      process.exit(1);
+      throw new CLIError(
+        `No integration with ID ${id}`,
+        ExitCode.GENERAL,
+        'List integrations with `polylane integration list`'
+      );
     }
     formatOutput(config, integration);
   },

@@ -3,6 +3,8 @@ import type { Config } from '../../config/schema';
 import { PolylaneAPI } from '../../generated/client';
 import { writeConfigFile } from '../../config/loader';
 import { requirePositional } from '../helpers';
+import { CLIError } from '../../errors/base';
+import { ExitCode } from '../../errors/codes';
 
 export const workspaceUseCommand: Command = {
   name: 'workspace use',
@@ -19,13 +21,16 @@ export const workspaceUseCommand: Command = {
     } else {
       const list = await api.workspacesList({ slug: raw, perPage: 5 });
       if (list.items.length === 0) {
-        process.stderr.write(`No workspace matching "${raw}"\n`);
-        process.exit(1);
+        throw new CLIError(
+          `No workspace matching "${raw}"`,
+          ExitCode.GENERAL,
+          'List workspaces with `polylane workspace list`'
+        );
       }
       workspace = list.items[0]!;
     }
 
     writeConfigFile({ workspace_id: workspace.id });
-    process.stderr.write(`Using workspace ${workspace.id} (${workspace.name})\n`);
+    process.stderr.write(`Using workspace ${workspace.name} (${workspace.id})\n`);
   },
 };

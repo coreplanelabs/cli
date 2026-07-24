@@ -76,7 +76,7 @@ export const feedListCommand: Command = {
 
     const limit = getArgNumber(args, 'limit') ?? 20;
     if (limit < 1 || limit > 200) {
-      throw new CLIError('Invalid --limit', ExitCode.USAGE, 'Must be between 1 and 200');
+      throw new CLIError(`Invalid --limit: ${limit}`, ExitCode.USAGE, 'Use 1–200');
     }
 
     const since = getArgString(args, 'since');

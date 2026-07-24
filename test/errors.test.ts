@@ -30,12 +30,14 @@ describe('mapApiError', () => {
   it('maps 401 -> AUTH with hint', () => {
     const err = mapApiError(401, { message: 'Unauthorized' });
     assert.equal(err.exitCode, ExitCode.AUTH);
+    assert.equal(err.message, 'Not authenticated');
     assert.ok(err.hint?.includes('polylane auth login'));
   });
 
   it('maps 403 -> AUTH', () => {
     const err = mapApiError(403, { message: 'Forbidden' });
     assert.equal(err.exitCode, ExitCode.AUTH);
+    assert.equal(err.message, 'Permission denied');
   });
 
   it('maps 404 -> GENERAL', () => {
