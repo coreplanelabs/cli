@@ -1,6 +1,8 @@
 import type { Command } from '../command';
 import type { Config } from '../config/schema';
 import { registry, renderHelp } from '../registry';
+import { CLIError } from '../errors/base';
+import { ExitCode } from '../errors/codes';
 
 export const helpCommand: Command = {
   name: 'help',
@@ -13,9 +15,11 @@ export const helpCommand: Command = {
     }
     const resolved = registry.resolve(positional);
     if (!resolved) {
-      process.stderr.write(`Unknown command: ${positional.join(' ')}\n`);
-      process.stdout.write(renderHelp(null, config.noColor));
-      return;
+      throw new CLIError(
+        `Unknown command: polylane ${positional.join(' ')}`,
+        ExitCode.USAGE,
+        'Run `polylane --help` to list commands'
+      );
     }
     process.stdout.write(renderHelp(resolved.command, config.noColor));
   },
