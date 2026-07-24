@@ -3,6 +3,8 @@ import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { PolylaneAPI } from '../../generated/client';
 import { requireWorkspace, requirePositional, getArgString } from '../helpers';
+import { CLIError } from '../../errors/base';
+import { ExitCode } from '../../errors/codes';
 
 type Format = 'md' | 'pdf';
 
@@ -31,8 +33,7 @@ export const threadExportCommand: Command = {
       return;
     }
     if (format === 'pdf') {
-      process.stderr.write('PDF output requires --out\n');
-      process.exit(2);
+      throw new CLIError('PDF export requires --out <file>', ExitCode.USAGE);
     }
     process.stdout.write(buffer.toString('utf-8'));
   },

@@ -24,7 +24,7 @@ interface SignupEnvelope {
 
 export const authSignupCommand: Command = {
   name: 'auth signup',
-  description: 'Bootstrap a new Polylane account with email + password',
+  description: 'Create a Polylane account with email and password',
   operationId: 'auth.signup',
   options: [
     { flag: '--email <email>', description: 'Email address', type: 'string' },
@@ -78,7 +78,7 @@ export const authSignupCommand: Command = {
     if (result.token) {
       note(
         [
-          `You are signed in. The session is valid until ${expiresAt}.`,
+          `Signed in. Session valid until ${expiresAt}.`,
           ``,
           `Onboarding (in order):`,
           ``,
@@ -111,7 +111,7 @@ export const authSignupCommand: Command = {
       );
       outro('Signed in.');
     } else {
-      outro('Signup accepted but no session returned. Run `polylane auth login` to authenticate.');
+      outro('Account created, but no session returned. Run `polylane auth login`.');
     }
   },
 };

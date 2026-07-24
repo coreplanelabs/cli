@@ -15,13 +15,13 @@ export function mapApiError(status: number, error: ApiErrorPayload | null): CLIE
       return new CLIError(detail || 'Bad request', ExitCode.USAGE);
     case 401:
       return new CLIError(
-        detail || 'Unauthorized - check your API key',
+        detail || 'Not authenticated',
         ExitCode.AUTH,
         'Run `polylane auth login`'
       );
     case 403:
       return new CLIError(
-        detail || 'Forbidden - insufficient permissions',
+        detail || 'Permission denied',
         ExitCode.AUTH,
         'Check your API key scopes or workspace permissions'
       );

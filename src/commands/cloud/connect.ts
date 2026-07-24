@@ -132,7 +132,8 @@ export const cloudConnectCommand: Command = {
     // All other providers return { accounts, failures } synchronously.
     formatOutput(config, result);
     if ('failures' in result && result.failures.length > 0 && !config.quiet) {
-      process.stderr.write(`\n${result.failures.length} account(s) failed to connect — see "failures" above.\n`);
+      const n = result.failures.length;
+      process.stderr.write(`\n${n} account${n === 1 ? '' : 's'} failed to connect — see "failures" above.\n`);
     }
   },
 };

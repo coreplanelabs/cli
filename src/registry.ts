@@ -158,7 +158,7 @@ function statusLine(config: Config | null): string | null {
 
 export async function buildStatusLine(config: Config): Promise<string> {
   const cred = await tryResolveCredential(config);
-  if (!cred) return 'Not logged in.';
+  if (!cred) return 'Not signed in.';
 
   const ws = config.workspaceId ? `workspace: ${config.workspaceId}` : 'no workspace set';
   if (cred.type === 'api-key') {

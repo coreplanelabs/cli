@@ -12,7 +12,7 @@ function ensureInteractive(ctx: PromptContext, fieldName: string): void {
     throw new CLIError(
       `Missing required input: ${fieldName}`,
       ExitCode.USAGE,
-      'Run with the appropriate flag or enable interactive mode'
+      'Pass the value as a flag or run in a TTY'
     );
   }
 }

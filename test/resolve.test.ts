@@ -2,6 +2,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { registry } from '../src/registry';
 import { registerAllCommands } from '../src/commands';
+import { helpCommand } from '../src/commands/help';
+import { setupCommand } from '../src/commands/setup';
+import { CLIError } from '../src/errors/base';
+import { ExitCode } from '../src/errors/codes';
+import { mockConfig } from './helpers/config';
 
 registerAllCommands();
 
@@ -69,5 +74,46 @@ describe('command resolution', () => {
     assert.ok(node);
     const subs = registry.getSubcommands(node);
     assert.equal(subs.length, 5);
+  });
+});
+
+describe('unknown command handling', () => {
+  it('help throws a concise usage error instead of dumping root help', async () => {
+    const written: string[] = [];
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array): boolean => {
+      written.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await assert.rejects(
+        helpCommand.execute(mockConfig(), {}, { _: ['nope', 'sub'] }),
+        (err: unknown) => {
+          assert.ok(err instanceof CLIError);
+          assert.equal(err.message, 'Unknown command: polylane nope sub');
+          assert.equal(err.exitCode, ExitCode.USAGE);
+          assert.ok(err.hint?.includes('polylane --help'));
+          return true;
+        }
+      );
+    } finally {
+      process.stdout.write = origWrite;
+    }
+    assert.deepEqual(written, []);
+  });
+});
+
+describe('setup failure copy', () => {
+  it('rejects an unknown agent with the supported list', async () => {
+    await assert.rejects(
+      setupCommand.execute(mockConfig(), {}, { _: [], agent: ['emacs'] }),
+      (err: unknown) => {
+        assert.ok(err instanceof CLIError);
+        assert.equal(err.message, 'Unknown agent: "emacs"');
+        assert.equal(err.exitCode, ExitCode.USAGE);
+        assert.ok(err.hint?.includes('claude'));
+        return true;
+      }
+    );
   });
 });

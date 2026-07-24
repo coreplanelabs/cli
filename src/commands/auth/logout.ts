@@ -38,7 +38,7 @@ export const authLogoutCommand: Command = {
     if (cred) {
       await revokeToken(config, cred.accessToken);
       deleteCredentials();
-      process.stderr.write('OAuth credentials revoked and removed\n');
+      process.stderr.write('Revoked OAuth token and removed credentials\n');
     }
 
     const existing = loadConfigFile();
@@ -46,10 +46,10 @@ export const authLogoutCommand: Command = {
       const next = { ...existing };
       delete next.api_key;
       replaceConfigFile(next);
-      process.stderr.write('API key cleared from config file\n');
+      process.stderr.write('Removed API key from config\n');
     }
 
-    process.stderr.write('Logged out\n');
+    process.stderr.write('Signed out\n');
 
     void flags;
   },

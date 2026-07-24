@@ -72,7 +72,7 @@ export const configSetCommand: Command = {
           throw new CLIError(
             `Invalid telemetry value: "${value}"`,
             ExitCode.USAGE,
-            `Use one of: ${[...truthy, ...falsy].join(', ')}`
+            'Use true/false, yes/no, on/off, 1/0, or enabled/disabled'
           );
         }
         break;

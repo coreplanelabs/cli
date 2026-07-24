@@ -27,7 +27,7 @@ interface WorkspaceItem {
 }
 
 async function validateApiKey(config: Config, key: string): Promise<WhoamiResult> {
-  const spinner = new Spinner('Validating API key');
+  const spinner = new Spinner('Validating API key…');
   spinner.start();
   try {
     const res = await request(
@@ -41,7 +41,7 @@ async function validateApiKey(config: Config, key: string): Promise<WhoamiResult
     );
     if (!res.ok) {
       spinner.stop();
-      throw new CLIError(`API key validation failed: ${res.status}`, ExitCode.AUTH);
+      throw new CLIError(`API key validation failed (${res.status})`, ExitCode.AUTH);
     }
     const json = (await res.json()) as {
       success: boolean;
@@ -64,7 +64,7 @@ async function validateApiKey(config: Config, key: string): Promise<WhoamiResult
 }
 
 async function selectWorkspace(config: Config, user: WhoamiResult): Promise<string | undefined> {
-  const spinner = new Spinner('Fetching workspaces');
+  const spinner = new Spinner('Fetching workspaces…');
   spinner.start();
   try {
     const list = await requestJson<{ items: WorkspaceItem[]; count: number }>(
@@ -73,12 +73,12 @@ async function selectWorkspace(config: Config, user: WhoamiResult): Promise<stri
     );
     spinner.stop();
     if (list.items.length === 0) {
-      process.stderr.write(`No workspaces found for ${user.email ?? user.id}\n`);
+      process.stderr.write(`No workspaces for ${user.email ?? user.id}. Create one with \`polylane workspace create\`.\n`);
       return undefined;
     }
     if (list.items.length === 1) {
       const ws = list.items[0]!;
-      process.stderr.write(`Using workspace: ${ws.name} (${ws.id})\n`);
+      process.stderr.write(`Using workspace ${ws.name} (${ws.id})\n`);
       return ws.id;
     }
     if (!isInteractive(config.nonInteractive)) {
@@ -86,7 +86,7 @@ async function selectWorkspace(config: Config, user: WhoamiResult): Promise<stri
     }
     const selected = await promptSelect<string>(
       { nonInteractive: config.nonInteractive },
-      'Select default workspace',
+      'Default workspace',
       list.items.map((ws) => ({
         value: ws.id,
         label: ws.name,
@@ -104,7 +104,7 @@ async function apiKeyLogin(config: Config, key: string): Promise<void> {
   const user = await validateApiKey(config, key);
 
   const name = user.forename ? `${user.forename}${user.surname ? ' ' + user.surname : ''}` : user.email ?? user.id;
-  process.stderr.write(`\nAuthenticated as ${name} (${user.email ?? user.id})\n`);
+  process.stderr.write(`\nSigned in as ${name} (${user.email ?? user.id})\n`);
 
   const configWithKey: Config = { ...config, apiKey: key };
   const wsId = await selectWorkspace(configWithKey, user);
@@ -148,7 +148,7 @@ async function oauthLogin(config: Config, useBrowser: boolean): Promise<void> {
       url: '/v1/auth/whoami',
     });
     const name = user.forename ? `${user.forename}${user.surname ? ' ' + user.surname : ''}` : user.email ?? user.id;
-    process.stderr.write(`\nAuthenticated as ${name} (${user.email ?? user.id})\n`);
+    process.stderr.write(`\nSigned in as ${name} (${user.email ?? user.id})\n`);
     const wsId = await selectWorkspace(configWithAuth, user);
     if (wsId) {
       writeConfigFile({ workspace_id: wsId });
@@ -194,7 +194,7 @@ export const authLoginCommand: Command = {
 
     const method = await promptSelect<'browser' | 'device' | 'api-key'>(
       { nonInteractive: config.nonInteractive },
-      'How would you like to authenticate?',
+      'Sign in with',
       [
         { value: 'browser', label: 'OAuth (browser)', hint: 'Recommended' },
         { value: 'device', label: 'OAuth (device code)', hint: 'For SSH/headless' },
@@ -203,7 +203,7 @@ export const authLoginCommand: Command = {
     );
 
     if (method === 'api-key') {
-      const key = await promptPassword({ nonInteractive: config.nonInteractive }, 'Enter API key');
+      const key = await promptPassword({ nonInteractive: config.nonInteractive }, 'API key');
       await apiKeyLogin(config, key);
       return;
     }

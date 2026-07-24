@@ -48,7 +48,7 @@ export function parseDuration(value: string): number {
     throw new CLIError(
       `Invalid duration: "${value}"`,
       ExitCode.USAGE,
-      'Use forms like 1h, 24h, 30m, 7d'
+      'Use a duration like 30m, 1h, 24h, or 7d'
     );
   }
   const n = Number(match[1]);

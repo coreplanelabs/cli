@@ -61,9 +61,9 @@ Every command inherits these. Specific messages are subject to change, but the *
 
 | Scenario | Typical message |
 |---|---|
-| No credentials | `Not logged in.` with a hint listing `auth login` variants |
-| HTTP 401 | `Unauthorized — check your API key` |
-| HTTP 403 | `Forbidden — insufficient permissions` |
+| No credentials | `Not signed in.` with a hint listing `auth login` variants |
+| HTTP 401 | `Not authenticated` |
+| HTTP 403 | `Permission denied` |
 | OAuth refresh failed | `Token refresh failed` with a hint to re-authenticate |
 | WebSocket upgrade rejected (for streaming commands) | `WebSocket upgrade rejected (<status>)` |
 
@@ -71,13 +71,14 @@ Every command inherits these. Specific messages are subject to change, but the *
 
 | Scenario | Typical message |
 |---|---|
-| HTTP 429 | `Rate limit exceeded` + any `Retry-After` |
+| HTTP 429 | `Rate limited` + any `Retry-After` |
 | HTTP 426 | `Plan upgrade required` |
 
 ### Usage (exit `2`)
 
 | Scenario | Typical message |
 |---|---|
+| Unknown command | `Unknown command: polylane <path>` with a hint pointing at `polylane --help` |
 | Unknown flag | `Unknown flag: <flag>` |
 | Flag requires a value | `Flag <flag> requires a value` |
 | Flag expects a number | `Flag <flag> expects a number, got "<value>"` |
@@ -86,7 +87,7 @@ Every command inherits these. Specific messages are subject to change, but the *
 | Invalid domain / workspace ID / timeout / output format | per-validator error with a hint |
 | `--body` invalid JSON | `Invalid JSON in --body: <message>` |
 | `--body-file` unreadable | bubbled fs error (`ENOENT`, `EACCES`, …) |
-| Destructive command without `--yes` in non-interactive mode | `Refusing to <verb> without --yes in non-interactive mode` |
+| Destructive command without `--yes` in non-interactive mode | `Confirmation required` with a hint to re-run with `--yes` |
 
 ### Workspace context (exit `2`)
 

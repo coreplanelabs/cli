@@ -15,11 +15,11 @@ function wrapUnknown(err: unknown): CLIError {
     const msg = err.message;
 
     if (name === 'AbortError' || msg.includes('aborted') || msg.includes('timeout')) {
-      return new CLIError('Request timed out', ExitCode.TIMEOUT, 'Try increasing --timeout');
+      return new CLIError('Request timed out', ExitCode.TIMEOUT, 'Raise --timeout');
     }
 
     if (hasCode(err, 'ECONNREFUSED')) {
-      return new CLIError('Connection refused', ExitCode.NETWORK, 'Check the API domain');
+      return new CLIError('Connection refused', ExitCode.NETWORK, 'Check --domain and your network');
     }
     if (hasCode(err, 'ENOTFOUND')) {
       return new CLIError(

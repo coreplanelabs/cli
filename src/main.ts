@@ -60,7 +60,7 @@ async function printRootHelp(noColor: boolean): Promise<void> {
     const config = loadConfig({} as GlobalFlags);
     status = await buildStatusLine(config);
   } catch {
-    status = 'Not logged in.';
+    status = 'Not signed in.';
   }
   process.stdout.write(renderRootHelp(noColor, status));
 }
@@ -100,9 +100,14 @@ async function run(): Promise<void> {
     }
     const { flags } = parseFlags(argv, [], GLOBAL_OPTIONS);
     const config = loadConfig(flags as GlobalFlags);
-    process.stderr.write(`Unknown command: polylane ${commandPath.join(' ')}\n\n`);
-    await printRootHelp(config.noColor);
-    process.exit(ExitCode.USAGE);
+    handleError(
+      new CLIError(
+        `Unknown command: polylane ${commandPath.join(' ')}`,
+        ExitCode.USAGE,
+        'Run `polylane --help` to list commands'
+      ),
+      config
+    );
   }
 
   const { command, consumed } = resolved;
@@ -144,7 +149,7 @@ async function run(): Promise<void> {
     if (!NO_AUTH_COMMANDS.has(command.name)) {
       if (!credential) {
         throw new CLIError(
-          'Not logged in.',
+          'Not signed in.',
           ExitCode.AUTH,
           'polylane auth login --api-key sk_xxxxx         (API key)\n' +
             '        polylane auth login                            (OAuth browser flow)\n' +
