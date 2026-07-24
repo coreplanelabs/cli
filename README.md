@@ -38,8 +38,8 @@ curl -fsSL https://polylane.com/install.sh | bash
 # Windows — PowerShell
 irm https://polylane.com/install.ps1 | iex
 
-# Homebrew (tap: coreplanelabs/polylane)
-brew install coreplanelabs/polylane/polylane
+# Homebrew (tap: coreplanelabs/tap)
+brew install coreplanelabs/tap/polylane
 
 # npm
 npm install -g @coreplane/polylane

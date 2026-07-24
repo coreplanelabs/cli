@@ -19,7 +19,7 @@ description: Use `polylane` to investigate production issues, explore cloud infr
 # Install (pick one — see README for the full list)
 npm install -g @coreplane/polylane
 # curl -fsSL https://polylane.com/install.sh | bash
-# brew install coreplanelabs/polylane/polylane
+# brew install coreplanelabs/tap/polylane
 
 # Pick ONE auth path (OAuth is the default; use an API key only where a browser sign-in is impossible):
 polylane auth login                                    # OAuth browser (PKCE) — the default
