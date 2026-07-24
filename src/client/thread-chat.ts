@@ -4,6 +4,7 @@ import type { Config } from '../config/schema';
 import { resolveCredential, getAuthHeader } from '../auth/resolver';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
+import { getCliVersion } from '../version';
 
 export interface UIMessagePart {
   type: string;
@@ -91,7 +92,7 @@ async function buildConnection(
   const headers: Record<string, string> = {
     ...getAuthHeader(cred),
     'x-nominal-client': 'cli',
-    'x-nominal-client-version': process.env.POLYLANE_CLI_VERSION ?? '0.0.0',
+    'x-nominal-client-version': getCliVersion(),
   };
   return { url, headers };
 }

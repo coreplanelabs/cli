@@ -3,9 +3,7 @@ import type { Config } from '../config/schema';
 import { UPDATE_STATE_FILE } from '../config/paths';
 import { readJsonFile, writeJsonFile } from '../utils/fs';
 import { isCI } from '../utils/env';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { getCliVersion } from '../version';
 
 interface UpdateState {
   lastCheck: number;
@@ -13,17 +11,6 @@ interface UpdateState {
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-
-function getCurrentVersion(): string {
-  try {
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const pkgPath = join(__dirname, '..', '..', 'package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
-    return pkg.version;
-  } catch {
-    return '0.0.0';
-  }
-}
 
 async function fetchLatest(): Promise<string | null> {
   try {
@@ -53,7 +40,7 @@ export const updateCommand: Command = {
   name: 'update',
   description: 'Check for CLI updates',
   async execute(config: Config): Promise<void> {
-    const current = getCurrentVersion();
+    const current = getCliVersion();
     process.stderr.write(`Current version: ${current}\n`);
 
     if (isCI() && !config.verbose) {
@@ -83,7 +70,7 @@ export async function checkForUpdateAsync(): Promise<string | null> {
   if (isCI()) return null;
   const state = readJsonFile<UpdateState>(UPDATE_STATE_FILE);
   if (state && Date.now() - state.lastCheck < CACHE_TTL_MS) {
-    const current = getCurrentVersion();
+    const current = getCliVersion();
     if (state.latest && compareVersions(state.latest, current) > 0) {
       return state.latest;
     }
@@ -91,7 +78,7 @@ export async function checkForUpdateAsync(): Promise<string | null> {
   }
   const latest = await fetchLatest();
   writeJsonFile(UPDATE_STATE_FILE, { lastCheck: Date.now(), latest });
-  const current = getCurrentVersion();
+  const current = getCliVersion();
   if (latest && compareVersions(latest, current) > 0) return latest;
   return null;
 }

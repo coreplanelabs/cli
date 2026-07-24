@@ -6,9 +6,7 @@ import { ExitCode } from '../errors/codes';
 import { maskToken } from '../utils/token';
 import { showStatusBar } from '../output/status-bar';
 import { recordHttpRequest } from '../telemetry/http-counter';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { getCliVersion } from '../version';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -30,21 +28,6 @@ interface ApiEnvelope<T> {
   success: boolean;
   error: ApiErrorPayload | null;
   result: T;
-}
-
-let cachedVersion: string | null = null;
-
-function getVersion(): string {
-  if (cachedVersion !== null) return cachedVersion;
-  try {
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const pkgPath = join(__dirname, '..', '..', 'package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
-    cachedVersion = pkg.version;
-  } catch {
-    cachedVersion = '0.0.0';
-  }
-  return cachedVersion;
 }
 
 function buildQueryString(query: Query): string {
@@ -78,9 +61,9 @@ export async function request(config: Config, opts: RequestOpts): Promise<Respon
   const fullUrl = path + query;
 
   const headers: Record<string, string> = {
-    'User-Agent': `polylane-cli/${getVersion()}`,
+    'User-Agent': `polylane-cli/${getCliVersion()}`,
     'x-nominal-client': 'cli',
-    'x-nominal-client-version': getVersion(),
+    'x-nominal-client-version': getCliVersion(),
     ...opts.headers,
   };
 

@@ -49,7 +49,7 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build
+        run: POLYLANE_CLI_VERSION="${GITHUB_REF_NAME#v}" npm run build
         env:
           POLYLANE_API_DOMAIN: ${{ secrets.POLYLANE_API_DOMAIN }}
           POLYLANE_OAUTH_CLIENT_ID: ${{ secrets.POLYLANE_OAUTH_CLIENT_ID }}
