@@ -25,7 +25,11 @@ export const workspaceCreateCommand: Command = {
     const slug = getArgString(args, 'slug');
     const noDefault = args.noDefault === true;
 
-    const body: Parameters<PolylaneAPI['workspacesPost']>[0] = { name };
+    // Creating a workspace from the CLI implies accepting the terms, same as
+    // the console flow. The non-literal assignment keeps typecheck green on
+    // spec versions from before acceptTerms existed.
+    const withTerms = { name, acceptTerms: true as const };
+    const body: Parameters<PolylaneAPI['workspacesPost']>[0] = withTerms;
     if (description !== undefined) body.description = description;
     if (slug !== undefined) body.slug = slug;
 
