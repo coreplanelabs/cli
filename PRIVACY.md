@@ -27,6 +27,7 @@ One event per command invocation, fired after the command finishes (success or f
 |---|---|---|
 | `cli.version` | `"0.1.0"` | CLI release in use |
 | `cli.installSource` | `"brew"` | npm / brew / curl / bun / dev / unknown |
+| `cli.ref` | `"gh-readme"` | Optional referral slug the website installer recorded in `~/.polylane/ref` (validated against `^[a-zA-Z0-9._-]{1,64}$`, omitted when absent) |
 
 ### Runtime
 
