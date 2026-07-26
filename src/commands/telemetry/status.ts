@@ -32,6 +32,7 @@ export const telemetryStatusCommand: Command = {
         ],
         runtime: [
           'CLI version + install source (npm/brew/curl/bun/dev/unknown)',
+          'install referral slug, only if the website installer wrote ~/.polylane/ref',
           'Node version, OS + OS release, arch',
           'CI flag + CI provider name (GitHub Actions / CircleCI / ...) when applicable',
           'TTY flags (stdout, stderr)',

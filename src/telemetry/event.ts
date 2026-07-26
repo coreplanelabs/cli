@@ -4,7 +4,7 @@ import type { Config } from '../config/schema';
 import type { Credential } from '../auth/types';
 import { isCI, getCIName, isStdoutTTY, isStderrTTY } from '../utils/env';
 import { getInstallId, recordRun } from './state';
-import { detectInstallSource, detectEnvironment, type InstallSource } from './environment';
+import { detectInstallSource, detectEnvironment, readInstallRef, type InstallSource } from './environment';
 import { getHttpStats } from './http-counter';
 import { getCliVersion } from '../version';
 
@@ -27,6 +27,7 @@ export interface CliTelemetryEvent {
     version: string;
     clientKind: 'cli';
     installSource: InstallSource;
+    ref?: string;               // install referral slug from ~/.polylane/ref, if valid
   };
 
   runtime: {
@@ -127,6 +128,7 @@ export function buildEvent(input: BuildEventInput): CliTelemetryEvent {
       version: getCliVersion(),
       clientKind: 'cli',
       installSource: detectInstallSource(),
+      ...(readInstallRef() ? { ref: readInstallRef()! } : {}),
     },
     runtime: {
       node: process.versions.node,

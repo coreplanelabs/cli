@@ -3,6 +3,8 @@
 <p><strong>Agent-focused CLI for the <a href="https://polylane.com">Polylane</a> platform.</strong><br>
 Investigate production issues, explore cloud infrastructure, search code, run automations, and drive threads — from any agent or terminal.</p>
 
+<p>Your coding agent writes the code. It can't see production. Polylane is the missing sense.</p>
+
 <p>📚 <strong>Docs: <a href="https://docs.polylane.com">docs.polylane.com</a></strong> · <a href="https://docs.polylane.com/getting-started">Getting started</a> · <a href="https://docs.polylane.com/llms.txt">llms.txt</a> (agent index)</p>
 
 <p>
@@ -15,7 +17,7 @@ Investigate production issues, explore cloud infrastructure, search code, run au
 
 `polylane` is designed to be driven by AI agents. Top-level commands map to the tasks an agent actually performs:
 
-- **Triage** issues — anomalies and alerts detected across your cloud and observability stack
+- **Triage** issues — detections and alerts across your cloud and observability stack
 - **Drive** issue timelines — record notes and milestones as you respond
 - **Explore** cloud infrastructure — logs, metrics, dependency graphs
 - **Search** code
@@ -78,6 +80,8 @@ polylane setup --project                  # this project instead of the home dir
 | VS Code | — | user profile `mcp.json` |
 
 It is idempotent: the skill is overwritten with the version bundled in the CLI, an existing MCP entry is left untouched, and unreadable config files are skipped with a manual pointer instead of clobbered. The curl installer runs it automatically after install (opt out with `--no-setup`).
+
+The skill alone, without the CLI: `npx skills add coreplanelabs/cli`.
 
 ## Quick start
 
