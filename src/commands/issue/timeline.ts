@@ -33,9 +33,7 @@ export const issueTimelineCommand: Command = {
     const to = getArgNumber(args, 'to');
 
     const api = new PolylaneAPI(config);
-    const result = await api.issuesTimelineList({
-      workspaceId,
-      issueId,
+    const result = await api.issuesTimelineList(workspaceId, issueId, {
       perPage: limit,
       ...(types ? { types } : {}),
       ...(from !== undefined ? { from } : {}),

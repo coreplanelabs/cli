@@ -22,8 +22,7 @@ export const feedSummaryCommand: Command = {
     const toMs = getArgNumber(args, 'to');
 
     const api = new PolylaneAPI(config);
-    const result = await api.feedSummary({
-      workspaceId,
+    const result = await api.feedSummary(workspaceId, {
       ...(fromMs !== undefined ? { from: fromMs } : {}),
       ...(toMs !== undefined ? { to: toMs } : {}),
     });

@@ -25,7 +25,17 @@ export const workspaceCreateCommand: Command = {
     const slug = getArgString(args, 'slug');
     const noDefault = args.noDefault === true;
 
-    const body: Parameters<PolylaneAPI['workspacesPost']>[0] = { name };
+    // Workspace creation accepts the terms on the user's behalf, so say so
+    // out loud first — on stderr, like every other notice, so piped stdout
+    // stays pure data. Printed before the call and regardless of --quiet.
+    process.stderr.write(
+      'By creating a workspace you accept the Polylane Terms of Service: https://console.polylane.com/terms\n',
+    );
+
+    // The non-literal assignment keeps typecheck green on spec versions from
+    // before acceptTerms existed.
+    const withTerms = { name, acceptTerms: true as const };
+    const body: Parameters<PolylaneAPI['workspacesPost']>[0] = withTerms;
     if (description !== undefined) body.description = description;
     if (slug !== undefined) body.slug = slug;
 
