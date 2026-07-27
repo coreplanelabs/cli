@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+node_bin="$HOME/.local/share/polylane-node/current/bin"
+if [[ -x "$node_bin/node" ]]; then
+  export PATH="$node_bin:$PATH"
+fi
+
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  printf '%s\n' '[orb resume] Node.js or npm is unavailable; run .agents/setup.' >&2
+  exit 1
+fi
+
+if ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit((major === 20 && minor >= 19) || (major === 22 && minor >= 13) || major >= 24 ? 0 : 1)'; then
+  printf '[orb resume] Node.js %s is too old for the locked dependencies; run .agents/setup.\n' "$(node --version)" >&2
+  exit 1
+fi
+
+if [[ ! -d node_modules || ! -f src/generated/client.ts ]]; then
+  printf '%s\n' '[orb resume] Development dependencies or generated sources are missing; run .agents/setup.' >&2
+  exit 1
+fi
+
+printf '%s\n' '[orb resume] Development environment is ready; no services need restarting.'

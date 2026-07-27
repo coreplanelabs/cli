@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+printf '%s\n' '[orb setup] Checking Node.js toolchain...'
+if ! command -v node >/dev/null 2>&1 ||
+  ! command -v npm >/dev/null 2>&1 ||
+  ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit((major === 20 && minor >= 19) || (major === 22 && minor >= 13) || major >= 24 ? 0 : 1)'; then
+  node_version='22.23.1'
+  case "$(uname -m)" in
+    x86_64) node_arch='x64' ;;
+    aarch64) node_arch='arm64' ;;
+    *)
+      printf '[orb setup] Unsupported architecture: %s\n' "$(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+
+  node_root="$HOME/.local/share/polylane-node"
+  node_archive="node-v${node_version}-linux-${node_arch}.tar.xz"
+  node_install_dir="$node_root/${node_archive%.tar.xz}"
+
+  if [[ ! -x "$node_install_dir/bin/node" ]]; then
+    printf '[orb setup] Installing Node.js v%s for the locked development dependencies...\n' "$node_version"
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    curl -fsSLo "$temp_dir/$node_archive" "https://nodejs.org/dist/v${node_version}/${node_archive}"
+    curl -fsSLo "$temp_dir/SHASUMS256.txt" "https://nodejs.org/dist/v${node_version}/SHASUMS256.txt"
+
+    expected_checksum="$(awk -v archive="$node_archive" '$2 == archive { print $1 }' "$temp_dir/SHASUMS256.txt")"
+    actual_checksum="$(sha256sum "$temp_dir/$node_archive" | cut -d ' ' -f 1)"
+    if [[ -z "$expected_checksum" || "$actual_checksum" != "$expected_checksum" ]]; then
+      printf '%s\n' '[orb setup] Node.js archive checksum verification failed.' >&2
+      exit 1
+    fi
+
+    mkdir -p "$node_root"
+    tar -xJf "$temp_dir/$node_archive" -C "$node_root"
+  fi
+
+  ln -sfn "$node_install_dir" "$node_root/current"
+  node_bin="$node_root/current/bin"
+  profile_marker='# polylane Node.js toolchain'
+  if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+    cat >> "$HOME/.bash_profile" <<EOF
+
+$profile_marker
+if [[ "\${PWD}" == "$repo_root" ]]; then
+  export PATH="\$HOME/.local/share/polylane-node/current/bin:\$PATH"
+fi
+EOF
+  fi
+
+  export PATH="$node_bin:$PATH"
+  hash -r
+fi
+
+printf '%s\n' '[orb setup] Installing dependencies from package-lock.json...'
+npm ci --no-audit --no-fund
+
+printf '%s\n' '[orb setup] Generating the OpenAPI client...'
+npm run codegen
+
+printf '[orb setup] Ready with Node.js %s and npm %s.\n' "$(node --version)" "$(npm --version)"
