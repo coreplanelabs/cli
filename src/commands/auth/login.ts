@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import type { GlobalFlags } from '../../types/flags';
@@ -5,7 +7,9 @@ import { promptPassword, promptSelect, intro, outro } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
 import { oauthBrowserFlow, oauthDeviceCodeFlow } from '../../auth/oauth';
 import { writeCredentials } from '../../auth/credentials';
+import { ensureMcpApiKey, mcpKeyName } from '../../auth/mcp-key';
 import type { OAuthCredential } from '../../auth/types';
+import { authorizeAgents } from '../setup';
 import { writeConfigFile } from '../../config/loader';
 import { request, requestJson } from '../../client/http';
 import { CLIError } from '../../errors/base';
@@ -114,6 +118,11 @@ async function apiKeyLogin(config: Config, key: string): Promise<void> {
     ...(wsId ? { workspace_id: wsId } : {}),
   });
 
+  const updated = authorizeAgents(homedir(), key, config.dryRun);
+  if (updated.length > 0) {
+    process.stderr.write(`MCP authenticated for ${updated.join(', ')}\n`);
+  }
+
   outro(`API key saved to ~/.polylane/config.json`);
 }
 
@@ -152,6 +161,17 @@ async function oauthLogin(config: Config, useBrowser: boolean): Promise<void> {
     const wsId = await selectWorkspace(configWithAuth, user);
     if (wsId) {
       writeConfigFile({ workspace_id: wsId });
+    }
+
+    const mcpKey = await ensureMcpApiKey({ ...configWithAuth, workspaceId: wsId ?? configWithAuth.workspaceId });
+    if (mcpKey) {
+      if (mcpKey.minted) {
+        process.stderr.write(`Created MCP API key ${mcpKeyName()} (agent_tools:read)\n`);
+      }
+      const updated = authorizeAgents(homedir(), mcpKey.key, config.dryRun);
+      if (updated.length > 0) {
+        process.stderr.write(`MCP authenticated for ${updated.join(', ')}\n`);
+      }
     }
   } catch {
     // non-fatal

@@ -23,6 +23,8 @@ export interface RawConfig {
   output?: OutputFormat;
   timeout?: number;
   telemetry?: boolean;
+  mcp_api_key?: string;
+  mcp_api_key_id?: string;
 }
 
 // process.env.POLYLANE_API_DOMAIN is replaced at build time via esbuild define

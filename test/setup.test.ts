@@ -5,9 +5,14 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import {
   AGENTS,
+  authorizeAgents,
   writeSkillFile,
   upsertJsonEntry,
   upsertTomlSection,
+  patchJsonEntry,
+  patchTomlSection,
+  headerPatch,
+  argsHeaderPatch,
   MCP_SERVER_NAME,
   MCP_SERVER_URL,
 } from '../src/commands/setup';
@@ -129,6 +134,136 @@ describe('upsertJsonEntry', () => {
     assert.equal(result.action, 'created');
     assert.equal(existsSync(path), false);
   });
+
+  it('adds a credential to an existing bare entry via patch', () => {
+    const path = join(tempDir, 'config.json');
+    writeFileSync(
+      path,
+      JSON.stringify({
+        mcpServers: { [MCP_SERVER_NAME]: { type: 'http', url: MCP_SERVER_URL, headers: { 'x-custom': '1' } } },
+      }),
+      'utf-8'
+    );
+    const result = upsertJsonEntry(
+      path,
+      ['mcpServers', MCP_SERVER_NAME],
+      { type: 'http', url: MCP_SERVER_URL },
+      false,
+      headerPatch('sk_test')
+    );
+    assert.equal(result.action, 'updated');
+    const parsed = JSON.parse(readFileSync(path, 'utf-8')) as {
+      mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+    };
+    const entry = parsed.mcpServers[MCP_SERVER_NAME]!;
+    assert.equal(entry.url, MCP_SERVER_URL);
+    assert.equal(entry.headers['x-custom'], '1');
+    assert.equal(entry.headers['x-api-key'], 'sk_test');
+  });
+
+  it('reports unchanged when the credential is already present', () => {
+    const path = join(tempDir, 'config.json');
+    const original = JSON.stringify({
+      mcpServers: { [MCP_SERVER_NAME]: { type: 'http', url: MCP_SERVER_URL, headers: { 'x-api-key': 'sk_test' } } },
+    });
+    writeFileSync(path, original, 'utf-8');
+    const result = upsertJsonEntry(
+      path,
+      ['mcpServers', MCP_SERVER_NAME],
+      { type: 'http', url: MCP_SERVER_URL },
+      false,
+      headerPatch('sk_test')
+    );
+    assert.equal(result.action, 'unchanged');
+    assert.equal(readFileSync(path, 'utf-8'), original);
+  });
+
+  it('replaces a stale credential', () => {
+    const path = join(tempDir, 'config.json');
+    writeFileSync(
+      path,
+      JSON.stringify({
+        mcpServers: { [MCP_SERVER_NAME]: { type: 'http', url: MCP_SERVER_URL, headers: { 'x-api-key': 'sk_old' } } },
+      }),
+      'utf-8'
+    );
+    const result = upsertJsonEntry(
+      path,
+      ['mcpServers', MCP_SERVER_NAME],
+      { type: 'http', url: MCP_SERVER_URL },
+      false,
+      headerPatch('sk_new')
+    );
+    assert.equal(result.action, 'updated');
+    const parsed = JSON.parse(readFileSync(path, 'utf-8')) as {
+      mcpServers: Record<string, { headers: Record<string, string> }>;
+    };
+    assert.equal(parsed.mcpServers[MCP_SERVER_NAME]!.headers['x-api-key'], 'sk_new');
+  });
+});
+
+describe('patchJsonEntry', () => {
+  it('skips when the file does not exist', () => {
+    const result = patchJsonEntry(join(tempDir, 'missing.json'), ['mcpServers', MCP_SERVER_NAME], headerPatch('sk_test'));
+    assert.equal(result.action, 'skipped');
+  });
+
+  it('skips when the entry is not registered', () => {
+    const path = join(tempDir, 'config.json');
+    writeFileSync(path, JSON.stringify({ mcpServers: {} }), 'utf-8');
+    const result = patchJsonEntry(path, ['mcpServers', MCP_SERVER_NAME], headerPatch('sk_test'));
+    assert.equal(result.action, 'skipped');
+    assert.equal(readFileSync(path, 'utf-8'), JSON.stringify({ mcpServers: {} }));
+  });
+
+  it('adds a credential to a registered entry', () => {
+    const path = join(tempDir, 'config.json');
+    writeFileSync(
+      path,
+      JSON.stringify({ mcpServers: { [MCP_SERVER_NAME]: { type: 'http', url: MCP_SERVER_URL } } }),
+      'utf-8'
+    );
+    const result = patchJsonEntry(path, ['mcpServers', MCP_SERVER_NAME], headerPatch('sk_test'));
+    assert.equal(result.action, 'updated');
+    const parsed = JSON.parse(readFileSync(path, 'utf-8')) as {
+      mcpServers: Record<string, { headers: Record<string, string> }>;
+    };
+    assert.equal(parsed.mcpServers[MCP_SERVER_NAME]!.headers['x-api-key'], 'sk_test');
+  });
+
+  it('does not write in dry-run mode', () => {
+    const path = join(tempDir, 'config.json');
+    const original = JSON.stringify({ mcpServers: { [MCP_SERVER_NAME]: { type: 'http', url: MCP_SERVER_URL } } });
+    writeFileSync(path, original, 'utf-8');
+    const result = patchJsonEntry(path, ['mcpServers', MCP_SERVER_NAME], headerPatch('sk_test'), true);
+    assert.equal(result.action, 'updated');
+    assert.equal(readFileSync(path, 'utf-8'), original);
+  });
+});
+
+describe('argsHeaderPatch', () => {
+  it('appends a header flag to bare mcp-remote args', () => {
+    const patched = argsHeaderPatch('sk_test')({ command: 'npx', args: ['mcp-remote', MCP_SERVER_URL] });
+    assert.ok(patched);
+    assert.deepEqual(patched.args, ['mcp-remote', MCP_SERVER_URL, '--header', 'x-api-key:sk_test']);
+  });
+
+  it('replaces a stale header flag', () => {
+    const patched = argsHeaderPatch('sk_new')({
+      command: 'npx',
+      args: ['mcp-remote', MCP_SERVER_URL, '--header', 'x-api-key:sk_old'],
+    });
+    assert.ok(patched);
+    assert.deepEqual(patched.args, ['mcp-remote', MCP_SERVER_URL, '--header', 'x-api-key:sk_new']);
+  });
+
+  it('returns null when the header is current or args are missing', () => {
+    assert.equal(
+      argsHeaderPatch('sk_test')({ args: ['mcp-remote', MCP_SERVER_URL, '--header', 'x-api-key:sk_test'] }),
+      null
+    );
+    assert.equal(argsHeaderPatch('sk_test')({ command: 'npx' }), null);
+  });
 });
 
 describe('upsertTomlSection', () => {
@@ -158,6 +293,62 @@ describe('upsertTomlSection', () => {
     const before = readFileSync(path, 'utf-8');
     assert.equal(upsertTomlSection(path, header, body).action, 'unchanged');
     assert.equal(readFileSync(path, 'utf-8'), before);
+  });
+
+  const authLine = 'http_headers = { "x-api-key" = "sk_test" }';
+
+  it('creates the section with an auth line', () => {
+    const path = join(tempDir, 'config.toml');
+    const result = upsertTomlSection(path, header, `${body}${authLine}\n`, false, authLine);
+    assert.equal(result.action, 'created');
+    assert.equal(readFileSync(path, 'utf-8'), `${header}\n${body}${authLine}\n`);
+  });
+
+  it('inserts the auth line into an existing bare section', () => {
+    const path = join(tempDir, 'config.toml');
+    writeFileSync(path, `model = "gpt-5"\n\n${header}\n${body}\n[other]\nkey = "v"\n`, 'utf-8');
+    const result = upsertTomlSection(path, header, `${body}${authLine}\n`, false, authLine);
+    assert.equal(result.action, 'updated');
+    const content = readFileSync(path, 'utf-8');
+    assert.ok(content.includes(`${header}\n${body}${authLine}\n`));
+    assert.ok(content.includes('[other]\nkey = "v"'));
+  });
+
+  it('replaces a stale injected auth line', () => {
+    const path = join(tempDir, 'config.toml');
+    writeFileSync(path, `${header}\n${body}http_headers = { "x-api-key" = "sk_old" }\n`, 'utf-8');
+    const result = upsertTomlSection(path, header, `${body}${authLine}\n`, false, authLine);
+    assert.equal(result.action, 'updated');
+    assert.ok(readFileSync(path, 'utf-8').includes(authLine));
+  });
+
+  it('leaves a custom http_headers line alone', () => {
+    const path = join(tempDir, 'config.toml');
+    const custom = `${header}\n${body}http_headers = { "x-api-key" = "sk_mine", "x-extra" = "1" }\n`;
+    writeFileSync(path, custom, 'utf-8');
+    assert.equal(upsertTomlSection(path, header, `${body}${authLine}\n`, false, authLine).action, 'unchanged');
+    assert.equal(readFileSync(path, 'utf-8'), custom);
+  });
+});
+
+describe('patchTomlSection', () => {
+  const header = `[mcp_servers.${MCP_SERVER_NAME}]`;
+  const body = `url = "${MCP_SERVER_URL}"\n`;
+  const authLine = 'http_headers = { "x-api-key" = "sk_test" }';
+
+  it('skips when the file or section is missing', () => {
+    assert.equal(patchTomlSection(join(tempDir, 'missing.toml'), header, authLine).action, 'skipped');
+    const path = join(tempDir, 'config.toml');
+    writeFileSync(path, 'model = "gpt-5"\n', 'utf-8');
+    assert.equal(patchTomlSection(path, header, authLine).action, 'skipped');
+  });
+
+  it('adds the auth line to a registered section', () => {
+    const path = join(tempDir, 'config.toml');
+    writeFileSync(path, `${header}\n${body}`, 'utf-8');
+    assert.equal(patchTomlSection(path, header, authLine).action, 'updated');
+    assert.ok(readFileSync(path, 'utf-8').includes(authLine));
+    assert.equal(patchTomlSection(path, header, authLine).action, 'unchanged');
   });
 });
 
@@ -279,5 +470,97 @@ describe('agent definitions', () => {
     const mcp = outcomes.find((o) => o.label === 'MCP server');
     assert.ok(mcp);
     assert.equal(mcp.action, 'skipped');
+  });
+
+  it('registers authenticated entries when a key is supplied', () => {
+    agent('cursor').user(tempDir, false, 'sk_test');
+    const cursor = JSON.parse(readFileSync(join(tempDir, '.cursor', 'mcp.json'), 'utf-8')) as {
+      mcpServers: Record<string, unknown>;
+    };
+    assert.deepEqual(cursor.mcpServers[MCP_SERVER_NAME], {
+      type: 'http',
+      url: MCP_SERVER_URL,
+      headers: { 'x-api-key': 'sk_test' },
+    });
+
+    agent('codex').user(tempDir, false, 'sk_test');
+    const toml = readFileSync(join(tempDir, '.codex', 'config.toml'), 'utf-8');
+    assert.ok(toml.includes('http_headers = { "x-api-key" = "sk_test" }'));
+
+    agent('zed').user(tempDir, false, 'sk_test');
+    const zed = JSON.parse(readFileSync(join(tempDir, '.config', 'zed', 'settings.json'), 'utf-8')) as {
+      context_servers: Record<string, { args: string[] }>;
+    };
+    assert.deepEqual(zed.context_servers[MCP_SERVER_NAME]!.args, [
+      'mcp-remote',
+      MCP_SERVER_URL,
+      '--header',
+      'x-api-key:sk_test',
+    ]);
+
+    agent('windsurf').user(tempDir, false, 'sk_test');
+    const windsurf = JSON.parse(
+      readFileSync(join(tempDir, '.codeium', 'windsurf', 'mcp_config.json'), 'utf-8')
+    ) as { mcpServers: Record<string, unknown> };
+    assert.deepEqual(windsurf.mcpServers[MCP_SERVER_NAME], {
+      serverUrl: MCP_SERVER_URL,
+      headers: { 'x-api-key': 'sk_test' },
+    });
+  });
+
+  it('is idempotent with a key for every agent', () => {
+    for (const definition of AGENTS.filter((a) => a.id !== 'vscode')) {
+      definition.user(tempDir, false, 'sk_test');
+      const second = definition.user(tempDir, false, 'sk_test');
+      assert.equal(
+        second.every((o) => o.action === 'unchanged'),
+        true,
+        `${definition.id} second authenticated run is a no-op`
+      );
+    }
+  });
+
+  it('adds a key to registrations created without one', () => {
+    for (const definition of AGENTS.filter((a) => a.id !== 'vscode')) {
+      definition.user(tempDir, false);
+      const outcomes = definition.user(tempDir, false, 'sk_test');
+      const mcp = outcomes.filter((o) => o.label === 'MCP server');
+      assert.equal(
+        mcp.every((o) => o.action === 'updated' && o.detail === 'credential added'),
+        true,
+        `${definition.id} bare registration gains the credential`
+      );
+    }
+  });
+});
+
+describe('authorizeAgents', () => {
+  it('updates only agents with an existing registration', () => {
+    mkdirSync(join(tempDir, '.claude'), { recursive: true });
+    agent('cursor').user(tempDir, false);
+    agent('codex').user(tempDir, false);
+
+    const updated = authorizeAgents(tempDir, 'sk_test', false);
+    assert.deepEqual(updated, ['cursor', 'codex']);
+
+    const cursor = JSON.parse(readFileSync(join(tempDir, '.cursor', 'mcp.json'), 'utf-8')) as {
+      mcpServers: Record<string, { headers: Record<string, string> }>;
+    };
+    assert.equal(cursor.mcpServers[MCP_SERVER_NAME]!.headers['x-api-key'], 'sk_test');
+    const toml = readFileSync(join(tempDir, '.codex', 'config.toml'), 'utf-8');
+    assert.ok(toml.includes('http_headers = { "x-api-key" = "sk_test" }'));
+    assert.equal(existsSync(join(tempDir, '.claude.json')), false);
+  });
+
+  it('is a no-op when registrations are already authenticated', () => {
+    agent('cursor').user(tempDir, false, 'sk_test');
+    assert.deepEqual(authorizeAgents(tempDir, 'sk_test', false), []);
+  });
+
+  it('does not write in dry-run mode', () => {
+    agent('cursor').user(tempDir, false);
+    const before = readFileSync(join(tempDir, '.cursor', 'mcp.json'), 'utf-8');
+    assert.deepEqual(authorizeAgents(tempDir, 'sk_test', true), ['cursor']);
+    assert.equal(readFileSync(join(tempDir, '.cursor', 'mcp.json'), 'utf-8'), before);
   });
 });

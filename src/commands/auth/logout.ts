@@ -42,9 +42,11 @@ export const authLogoutCommand: Command = {
     }
 
     const existing = loadConfigFile();
-    if (existing?.api_key) {
+    if (existing?.api_key || existing?.mcp_api_key || existing?.mcp_api_key_id) {
       const next = { ...existing };
       delete next.api_key;
+      delete next.mcp_api_key;
+      delete next.mcp_api_key_id;
       replaceConfigFile(next);
       process.stderr.write('Removed API key from config\n');
     }
