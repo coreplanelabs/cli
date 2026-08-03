@@ -13,21 +13,19 @@ import {
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 
-const VALID_CATEGORIES = [
-  'chat',
-  'investigation',
-  'autofix',
-  'automation',
-  'anomaly',
-  'deploy',
-  'change',
-  'release',
-  'alert',
-  'issue',
-  'digest',
-  'tier',
-] as const;
-type Category = (typeof VALID_CATEGORIES)[number];
+type Category = NonNullable<NonNullable<Parameters<PolylaneAPI['feedList']>[1]>['category']>;
+
+const CATEGORY_COVERAGE: Record<Category, true> = {
+  autofix: true,
+  automation: true,
+  change: true,
+  release: true,
+  issue: true,
+  digest: true,
+  tier: true,
+};
+
+const VALID_CATEGORIES = Object.keys(CATEGORY_COVERAGE) as Category[];
 
 const FIELDS = [
   'occurredAt',
@@ -45,7 +43,7 @@ const FIELDS = [
 
 export const feedListCommand: Command = {
   name: 'feed list',
-  description: 'Workspace agent activity feed (chat, investigations, autofixes, issues, deploys…)',
+  description: 'Workspace agent activity feed (autofixes, automations, changes, releases, issues…)',
   operationId: 'feed.list',
   options: [
     { flag: '--category <c>', description: VALID_CATEGORIES.join(' | '), type: 'string' },
