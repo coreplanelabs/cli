@@ -5,6 +5,8 @@ import { formatOutput } from '../../output/formatter';
 import { writeConfigFile } from '../../config/loader';
 import { getArgString, promptIfMissing } from '../helpers';
 
+type CreateWorkspaceBody = Parameters<PolylaneAPI['workspacesPost']>[0];
+
 export const workspaceCreateCommand: Command = {
   name: 'workspace create',
   description: 'Create a new workspace and set it as the default',
@@ -32,10 +34,7 @@ export const workspaceCreateCommand: Command = {
       'By creating a workspace you accept the Polylane Terms of Service: https://console.polylane.com/terms\n',
     );
 
-    // The non-literal assignment keeps typecheck green on spec versions from
-    // before acceptTerms existed.
-    const withTerms = { name, acceptTerms: true as const };
-    const body: Parameters<PolylaneAPI['workspacesPost']>[0] = withTerms;
+    const body: CreateWorkspaceBody = { name };
     if (description !== undefined) body.description = description;
     if (slug !== undefined) body.slug = slug;
 
