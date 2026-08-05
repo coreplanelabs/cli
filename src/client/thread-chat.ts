@@ -227,12 +227,16 @@ export async function sendThreadMessage(
       rejectOnce(new CLIError(`WebSocket error: ${err.message}`, ExitCode.NETWORK));
     });
 
-    ws.on('close', () => {
+    ws.on('close', (code: number, reason: Buffer) => {
       if (!resolved) {
         if (blockOrder.length > 0) {
           finalize();
         } else {
-          rejectOnce(new CLIError('WebSocket closed before reply', ExitCode.NETWORK));
+          const reasonText = reason.toString('utf-8').trim();
+          rejectOnce(new CLIError(
+            `WebSocket closed before reply (code ${code}${reasonText ? `, ${reasonText}` : ''})`,
+            ExitCode.NETWORK
+          ));
         }
       }
     });

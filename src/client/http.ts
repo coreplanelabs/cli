@@ -133,12 +133,16 @@ export async function requestJson<T>(config: Config, opts: RequestOpts): Promise
   }
 
   let json: ApiEnvelope<T>;
+  let bodyText = '';
   try {
-    json = (await res.json()) as ApiEnvelope<T>;
+    bodyText = await res.text();
+    json = JSON.parse(bodyText) as ApiEnvelope<T>;
   } catch {
+    const snippet = bodyText.slice(0, 500);
     throw new CLIError(
-      `Invalid JSON response from server (status ${res.status})`,
-      ExitCode.GENERAL
+      `Invalid JSON response from ${opts.method ?? 'GET'} ${opts.url} (status ${res.status}): ${snippet}`,
+      ExitCode.GENERAL,
+      `Check --domain=${config.domain} and your network`
     );
   }
 
