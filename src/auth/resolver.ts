@@ -19,8 +19,12 @@ export async function resolveCredential(config: Config): Promise<Credential> {
     if (isTokenExpiringSoon(stored)) {
       try {
         return await refreshToken(config, stored);
-      } catch {
-        // Fall through
+      } catch (err) {
+        if (config.verbose) {
+          const msg = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`Token refresh failed: ${msg}
+`);
+        }
       }
     } else {
       return stored;

@@ -30,8 +30,9 @@ export async function refreshToken(
   });
 
   if (!res.ok) {
+    const body = await res.text().catch(() => '');
     throw new CLIError(
-      `Token refresh failed: ${res.status}`,
+      `Token refresh failed: ${res.status} ${body}`.trim(),
       ExitCode.AUTH,
       'Run `polylane auth login` to re-authenticate'
     );
