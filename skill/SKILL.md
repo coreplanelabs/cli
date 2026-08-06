@@ -149,7 +149,7 @@ polylane service list                             # cloud infra discovered from 
 polylane automation list
 ```
 
-`integration connect` and `cloud connect` dispatch on `--type` / `--provider`. Some options open a browser for an install URL; others take API credentials directly. Use `--help` on each to see the required flags and optional `--no-browser`.
+`integration connect` and `cloud connect` dispatch on `--type` / `--provider`. Some options open a browser for an install URL; others take API credentials directly. Use `--help` on each to see the required flags and optional `--no-browser`. Browser flows wait in the terminal until the connection appears (interactive TTY only); with `--output json` or in non-interactive runs they print the URL and exit, so poll `integration list` / `cloud list` to confirm.
 
 ### Investigating an issue
 

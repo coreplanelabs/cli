@@ -4,6 +4,8 @@ import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
 import { promptText, promptSelect, promptPassword, note } from '../utils/prompt';
 import { isInteractive } from '../utils/env';
+import { Spinner } from '../output/progress';
+import { consoleBaseUrl } from '../auth/oauth';
 
 export async function requireWorkspace(config: Config): Promise<string> {
   if (config.workspaceId) return config.workspaceId;
@@ -133,6 +135,65 @@ export async function promptSecret(
   }
   note(`${opts.instructions}\n\n${opts.linkLabel}:\n  ${opts.link}`, opts.message);
   return promptPassword({ nonInteractive: config.nonInteractive }, opts.message);
+}
+
+// Browser connect flows enter through the console's /cli/connect page: it
+// marks the browser session as CLI-initiated (cookie), generates the provider
+// install URL, and forwards to it — so the flow ends on the console's
+// "go back to your terminal" page instead of the workspace dashboard.
+export function cliConnectUrl(config: Config, flow: string, workspaceId: string): string {
+  return `${consoleBaseUrl(config)}/cli/connect?flow=${encodeURIComponent(flow)}&workspace=${encodeURIComponent(workspaceId)}`;
+}
+
+// After a connect flow hands off to the browser, the terminal session should
+// not just end — keep it alive and poll until the connection shows up
+// server-side, so the user comes back to a confirmation instead of a dead
+// prompt.
+export function canWaitForBrowser(config: Config): boolean {
+  return !config.dryRun && config.output !== 'json' && isInteractive(config.nonInteractive);
+}
+
+export async function waitForBrowserCompletion<T>(
+  config: Config,
+  check: () => Promise<T | null>,
+  opts: { waitingFor: string; interruptHint: string; timeoutMs?: number; intervalMs?: number }
+): Promise<T | null> {
+  const timeoutMs = opts.timeoutMs ?? 5 * 60_000;
+  const intervalMs = opts.intervalMs ?? 3_000;
+  if (!config.quiet) {
+    process.stderr.write('\nFinish in the browser, then come back to this terminal.\n');
+  }
+  const spinner = new Spinner(`Waiting for ${opts.waitingFor}… (Ctrl+C to stop waiting)`);
+  const onSigint = (): void => {
+    spinner.stop(`Stopped waiting — the browser setup continues on its own. ${opts.interruptHint}`);
+    process.exit(0);
+  };
+  spinner.start();
+  process.once('SIGINT', onSigint);
+  try {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, intervalMs));
+      let found: T | null = null;
+      try {
+        found = await check();
+      } catch {
+        // Transient poll failures (e.g. 404 until the resource exists) are
+        // expected — keep waiting.
+      }
+      if (found) {
+        spinner.stop();
+        return found;
+      }
+    }
+    spinner.stop();
+    return null;
+  } catch (err) {
+    spinner.fail();
+    throw err;
+  } finally {
+    process.removeListener('SIGINT', onSigint);
+  }
 }
 
 export function getArgString(args: Record<string, unknown>, key: string): string | undefined {

@@ -3,7 +3,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { PolylaneAPI } from '../../generated/client';
-import { requestJson } from '../../client/http';
 import { formatOutput } from '../../output/formatter';
 import {
   requireWorkspace,
@@ -12,7 +11,11 @@ import {
   promptIfMissing,
   promptChoice,
   promptSecret,
+  canWaitForBrowser,
+  waitForBrowserCompletion,
+  cliConnectUrl,
 } from '../helpers';
+import type { CloudAccount } from '../../generated/types';
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { openBrowser } from '../../utils/browser';
@@ -63,6 +66,49 @@ const AWS_REGIONS = [
   { value: 'sa-east-1', label: 'sa-east-1 (São Paulo)' },
 ];
 
+// Baseline the accounts of one provider so the poller can spot the ones the
+// browser flow creates — or updates, when it's a reconnect.
+async function accountArrivalCheck(
+  api: PolylaneAPI,
+  workspaceId: string,
+  provider: Provider
+): Promise<() => Promise<CloudAccount[] | null>> {
+  const before = await api.cloudAccountsList(workspaceId, { provider, perPage: 100 });
+  const seen = new Map(before.items.map((a) => [a.id, a.updated ?? '']));
+  return async () => {
+    const current = await api.cloudAccountsList(workspaceId, { provider, perPage: 100 });
+    const fresh = current.items.filter((a) => !seen.has(a.id) || seen.get(a.id) !== (a.updated ?? ''));
+    return fresh.length > 0 ? fresh : null;
+  };
+}
+
+async function confirmBrowserConnect(
+  config: Config,
+  check: (() => Promise<CloudAccount[] | null>) | null,
+  label: string,
+  opts: { timeoutMs?: number; intervalMs?: number } = {}
+): Promise<void> {
+  if (!check) {
+    if (!config.quiet && config.output !== 'json') {
+      process.stderr.write('\nAfter finishing in the browser, check with `polylane cloud list`.\n');
+    }
+    return;
+  }
+  const found = await waitForBrowserCompletion(config, check, {
+    waitingFor: label,
+    interruptHint: 'Check with `polylane cloud list`.',
+    ...opts,
+  });
+  if (found) {
+    for (const account of found) {
+      const detail = [account.account, account.region].filter(Boolean).join(', ');
+      process.stderr.write(`✓ Connected: ${account.alias || account.account}${detail ? ` (${detail})` : ''}\n`);
+    }
+  } else {
+    process.stderr.write('Not seeing the connection yet — check with `polylane cloud list`.\n');
+  }
+}
+
 async function openOrPrintInstallUrl(config: Config, url: string, label: string, noBrowser: boolean): Promise<void> {
   if (config.output === 'json') {
     formatOutput(config, { url });
@@ -84,26 +130,20 @@ async function openOrPrintInstallUrl(config: Config, url: string, label: string,
   }
 }
 
-// PlanetScale and Supabase use the same browser OAuth flow the console does:
-// a hidden generate endpoint returns the authorization URL and the callback
-// lands back in the API. Neither endpoint is in the public OpenAPI spec, so
-// call the paths directly.
-async function oauthConnect(
+// Vercel, PlanetScale and Supabase complete in the browser: the flow enters
+// via the console's /cli/connect page (which ends the journey on its "go back
+// to your terminal" page) while the CLI waits for the account to appear.
+async function browserConnect(
   config: Config,
+  api: PolylaneAPI,
   workspaceId: string,
-  provider: 'planetscale' | 'supabase',
+  provider: 'vercel' | 'planetscale' | 'supabase',
   label: string,
   noBrowser: boolean
 ): Promise<void> {
-  const result = await requestJson<{ url: string }>(config, {
-    method: 'POST',
-    url: `/v1/cloud_accounts/${provider}/generate`,
-    body: { workspaceId },
-  });
-  await openOrPrintInstallUrl(config, result.url, label, noBrowser);
-  if (!config.quiet && config.output !== 'json') {
-    process.stderr.write('\nAfter authorizing, run `polylane cloud list` to see the account.\n');
-  }
+  const check = canWaitForBrowser(config) ? await accountArrivalCheck(api, workspaceId, provider) : null;
+  await openOrPrintInstallUrl(config, cliConnectUrl(config, provider, workspaceId), label, noBrowser);
+  await confirmBrowserConnect(config, check, `${label} to connect`);
 }
 
 export const cloudConnectCommand: Command = {
@@ -159,14 +199,14 @@ export const cloudConnectCommand: Command = {
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
     const api = new PolylaneAPI(config);
 
-    // --- Browser flows: setup completes outside the CLI ---
+    // --- Browser flows: setup completes in the browser, then the CLI waits
+    // for the account to appear so the session ends with a result ---
     if (provider === 'vercel') {
-      const result = await api.cloudAccountsConnectVercelGenerate({ workspaceId });
-      await openOrPrintInstallUrl(config, result.url, 'the Vercel integration', noBrowser);
+      await browserConnect(config, api, workspaceId, 'vercel', 'the Vercel integration', noBrowser);
       return;
     }
     if (provider === 'supabase') {
-      await oauthConnect(config, workspaceId, 'supabase', 'your Supabase organization', noBrowser);
+      await browserConnect(config, api, workspaceId, 'supabase', 'your Supabase organization', noBrowser);
       return;
     }
     if (provider === 'planetscale') {
@@ -176,7 +216,7 @@ export const cloudConnectCommand: Command = {
       const token = getArgString(args, 'token');
       const organization = getArgString(args, 'organization');
       if (tokenId === undefined && token === undefined && organization === undefined) {
-        await oauthConnect(config, workspaceId, 'planetscale', 'your PlanetScale organization', noBrowser);
+        await browserConnect(config, api, workspaceId, 'planetscale', 'your PlanetScale organization', noBrowser);
         return;
       }
       if (!tokenId || !token || !organization) {
@@ -285,17 +325,21 @@ export const cloudConnectCommand: Command = {
       body = { workspaceId, provider: 'kubernetes', kubeconfig: readFileSync(resolved, 'utf-8') };
     }
 
+    // AWS ends in the browser too (deploying the CloudFormation stack), so
+    // snapshot before connecting to be able to wait for the account after.
+    const awsCheck =
+      provider === 'aws' && canWaitForBrowser(config) ? await accountArrivalCheck(api, workspaceId, 'aws') : null;
+
     const result = await api.cloudAccountsConnect(body);
 
     // AWS returns a CloudFormation URL the user must open to deploy the stack.
     // Open it in the browser unless suppressed.
     if (result.provider === 'aws') {
       await openOrPrintInstallUrl(config, result.url, 'the AWS CloudFormation stack', noBrowser);
-      if (!config.quiet) {
-        process.stderr.write(
-          '\nAfter the stack finishes deploying, run `polylane cloud list` to see the account.\n'
-        );
-      }
+      await confirmBrowserConnect(config, awsCheck, 'the CloudFormation stack to deploy (usually a few minutes)', {
+        timeoutMs: 15 * 60_000,
+        intervalMs: 5_000,
+      });
       return;
     }
 

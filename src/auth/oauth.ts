@@ -324,7 +324,7 @@ async function startCallbackServer(expectedState: string, timeoutMs: number): Pr
 //
 // Convention: API lives at api.<root>, console at console.<root>. Override with
 // POLYLANE_CONSOLE_DOMAIN if that ever diverges.
-function consoleBaseUrl(config: Config): string {
+export function consoleBaseUrl(config: Config): string {
   const override = process.env.POLYLANE_CONSOLE_DOMAIN;
   if (override) return `https://${override}`;
   const host = config.domain.replace(/^api\./, 'console.');

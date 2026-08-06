@@ -10,7 +10,11 @@ import {
   promptChoice,
   promptSecret,
   parseJsonArg,
+  canWaitForBrowser,
+  waitForBrowserCompletion,
+  cliConnectUrl,
 } from '../helpers';
+import type { Integration } from '../../generated/types';
 import { openBrowser } from '../../utils/browser';
 import { isInteractive } from '../../utils/env';
 import { promptSelect, promptPassword, promptConfirm } from '../../utils/prompt';
@@ -76,6 +80,43 @@ const CODE_AGENTS = {
     linkLabel: 'Open Factory settings',
   },
 } as const;
+
+// Baseline the integrations of one type so the poller can spot the one the
+// browser flow creates — or updates, when it's a re-install.
+async function integrationArrivalCheck(
+  api: PolylaneAPI,
+  workspaceId: string,
+  type: string
+): Promise<() => Promise<Integration | null>> {
+  const before = await api.integrationsList(workspaceId, { type, perPage: 100 });
+  const seen = new Map(before.items.map((i) => [i.id, i.updated ?? '']));
+  return async () => {
+    const current = await api.integrationsList(workspaceId, { type, perPage: 100 });
+    return current.items.find((i) => !seen.has(i.id) || seen.get(i.id) !== (i.updated ?? '')) ?? null;
+  };
+}
+
+async function confirmBrowserConnect(
+  config: Config,
+  check: (() => Promise<Integration | null>) | null,
+  label: string
+): Promise<void> {
+  if (!check) {
+    if (!config.quiet && config.output !== 'json') {
+      process.stderr.write('\nAfter finishing in the browser, check with `polylane integration list`.\n');
+    }
+    return;
+  }
+  const found = await waitForBrowserCompletion(config, check, {
+    waitingFor: `${label} to connect`,
+    interruptHint: 'Check with `polylane integration list`.',
+  });
+  if (found) {
+    process.stderr.write(`✓ ${label} connected: ${found.name}\n`);
+  } else {
+    process.stderr.write('Not seeing the connection yet — check with `polylane integration list`.\n');
+  }
+}
 
 async function openOrPrintInstallUrl(config: Config, url: string, label: string, noBrowser: boolean): Promise<void> {
   if (config.output === 'json') {
@@ -150,20 +191,15 @@ export const integrationConnectCommand: Command = {
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
     const api = new PolylaneAPI(config);
 
-    // --- Install-URL flows: setup completes in the browser ---
-    if (type === 'github') {
-      const result = await api.integrationsGithubGenerate({ workspaceId });
-      await openOrPrintInstallUrl(config, result.url, 'the GitHub App', noBrowser);
-      return;
-    }
-    if (type === 'slack') {
-      const result = await api.integrationsSlackGenerate({ workspaceId });
-      await openOrPrintInstallUrl(config, result.url, 'the Slack app', noBrowser);
-      return;
-    }
-    if (type === 'sentry') {
-      const result = await api.integrationsSentryGenerate({ workspaceId });
-      await openOrPrintInstallUrl(config, result.url, 'the Sentry integration', noBrowser);
+    // --- Install-URL flows: the browser enters via the console's /cli/connect
+    // page (which ends the journey on its "go back to your terminal" page),
+    // while the CLI waits for the integration to appear ---
+    if (type === 'github' || type === 'slack' || type === 'sentry') {
+      const labels = { github: 'the GitHub App', slack: 'the Slack app', sentry: 'the Sentry integration' } as const;
+      const names = { github: 'GitHub', slack: 'Slack', sentry: 'Sentry' } as const;
+      const check = canWaitForBrowser(config) ? await integrationArrivalCheck(api, workspaceId, type) : null;
+      await openOrPrintInstallUrl(config, cliConnectUrl(config, type, workspaceId), labels[type], noBrowser);
+      await confirmBrowserConnect(config, check, names[type]);
       return;
     }
 
@@ -198,6 +234,7 @@ export const integrationConnectCommand: Command = {
 
       if (authMethod === 'oauth') {
         const scope = getArgString(args, 'scope');
+        const check = canWaitForBrowser(config) ? await integrationArrivalCheck(api, workspaceId, 'mcp') : null;
         const result = await api.integrationsMcpOauthStart({
           workspaceId,
           url,
@@ -209,8 +246,8 @@ export const integrationConnectCommand: Command = {
         await openOrPrintInstallUrl(config, result.authorizeUrl, 'the MCP server authorization page', noBrowser);
         if (!config.quiet && config.output !== 'json') {
           process.stderr.write(`\nPending integration: ${result.pendingId}\n`);
-          process.stderr.write('After authorizing, run `polylane integration list` to see the connected server.\n');
         }
+        await confirmBrowserConnect(config, check, name);
         return;
       }
 
