@@ -2,7 +2,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import {
   AGENTS,
   writeSkillFile,
@@ -165,7 +165,7 @@ describe('agent definitions', () => {
   it('covers the supported agent list', () => {
     assert.deepEqual(
       AGENTS.map((a) => a.id),
-      ['claude', 'cursor', 'opencode', 'codex', 'windsurf', 'zed', 'vscode']
+      ['claude', 'cursor', 'opencode', 'codex', 'pi', 'warp', 'windsurf', 'zed', 'vscode']
     );
   });
 
@@ -181,6 +181,14 @@ describe('agent definitions', () => {
     assert.equal(agent('windsurf').detect(tempDir), false);
     mkdirSync(join(tempDir, '.codeium', 'windsurf'), { recursive: true });
     assert.equal(agent('windsurf').detect(tempDir), true);
+
+    assert.equal(agent('pi').detect(tempDir), false);
+    mkdirSync(join(tempDir, '.pi'), { recursive: true });
+    assert.equal(agent('pi').detect(tempDir), true);
+
+    assert.equal(agent('warp').detect(tempDir), false);
+    mkdirSync(join(tempDir, '.warp'), { recursive: true });
+    assert.equal(agent('warp').detect(tempDir), true);
   });
 
   it('detects claude from ~/.claude.json alone', () => {
@@ -227,6 +235,24 @@ describe('agent definitions', () => {
     assert.ok(toml.includes(`url = "${MCP_SERVER_URL}"`));
   });
 
+  it('configures pi with a skill and a url MCP entry', () => {
+    agent('pi').user(tempDir, false);
+    assert.equal(readFileSync(join(tempDir, '.pi', 'agent', 'skills', 'polylane-cli', 'SKILL.md'), 'utf-8'), SKILL_MD);
+    const parsed = JSON.parse(readFileSync(join(tempDir, '.pi', 'agent', 'mcp.json'), 'utf-8')) as {
+      mcpServers: Record<string, unknown>;
+    };
+    assert.deepEqual(parsed.mcpServers[MCP_SERVER_NAME], { url: MCP_SERVER_URL });
+  });
+
+  it('configures warp with a skill and a url MCP entry', () => {
+    agent('warp').user(tempDir, false);
+    assert.equal(readFileSync(join(tempDir, '.warp', 'skills', 'polylane-cli', 'SKILL.md'), 'utf-8'), SKILL_MD);
+    const parsed = JSON.parse(readFileSync(join(tempDir, '.warp', '.mcp.json'), 'utf-8')) as {
+      mcpServers: Record<string, unknown>;
+    };
+    assert.deepEqual(parsed.mcpServers[MCP_SERVER_NAME], { url: MCP_SERVER_URL });
+  });
+
   it('configures windsurf with a serverUrl MCP entry only', () => {
     const outcomes = agent('windsurf').user(tempDir, false);
     assert.equal(outcomes.length, 1);
@@ -270,6 +296,22 @@ describe('agent definitions', () => {
       mcpServers: Record<string, unknown>;
     };
     assert.deepEqual(parsed.mcpServers[MCP_SERVER_NAME], { type: 'http', url: MCP_SERVER_URL });
+  });
+
+  it('writes project-scope config for pi and warp', () => {
+    for (const [id, mcpPath] of [
+      ['pi', join('.pi', 'mcp.json')],
+      ['warp', join('.warp', '.mcp.json')],
+    ] as const) {
+      const project = agent(id).project;
+      assert.ok(project);
+      project(tempDir, false);
+      assert.ok(existsSync(join(tempDir, `.${id}`, 'skills', 'polylane-cli', 'SKILL.md')));
+      const parsed = JSON.parse(readFileSync(join(tempDir, mcpPath), 'utf-8')) as {
+        mcpServers: Record<string, unknown>;
+      };
+      assert.deepEqual(parsed.mcpServers[MCP_SERVER_NAME], { url: MCP_SERVER_URL });
+    }
   });
 
   it('reports codex project MCP as user-level only', () => {

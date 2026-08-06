@@ -128,6 +128,7 @@ export function vscodeUserDirectory(home: string): string {
 }
 
 const HTTP_SERVER_ENTRY = { type: 'http', url: MCP_SERVER_URL };
+const URL_SERVER_ENTRY = { url: MCP_SERVER_URL };
 const CODEX_SECTION_HEADER = `[mcp_servers.${MCP_SERVER_NAME}]`;
 const CODEX_SECTION_BODY = `url = "${MCP_SERVER_URL}"\n`;
 
@@ -209,6 +210,32 @@ export const AGENTS: AgentSetup[] = [
         action: 'skipped',
         detail: 'Codex MCP servers are user-level only; run without --project',
       },
+    ],
+  },
+  {
+    id: 'pi',
+    name: 'Pi',
+    detect: (home) => existsSync(join(home, '.pi')),
+    user: (home, dryRun) => [
+      writeSkillFile(skillFile(join(home, '.pi', 'agent')), dryRun),
+      upsertJsonEntry(join(home, '.pi', 'agent', 'mcp.json'), ['mcpServers', MCP_SERVER_NAME], URL_SERVER_ENTRY, dryRun),
+    ],
+    project: (projectDir, dryRun) => [
+      writeSkillFile(skillFile(join(projectDir, '.pi')), dryRun),
+      upsertJsonEntry(join(projectDir, '.pi', 'mcp.json'), ['mcpServers', MCP_SERVER_NAME], URL_SERVER_ENTRY, dryRun),
+    ],
+  },
+  {
+    id: 'warp',
+    name: 'Warp',
+    detect: (home) => existsSync(join(home, '.warp')),
+    user: (home, dryRun) => [
+      writeSkillFile(skillFile(join(home, '.warp')), dryRun),
+      upsertJsonEntry(join(home, '.warp', '.mcp.json'), ['mcpServers', MCP_SERVER_NAME], URL_SERVER_ENTRY, dryRun),
+    ],
+    project: (projectDir, dryRun) => [
+      writeSkillFile(skillFile(join(projectDir, '.warp')), dryRun),
+      upsertJsonEntry(join(projectDir, '.warp', '.mcp.json'), ['mcpServers', MCP_SERVER_NAME], URL_SERVER_ENTRY, dryRun),
     ],
   },
   {
