@@ -92,9 +92,9 @@ The skill alone, without the CLI: `npx skills add coreplanelabs/cli`.
 polylane auth login                            # OAuth browser (the default)
 polylane auth login --no-browser               # OAuth device code (SSH / headless)
 polylane auth login --api-key sk_xxxxx         # API key (CI / scripts where OAuth is impossible)
-polylane auth signup --email agent@example.com # bootstrap a fresh account
-                                              # (returns a session token; create an
-                                              # API key after step 2 for long-lived use)
+polylane auth signup                           # create an account: Google, GitHub, or email
+                                              # (email signup sends a 6-digit code; enter it
+                                              # at the prompt or re-run with --code <code>)
 
 # 2. Workspace
 polylane workspace create --name "My Workspace"   # creates + makes default
@@ -203,11 +203,12 @@ OAuth is the default way to connect — including for agents. Use an API key onl
 | `polylane auth login` | Interactive OAuth (browser, PKCE) — the default |
 | `polylane auth login --no-browser` | OAuth device code (SSH / headless) |
 | `polylane auth login --api-key sk_...` | Scripts / CI / machines that cannot complete OAuth |
-| `polylane auth signup --email … --password …` | Bootstrap a fresh account from an agent (no browser, no human) |
+| `polylane auth signup` | Create an account — Google/GitHub (opens the browser) or email + password |
+| `polylane auth signup --email … --password …` | Bootstrap a fresh account from an agent; finish with `--code <code>` from the verification email |
 
 OAuth credentials live at `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. `polylane auth status` reports the active source.
 
-For account lifecycle operations beyond signup/login (verify email, reset password, update profile, delete account, notification settings) — use the web console. They're available via `polylane api call <op>` if you really need them from the CLI, but they're not first-class commands.
+For account lifecycle operations beyond signup/login (reset password, update profile, delete account, notification settings) — use the web console. They're available via `polylane api call <op>` if you really need them from the CLI, but they're not first-class commands.
 
 ## Telemetry
 

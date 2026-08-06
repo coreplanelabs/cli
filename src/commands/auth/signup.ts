@@ -2,7 +2,9 @@ import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { formatOutput } from '../../output/formatter';
 import { getArgString, promptIfMissing } from '../helpers';
-import { promptPassword, intro, outro, note } from '../../utils/prompt';
+import { promptPassword, promptSelect, promptText, intro, outro, note } from '../../utils/prompt';
+import { isInteractive } from '../../utils/env';
+import { openBrowser } from '../../utils/browser';
 import { writeCredentials } from '../../auth/credentials';
 import { parseSessionExpiresAt } from '../../auth/signup-helpers';
 import type { OAuthCredential } from '../../auth/types';
@@ -11,107 +13,295 @@ import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import type { User } from '../../generated/types';
 
-interface SignupBody {
-  email: string;
-  password: string;
+type SignupMethod = 'google' | 'github' | 'email';
+
+interface ApiErrorBody {
+  message?: string;
+  detail?: string;
 }
 
 interface SignupEnvelope {
   success: boolean;
   result: { user: User; token?: string };
-  error: { message?: string; detail?: string } | null;
+  error: ApiErrorBody | null;
+}
+
+interface VerifyEmailEnvelope {
+  success: boolean;
+  result: { token?: string; workspaceSlug?: string };
+  error: ApiErrorBody | null;
+}
+
+interface VerifiedSession {
+  token?: string;
+  workspaceSlug?: string;
+  expiresAt: string;
+}
+
+const CODE_ATTEMPTS = 3;
+
+const OAUTH_PROVIDER_LABELS: Record<'google' | 'github', string> = {
+  google: 'Google',
+  github: 'GitHub',
+};
+
+function writeSessionCredential(token: string, expiresAt: string, account: string): void {
+  const cred: OAuthCredential = {
+    type: 'oauth',
+    accessToken: token,
+    refreshToken: '',
+    expiresAt,
+    tokenType: 'Bearer',
+    scope: '',
+    account,
+  };
+  writeCredentials(cred);
+}
+
+function nextSteps(expiresAt: string, workspaceSlug?: string): string {
+  const workspaceStep = workspaceSlug
+    ? [
+        `  1. Your first workspace ("${workspaceSlug}") was created — set it as the default`,
+        `     polylane workspace list`,
+        `     polylane workspace use <id>`,
+      ]
+    : [`  1. Create a workspace`, `     polylane workspace create --name "My Workspace"`];
+  return [
+    `Signed in. Session valid until ${expiresAt}.`,
+    ``,
+    `Onboarding (in order):`,
+    ``,
+    ...workspaceStep,
+    ``,
+    `  2. Browse what you can connect`,
+    `     polylane integration catalog`,
+    ``,
+    `  3. Connect an integration`,
+    `     polylane integration connect --type <type>    # see --help`,
+    ``,
+    `  4. Connect a cloud account`,
+    `     polylane cloud connect --provider <provider>  # see --help`,
+    ``,
+    `  5. Add an automation from the catalog`,
+    `     polylane automation catalog`,
+    `     polylane automation from-template <slug>`,
+    ``,
+    `  6. Verify what's wired up`,
+    `     polylane integration list`,
+    `     polylane cloud list`,
+    `     polylane service list`,
+    `     polylane automation list`,
+    ``,
+    `Once things are connected, try:`,
+    `  polylane thread ask "summarise production"`,
+  ].join('\n');
+}
+
+// The OAuth callback completes in the browser (it lands in the console with a
+// web session), so the CLI's job ends at opening the authorization URL. The
+// user then runs `auth login` to get CLI credentials from that session.
+async function oauthSignup(config: Config, provider: 'google' | 'github'): Promise<void> {
+  const label = OAUTH_PROVIDER_LABELS[provider];
+  const res = await request(config, { method: 'GET', url: `/v1/auth/${provider}/login`, noAuth: true });
+  if (!res.ok) {
+    throw new CLIError(`Could not start ${label} sign up (${res.status})`, ExitCode.GENERAL);
+  }
+  // This endpoint returns bare `{ url }`, not the success/result envelope.
+  const json = (await res.json()) as { url?: string };
+  if (!json.url) {
+    throw new CLIError(`The server did not return a ${label} authorization URL`, ExitCode.GENERAL);
+  }
+  openBrowser(json.url);
+  note(`If your browser didn't open, use this link:\n\n${json.url}`, `Sign up with ${label}`);
+  outro('Finish signing up in the browser, then run `polylane auth login` to authenticate the CLI.');
+}
+
+// Returns null when the server rejects the code (invalid or expired) so the
+// caller can re-prompt; any other failure throws.
+async function verifyEmail(config: Config, email: string, code: string): Promise<VerifiedSession | null> {
+  const res = await request(config, {
+    method: 'POST',
+    url: '/v1/auth/verify_email',
+    body: { email, code },
+    noAuth: true,
+  });
+  const json = (await res.json()) as VerifyEmailEnvelope;
+  if (res.status === 400) return null;
+  if (!res.ok || !json.success) {
+    throw new CLIError(json.error?.detail ?? json.error?.message ?? 'Email verification failed', ExitCode.GENERAL);
+  }
+  const expiresAt =
+    parseSessionExpiresAt(res.headers.get('set-cookie')) ??
+    // Server didn't include Expires (shouldn't happen, but stay safe): treat as
+    // an immediate-expiry token so the next request triggers re-auth.
+    new Date().toISOString();
+  return { ...json.result, expiresAt };
+}
+
+function finishEmailSignIn(config: Config, email: string, session: VerifiedSession): void {
+  if (!session.token) {
+    formatOutput(config, { workspaceSlug: session.workspaceSlug });
+    outro('Email verified, but no session was returned. Run `polylane auth login`.');
+    return;
+  }
+  writeSessionCredential(session.token, session.expiresAt, email);
+  formatOutput(config, { token: session.token, workspaceSlug: session.workspaceSlug });
+  note(nextSteps(session.expiresAt, session.workspaceSlug), 'Next steps');
+  outro('Signed in.');
+}
+
+async function emailSignup(config: Config, args: Record<string, unknown>): Promise<void> {
+  const email = await promptIfMissing(config, args, 'email', 'Email', '--email');
+
+  // `--code` completes a signup that already received its verification email.
+  const codeArg = getArgString(args, 'code');
+  if (codeArg) {
+    const session = await verifyEmail(config, email, codeArg.trim());
+    if (!session) {
+      throw new CLIError(
+        'Invalid or expired verification code',
+        ExitCode.GENERAL,
+        'Codes expire after 15 minutes. Re-run `polylane auth signup` to get a new one.'
+      );
+    }
+    finishEmailSignIn(config, email, session);
+    return;
+  }
+
+  const password =
+    getArgString(args, 'password') ??
+    (await promptPassword({ nonInteractive: config.nonInteractive }, 'Password'));
+
+  // Need response headers (Set-Cookie -> session expiry) so call request() directly
+  // rather than via the generated client which only exposes the body.
+  // Note: signup is idempotent for an existing user with a matching password —
+  // it returns a fresh session token. Agents can re-invoke `auth signup` with
+  // the same credentials to renew, or (better) create an API key after first
+  // signup and switch to it.
+  const res = await request(config, {
+    method: 'POST',
+    url: '/v1/auth/signup',
+    body: { email, password },
+    noAuth: true,
+  });
+  const json = (await res.json()) as SignupEnvelope;
+  if (!res.ok || !json.success) {
+    throw new CLIError(json.error?.detail ?? json.error?.message ?? 'Signup failed', ExitCode.GENERAL);
+  }
+  const { user, token } = json.result;
+  if (!user) {
+    // dry-run stub or unexpected server response
+    formatOutput(config, json.result);
+    outro('Account created, but no session returned. Run `polylane auth login`.');
+    return;
+  }
+
+  if (user.emailVerified) {
+    // Existing account re-authenticated: the session works immediately.
+    if (!token) {
+      formatOutput(config, json.result);
+      outro('Account created, but no session returned. Run `polylane auth login`.');
+      return;
+    }
+    const expiresAt = parseSessionExpiresAt(res.headers.get('set-cookie')) ?? new Date().toISOString();
+    writeSessionCredential(token, expiresAt, user.email ?? user.id);
+    formatOutput(config, json.result);
+    note(nextSteps(expiresAt), 'Next steps');
+    outro('Signed in.');
+    return;
+  }
+
+  // Unverified accounts get a 401 on every authenticated route, so the token
+  // from signup is unusable until the emailed 6-digit code is entered.
+  // Signup only emails a code when it creates the account; an older unverified
+  // account re-running signup has no fresh code in flight, so request one.
+  const createdMs = user.created ? new Date(user.created).getTime() : NaN;
+  const justCreated = Number.isFinite(createdMs) && Date.now() - createdMs < 2 * 60 * 1000;
+  if (!justCreated) {
+    await request(config, {
+      method: 'POST',
+      url: '/v1/auth/resend_verification_code',
+      body: { id: user.id },
+      noAuth: true,
+    }).catch(() => undefined);
+  }
+
+  if (!isInteractive(config.nonInteractive)) {
+    formatOutput(config, json.result);
+    outro(
+      `Check ${email} for a verification code, then run: polylane auth signup --email ${email} --code <code>`
+    );
+    return;
+  }
+
+  for (let attempt = 1; attempt <= CODE_ATTEMPTS; attempt++) {
+    const code = await promptText(
+      { nonInteractive: config.nonInteractive },
+      `Enter the 6-digit code sent to ${email}`,
+      {
+        placeholder: '000000',
+        validate: (v) => (/^\s*\d{6}\s*$/.test(v) ? undefined : 'The code is 6 digits'),
+      }
+    );
+    const session = await verifyEmail(config, email, code.trim());
+    if (session) {
+      finishEmailSignIn(config, email, session);
+      return;
+    }
+    if (attempt < CODE_ATTEMPTS) {
+      process.stderr.write('Invalid or expired code. Try again.\n');
+    }
+  }
+  throw new CLIError(
+    'Email verification failed',
+    ExitCode.GENERAL,
+    `Re-run \`polylane auth signup\` for a fresh code, or finish later with: polylane auth signup --email ${email} --code <code>`
+  );
 }
 
 export const authSignupCommand: Command = {
   name: 'auth signup',
-  description: 'Create a Polylane account with email and password',
+  description: 'Create a Polylane account with Google, GitHub, or email',
   operationId: 'auth.signup',
   options: [
-    { flag: '--email <email>', description: 'Email address', type: 'string' },
+    { flag: '--email <email>', description: 'Email address (implies email signup)', type: 'string' },
     { flag: '--password <password>', description: 'Password (prompted if omitted)', type: 'string' },
+    {
+      flag: '--code <code>',
+      description: 'Verification code from the signup email (completes email signup)',
+      type: 'string',
+    },
   ],
   examples: [
+    'polylane auth signup',
     'polylane auth signup --email agent@example.com --password "$PW"',
-    'polylane auth signup --email agent@example.com   # prompts for password',
+    'polylane auth signup --email agent@example.com --code 123456   # finish verification',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     intro('Create a Polylane account');
-    const email = await promptIfMissing(config, args, 'email', 'Email', '--email');
-    const password =
-      getArgString(args, 'password') ??
-      (await promptPassword({ nonInteractive: config.nonInteractive }, 'Password'));
 
-    // Need response headers (Set-Cookie -> session expiry) so call request() directly
-    // rather than via the generated client which only exposes the body.
-    // Note: signup is idempotent for an existing user with a matching password —
-    // it returns a fresh session token. Agents can re-invoke `auth signup` with
-    // the same credentials to renew, or (better) create an API key after first
-    // signup and switch to it.
-    const body: SignupBody = { email, password };
-    const res = await request(config, { method: 'POST', url: '/v1/auth/signup', body, noAuth: true });
-    const json = (await res.json()) as SignupEnvelope;
-    if (!res.ok || !json.success) {
-      throw new CLIError(json.error?.detail ?? json.error?.message ?? 'Signup failed', ExitCode.GENERAL);
-    }
-    const result = json.result;
-    const expiresAt =
-      parseSessionExpiresAt(res.headers.get('set-cookie')) ??
-      // Server didn't include Expires (shouldn't happen, but stay safe): treat as
-      // an immediate-expiry token so the next request triggers re-auth.
-      new Date().toISOString();
+    const hasEmailFlags =
+      getArgString(args, 'email') !== undefined ||
+      getArgString(args, 'password') !== undefined ||
+      getArgString(args, 'code') !== undefined;
 
-    if (result.token) {
-      const cred: OAuthCredential = {
-        type: 'oauth',
-        accessToken: result.token,
-        refreshToken: '',
-        expiresAt,
-        tokenType: 'Bearer',
-        scope: '',
-        account: result.user.email ?? result.user.id,
-      };
-      writeCredentials(cred);
-    }
-
-    formatOutput(config, result);
-
-    if (result.token) {
-      note(
+    let method: SignupMethod = 'email';
+    if (!hasEmailFlags && isInteractive(config.nonInteractive)) {
+      method = await promptSelect<SignupMethod>(
+        { nonInteractive: config.nonInteractive },
+        'Sign up with',
         [
-          `Signed in. Session valid until ${expiresAt}.`,
-          ``,
-          `Onboarding (in order):`,
-          ``,
-          `  1. Create a workspace`,
-          `     polylane workspace create --name "My Workspace"`,
-          ``,
-          `  2. Browse what you can connect`,
-          `     polylane integration catalog`,
-          ``,
-          `  3. Connect an integration`,
-          `     polylane integration connect --type <type>    # see --help`,
-          ``,
-          `  4. Connect a cloud account`,
-          `     polylane cloud connect --provider <provider>  # see --help`,
-          ``,
-          `  5. Add an automation from the catalog`,
-          `     polylane automation catalog`,
-          `     polylane automation from-template <slug>`,
-          ``,
-          `  6. Verify what's wired up`,
-          `     polylane integration list`,
-          `     polylane cloud list`,
-          `     polylane service list`,
-          `     polylane automation list`,
-          ``,
-          `Once things are connected, try:`,
-          `  polylane thread ask "summarise production"`,
-        ].join('\n'),
-        'Next steps'
+          { value: 'google', label: 'Google', hint: 'opens your browser' },
+          { value: 'github', label: 'GitHub', hint: 'opens your browser' },
+          { value: 'email', label: 'Email and password' },
+        ]
       );
-      outro('Signed in.');
-    } else {
-      outro('Account created, but no session returned. Run `polylane auth login`.');
     }
+
+    if (method === 'email') {
+      await emailSignup(config, args);
+      return;
+    }
+    await oauthSignup(config, method);
   },
 };
