@@ -2,14 +2,80 @@ import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
-import { requireWorkspace, getArgString, getArgBoolean, promptIfMissing, parseJsonArg } from '../helpers';
-import { CLIError } from '../../errors/base';
-import { ExitCode } from '../../errors/codes';
+import {
+  requireWorkspace,
+  getArgString,
+  getArgBoolean,
+  promptIfMissing,
+  promptChoice,
+  promptSecret,
+  parseJsonArg,
+} from '../helpers';
 import { openBrowser } from '../../utils/browser';
 import { isInteractive } from '../../utils/env';
-import { promptSelect, promptPassword } from '../../utils/prompt';
+import { promptSelect, promptPassword, promptConfirm } from '../../utils/prompt';
 
 type ConnectBody = Parameters<PolylaneAPI['integrationsConnect']>[0];
+
+type ConnectableType =
+  | 'github'
+  | 'slack'
+  | 'sentry'
+  | 'datadog'
+  | 'honeycomb'
+  | 'axiom'
+  | 'betterstack'
+  | 'devin'
+  | 'cursor'
+  | 'factory'
+  | 'mcp';
+
+const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string }> = [
+  { value: 'github', label: 'GitHub', hint: 'install the GitHub App (browser)' },
+  { value: 'slack', label: 'Slack', hint: 'install the Slack app (browser)' },
+  { value: 'sentry', label: 'Sentry', hint: 'install the Sentry integration (browser)' },
+  { value: 'datadog', label: 'Datadog', hint: 'API + application keys' },
+  { value: 'honeycomb', label: 'Honeycomb', hint: 'configuration API key' },
+  { value: 'axiom', label: 'Axiom', hint: 'API token' },
+  { value: 'betterstack', label: 'Better Stack', hint: 'global, Uptime and Telemetry tokens' },
+  { value: 'devin', label: 'Devin', hint: 'API key — coding agent' },
+  { value: 'cursor', label: 'Cursor', hint: 'API key — coding agent' },
+  { value: 'factory', label: 'Factory', hint: 'API key — coding agent' },
+  { value: 'mcp', label: 'MCP server', hint: 'any MCP server by URL' },
+];
+
+// Same site list the console offers; the flag accepts any value so orgs on
+// sites not listed here (e.g. newer regions) are not locked out.
+const DATADOG_SITES = [
+  { value: 'datadoghq.com', label: 'US1 (datadoghq.com)' },
+  { value: 'us3.datadoghq.com', label: 'US3 (us3.datadoghq.com)' },
+  { value: 'us5.datadoghq.com', label: 'US5 (us5.datadoghq.com)' },
+  { value: 'datadoghq.eu', label: 'EU (datadoghq.eu)' },
+  { value: 'ap1.datadoghq.com', label: 'AP1 (ap1.datadoghq.com)' },
+  { value: 'ddog-gov.com', label: 'US1-FED (ddog-gov.com)' },
+];
+
+const CODE_AGENTS = {
+  devin: {
+    name: 'Devin',
+    instructions: 'Create a service user and copy its API key (cog_…).',
+    link: 'https://app.devin.ai/settings/devin-api?tab=service-users',
+    linkLabel: 'Open Devin service users',
+  },
+  cursor: {
+    name: 'Cursor',
+    instructions:
+      'Create an API key (key_…) under Cursor → Settings. Make sure your target repositories are connected to your Cursor account.',
+    link: 'https://cursor.com/dashboard/api?section=user-keys#user-api-keys',
+    linkLabel: 'Open Cursor settings',
+  },
+  factory: {
+    name: 'Factory',
+    instructions: 'Create an API key (fk-…) in your Factory settings.',
+    link: 'https://app.factory.ai/settings/api-keys',
+    linkLabel: 'Open Factory settings',
+  },
+} as const;
 
 async function openOrPrintInstallUrl(config: Config, url: string, label: string, noBrowser: boolean): Promise<void> {
   if (config.output === 'json') {
@@ -34,15 +100,22 @@ async function openOrPrintInstallUrl(config: Config, url: string, label: string,
 
 export const integrationConnectCommand: Command = {
   name: 'integration connect',
-  description: 'Connect an integration (github | datadog | honeycomb | axiom | mcp)',
+  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, Devin, Cursor, Factory, MCP)',
   operationId: 'integrations.connect',
   options: [
-    { flag: '--type <type>', description: 'github | datadog | honeycomb | axiom | mcp', type: 'string' },
+    {
+      flag: '--type <type>',
+      description: `${TYPE_OPTIONS.map((o) => o.value).join(' | ')} (prompted if omitted)`,
+      type: 'string',
+    },
     { flag: '--site <site>', description: 'Datadog site (e.g. us5.datadoghq.com)', type: 'string' },
     { flag: '--region <region>', description: 'Honeycomb (us|eu) or Axiom (us-east-1|eu-central-1)', type: 'string' },
-    { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb)', type: 'string' },
+    { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / Devin / Cursor / Factory)', type: 'string' },
     { flag: '--app-key <key>', description: 'App key (Datadog only)', type: 'string' },
-    { flag: '--api-token <token>', description: 'API token (Axiom only)', type: 'string' },
+    { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token)', type: 'string' },
+    { flag: '--uptime-api-token <token>', description: 'Uptime API token (Better Stack only)', type: 'string' },
+    { flag: '--telemetry-api-token <token>', description: 'Telemetry API token (Better Stack only)', type: 'string' },
+    { flag: '--no-default-executor', description: 'Devin / Cursor / Factory: do not route autofixes through it', type: 'boolean' },
     { flag: '--url <url>', description: 'MCP server URL', type: 'string' },
     { flag: '--name <name>', description: 'MCP server display name', type: 'string' },
     { flag: '--transport <t>', description: 'MCP transport: http | sse (default: http)', type: 'string' },
@@ -50,33 +123,47 @@ export const integrationConnectCommand: Command = {
     { flag: '--extra-headers <json>', description: 'MCP extra headers as JSON object', type: 'string' },
     { flag: '--oauth', description: 'MCP: use OAuth flow (opens browser to authorize)', type: 'boolean' },
     { flag: '--scope <scope>', description: 'MCP OAuth scope', type: 'string' },
-    { flag: '--no-browser', description: 'GitHub / MCP OAuth: print the URL instead of opening it', type: 'boolean' },
+    { flag: '--no-browser', description: 'GitHub / Slack / Sentry / MCP OAuth: print the URL instead of opening it', type: 'boolean' },
   ],
   examples: [
+    'polylane integration connect',
     'polylane integration connect --type github',
     'polylane integration connect --type datadog --site us5.datadoghq.com --api-key ... --app-key ...',
     'polylane integration connect --type honeycomb --region us --api-key ...',
     'polylane integration connect --type axiom --region us-east-1 --api-token ...',
+    'polylane integration connect --type betterstack --api-token ... --uptime-api-token ... --telemetry-api-token ...',
+    'polylane integration connect --type cursor --api-key key_...',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP"',
-    'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP" --bearer-token ...',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP" --oauth',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
-    const type = await promptIfMissing(
+    const type = await promptChoice<ConnectableType>(
       config,
       args,
       'type',
-      'Type (github | datadog | honeycomb | axiom | mcp)',
-      '--type'
+      '--type',
+      'Which integration do you want to connect?',
+      TYPE_OPTIONS,
+      { strict: true }
     );
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
     const api = new PolylaneAPI(config);
 
-    // --- GitHub: install-URL flow ---
+    // --- Install-URL flows: setup completes in the browser ---
     if (type === 'github') {
       const result = await api.integrationsGithubGenerate({ workspaceId });
       await openOrPrintInstallUrl(config, result.url, 'the GitHub App', noBrowser);
+      return;
+    }
+    if (type === 'slack') {
+      const result = await api.integrationsSlackGenerate({ workspaceId });
+      await openOrPrintInstallUrl(config, result.url, 'the Slack app', noBrowser);
+      return;
+    }
+    if (type === 'sentry') {
+      const result = await api.integrationsSentryGenerate({ workspaceId });
+      await openOrPrintInstallUrl(config, result.url, 'the Sentry integration', noBrowser);
       return;
     }
 
@@ -145,41 +232,116 @@ export const integrationConnectCommand: Command = {
       return;
     }
 
-    // --- Observability tools: credential-based connect ---
+    // --- Credential-based connects ---
     let body: ConnectBody;
     if (type === 'datadog') {
-      const site = await promptIfMissing(config, args, 'site', 'Datadog site', '--site');
-      const apiKey = await promptIfMissing(config, args, 'apiKey', 'API key', '--api-key');
-      const appKey = await promptIfMissing(config, args, 'appKey', 'App key', '--app-key');
+      const site = await promptChoice(
+        config,
+        args,
+        'site',
+        '--site',
+        'Datadog site — the one in your Datadog URL',
+        DATADOG_SITES
+      );
+      const apiKey = await promptSecret(config, args, 'apiKey', '--api-key', {
+        message: 'Datadog API key',
+        instructions:
+          'Create an API key in your Datadog organization settings, then paste it here. This is an org-level credential used to authenticate requests.',
+        link: `https://app.${site}/organization-settings/api-keys`,
+        linkLabel: 'Create API key',
+      });
+      const appKey = await promptSecret(config, args, 'appKey', '--app-key', {
+        message: 'Datadog application key',
+        instructions:
+          'Create an application key, then paste it here. This is a user-level credential that controls what data Polylane can access.',
+        link: `https://app.${site}/organization-settings/application-keys`,
+        linkLabel: 'Create application key',
+      });
       body = { type: 'datadog', workspaceId, site, apiKey, appKey };
     } else if (type === 'honeycomb') {
-      const region = (await promptIfMissing(config, args, 'region', 'Region (us | eu)', '--region')) as
-        | 'us'
-        | 'eu';
-      if (region !== 'us' && region !== 'eu') {
-        throw new CLIError('Honeycomb region must be "us" or "eu"', ExitCode.USAGE);
-      }
-      const apiKey = await promptIfMissing(config, args, 'apiKey', 'API key', '--api-key');
-      body = { type: 'honeycomb', workspaceId, region, apiKey };
-    } else if (type === 'axiom') {
-      const region = (await promptIfMissing(
+      const region = await promptChoice<'us' | 'eu'>(
         config,
         args,
         'region',
-        'Region (us-east-1 | eu-central-1)',
-        '--region'
-      )) as 'us-east-1' | 'eu-central-1';
-      if (region !== 'us-east-1' && region !== 'eu-central-1') {
-        throw new CLIError('Axiom region must be "us-east-1" or "eu-central-1"', ExitCode.USAGE);
-      }
-      const apiToken = await promptIfMissing(config, args, 'apiToken', 'API token', '--api-token');
-      body = { type: 'axiom', workspaceId, region, apiToken };
-    } else {
-      throw new CLIError(
-        `Unknown integration type: ${type}`,
-        ExitCode.USAGE,
-        'Use github | datadog | honeycomb | axiom | mcp (see `polylane integration catalog`)'
+        '--region',
+        'Honeycomb region — the one in your Honeycomb URL',
+        [
+          { value: 'us', label: 'US (api.honeycomb.io)' },
+          { value: 'eu', label: 'EU (api.eu1.honeycomb.io)' },
+        ],
+        { strict: true }
       );
+      const apiKey = await promptSecret(config, args, 'apiKey', '--api-key', {
+        message: 'Honeycomb configuration API key',
+        instructions:
+          'In your Honeycomb environment settings, open API Keys, switch to the Configuration tab, and create a key named "polylane" with these permissions: Create Datasets, Manage Queries and Columns, Manage Public Boards, Manage Triggers, Manage Recipients, Manage Markers.',
+        link: 'https://ui.honeycomb.io',
+        linkLabel: 'Open Honeycomb settings',
+      });
+      body = { type: 'honeycomb', workspaceId, region, apiKey };
+    } else if (type === 'axiom') {
+      const region = await promptChoice<'us-east-1' | 'eu-central-1'>(
+        config,
+        args,
+        'region',
+        '--region',
+        'Axiom edge deployment region — see your organization settings (https://app.axiom.co/settings/org)',
+        [
+          { value: 'us-east-1', label: 'US East 1' },
+          { value: 'eu-central-1', label: 'EU Central 1' },
+        ],
+        { strict: true }
+      );
+      const apiToken = await promptSecret(config, args, 'apiToken', '--api-token', {
+        message: 'Axiom API token',
+        instructions:
+          'In your Axiom settings, navigate to API Tokens and create a new token named "polylane" with all permissions.',
+        link: 'https://app.axiom.co',
+        linkLabel: 'Open Axiom settings',
+      });
+      body = { type: 'axiom', workspaceId, region, apiToken };
+    } else if (type === 'betterstack') {
+      const apiToken = await promptSecret(config, args, 'apiToken', '--api-token', {
+        message: 'Better Stack global API token',
+        instructions:
+          'In Better Stack, open your organization settings, navigate to API tokens, and create a global API token.',
+        link: 'https://betterstack.com/settings/global-api-tokens',
+        linkLabel: 'Create global API token',
+      });
+      const uptimeApiToken = await promptSecret(config, args, 'uptimeApiToken', '--uptime-api-token', {
+        message: 'Better Stack Uptime API token',
+        instructions:
+          "In the API token settings, switch to the Team-based tokens tab and copy your team's Uptime API token.",
+        link: 'https://betterstack.com/settings/global-api-tokens',
+        linkLabel: 'Open API token settings',
+      });
+      const telemetryApiToken = await promptSecret(config, args, 'telemetryApiToken', '--telemetry-api-token', {
+        message: 'Better Stack Telemetry API token',
+        instructions:
+          'In Telemetry, open your team settings, navigate to API tokens, and copy your Telemetry API token.',
+        link: 'https://telemetry.betterstack.com',
+        linkLabel: 'Open Telemetry settings',
+      });
+      body = { type: 'betterstack', workspaceId, apiToken, uptimeApiToken, telemetryApiToken };
+    } else {
+      const agent = CODE_AGENTS[type];
+      const apiKey = await promptSecret(config, args, 'apiKey', '--api-key', {
+        message: `${agent.name} API key`,
+        instructions: agent.instructions,
+        link: agent.link,
+        linkLabel: agent.linkLabel,
+      });
+      // Matches the console default: route autofixes through the agent unless
+      // the user opts out.
+      let useAsDefaultExecutor = getArgBoolean(args, 'noDefaultExecutor') !== true;
+      if (useAsDefaultExecutor && isInteractive(config.nonInteractive)) {
+        useAsDefaultExecutor = await promptConfirm(
+          { nonInteractive: config.nonInteractive },
+          `Use ${agent.name} for all autofixes? (instead of the Polylane executor — you can change this later)`,
+          true
+        );
+      }
+      body = { type, workspaceId, apiKey, useAsDefaultExecutor };
     }
 
     const integration = await api.integrationsConnect(body);

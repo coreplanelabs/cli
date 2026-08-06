@@ -2,7 +2,7 @@ import type { Config } from '../config/schema';
 import type { GlobalFlags } from '../types/flags';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
-import { promptText } from '../utils/prompt';
+import { promptText, promptSelect, promptPassword, note } from '../utils/prompt';
 import { isInteractive } from '../utils/env';
 
 export async function requireWorkspace(config: Config): Promise<string> {
@@ -87,6 +87,52 @@ export async function promptIfMissing(
     throw new CLIError(`Missing required flag: ${flag}`, ExitCode.USAGE);
   }
   return promptText({ nonInteractive: config.nonInteractive }, message);
+}
+
+// Flag value wins; otherwise show a select. With `strict`, a flag value outside
+// the options is a usage error (for closed API unions like regions).
+export async function promptChoice<T extends string>(
+  config: Config,
+  args: Record<string, unknown>,
+  key: string,
+  flag: string,
+  message: string,
+  options: Array<{ value: T; label: string; hint?: string }>,
+  opts: { strict?: boolean } = {}
+): Promise<T> {
+  const fromFlag = getArgString(args, key);
+  if (fromFlag !== undefined) {
+    if (opts.strict && !options.some((o) => o.value === fromFlag)) {
+      throw new CLIError(
+        `Invalid value for ${flag}: "${fromFlag}"`,
+        ExitCode.USAGE,
+        `Use one of: ${options.map((o) => o.value).join(', ')}`
+      );
+    }
+    return fromFlag as T;
+  }
+  if (!isInteractive(config.nonInteractive)) {
+    throw new CLIError(`Missing required flag: ${flag}`, ExitCode.USAGE);
+  }
+  return promptSelect<T>({ nonInteractive: config.nonInteractive }, message, options);
+}
+
+// Mirrors the console connect flows: short instructions and a direct link to
+// the page where the credential is created, then a hidden input.
+export async function promptSecret(
+  config: Config,
+  args: Record<string, unknown>,
+  key: string,
+  flag: string,
+  opts: { message: string; instructions: string; link: string; linkLabel: string }
+): Promise<string> {
+  const fromFlag = getArgString(args, key);
+  if (fromFlag !== undefined) return fromFlag;
+  if (!isInteractive(config.nonInteractive)) {
+    throw new CLIError(`Missing required flag: ${flag}`, ExitCode.USAGE);
+  }
+  note(`${opts.instructions}\n\n${opts.linkLabel}:\n  ${opts.link}`, opts.message);
+  return promptPassword({ nonInteractive: config.nonInteractive }, opts.message);
 }
 
 export function getArgString(args: Record<string, unknown>, key: string): string | undefined {

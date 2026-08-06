@@ -84,6 +84,40 @@ export function outro(message: string): void {
   p.outro(message);
 }
 
+const NOTE_MAX_WIDTH = 76;
+
+function wrapLine(line: string, width: number): string[] {
+  if (line.length <= width) return [line];
+  const indent = line.match(/^\s*/)?.[0] ?? '';
+  const wrapped: string[] = [];
+  let current = indent;
+  for (const word of line.trim().split(/\s+/)) {
+    if (current === indent) {
+      current += word;
+    } else if (current.length + 1 + word.length <= width) {
+      current += ' ' + word;
+    } else {
+      wrapped.push(current);
+      current = indent + word;
+    }
+  }
+  if (current !== indent) wrapped.push(current);
+  return wrapped;
+}
+
+// Wraps at word boundaries, preserving existing line breaks and each line's
+// leading indentation. Words longer than the width (URLs) are never split —
+// breaking a URL would also break its click target.
+export function wrapText(text: string, width: number = NOTE_MAX_WIDTH): string {
+  return text
+    .split('\n')
+    .flatMap((line) => wrapLine(line, width))
+    .join('\n');
+}
+
 export function note(message: string, title?: string): void {
-  p.note(message, title);
+  // clack draws a box around the note; wrap long lines so the box survives
+  // the terminal edge (leave room for the box borders and padding).
+  const width = Math.max(40, Math.min(NOTE_MAX_WIDTH, (process.stderr.columns ?? 80) - 8));
+  p.note(wrapText(message, width), title);
 }
