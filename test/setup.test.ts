@@ -8,6 +8,8 @@ import {
   writeSkillFile,
   upsertJsonEntry,
   upsertTomlSection,
+  upsertGooseExtension,
+  vscodeUserDirectory,
   MCP_SERVER_NAME,
   MCP_SERVER_URL,
 } from '../src/commands/setup';
@@ -161,11 +163,62 @@ describe('upsertTomlSection', () => {
   });
 });
 
+describe('upsertGooseExtension', () => {
+  it('creates config.yaml with the extensions block', () => {
+    const path = join(tempDir, '.config', 'goose', 'config.yaml');
+    const result = upsertGooseExtension(path);
+    assert.equal(result.action, 'created');
+    const yaml = readFileSync(path, 'utf-8');
+    assert.ok(yaml.startsWith(`extensions:\n  ${MCP_SERVER_NAME}:\n`));
+  });
+
+  it('inserts under an existing extensions block without touching other entries', () => {
+    const path = join(tempDir, 'config.yaml');
+    writeFileSync(path, 'GOOSE_PROVIDER: anthropic\nextensions:\n  developer:\n    enabled: true\n    type: builtin\n', 'utf-8');
+    const result = upsertGooseExtension(path);
+    assert.equal(result.action, 'updated');
+    const yaml = readFileSync(path, 'utf-8');
+    assert.ok(yaml.startsWith('GOOSE_PROVIDER: anthropic\n'));
+    assert.ok(yaml.includes(`extensions:\n  ${MCP_SERVER_NAME}:\n`));
+    assert.ok(yaml.includes('  developer:\n    enabled: true\n    type: builtin\n'));
+  });
+
+  it('appends an extensions block when the file has none', () => {
+    const path = join(tempDir, 'config.yaml');
+    writeFileSync(path, 'GOOSE_PROVIDER: anthropic\n', 'utf-8');
+    assert.equal(upsertGooseExtension(path).action, 'updated');
+    assert.ok(readFileSync(path, 'utf-8').includes(`\nextensions:\n  ${MCP_SERVER_NAME}:\n`));
+  });
+
+  it('reports unchanged when the entry is already present', () => {
+    const path = join(tempDir, 'config.yaml');
+    upsertGooseExtension(path);
+    const before = readFileSync(path, 'utf-8');
+    assert.equal(upsertGooseExtension(path).action, 'unchanged');
+    assert.equal(readFileSync(path, 'utf-8'), before);
+  });
+
+  it('skips when extensions is inline YAML', () => {
+    const path = join(tempDir, 'config.yaml');
+    writeFileSync(path, 'extensions: {}\n', 'utf-8');
+    const result = upsertGooseExtension(path);
+    assert.equal(result.action, 'skipped');
+    assert.equal(readFileSync(path, 'utf-8'), 'extensions: {}\n');
+  });
+
+  it('does not write in dry-run mode', () => {
+    const path = join(tempDir, 'config.yaml');
+    const result = upsertGooseExtension(path, true);
+    assert.equal(result.action, 'created');
+    assert.equal(existsSync(path), false);
+  });
+});
+
 describe('agent definitions', () => {
   it('covers the supported agent list', () => {
     assert.deepEqual(
       AGENTS.map((a) => a.id),
-      ['claude', 'cursor', 'opencode', 'codex', 'pi', 'warp', 'windsurf', 'zed', 'vscode']
+      ['claude', 'cursor', 'opencode', 'codex', 'pi', 'warp', 'cline', 'roo', 'goose', 'gemini', 'windsurf', 'zed', 'vscode']
     );
   });
 
@@ -189,6 +242,27 @@ describe('agent definitions', () => {
     assert.equal(agent('warp').detect(tempDir), false);
     mkdirSync(join(tempDir, '.warp'), { recursive: true });
     assert.equal(agent('warp').detect(tempDir), true);
+
+    assert.equal(agent('cline').detect(tempDir), false);
+    mkdirSync(join(tempDir, '.cline'), { recursive: true });
+    assert.equal(agent('cline').detect(tempDir), true);
+
+    assert.equal(agent('roo').detect(tempDir), false);
+    mkdirSync(join(vscodeUserDirectory(tempDir), 'globalStorage', 'rooveterinaryinc.roo-cline'), { recursive: true });
+    assert.equal(agent('roo').detect(tempDir), true);
+
+    assert.equal(agent('goose').detect(tempDir), false);
+    mkdirSync(join(tempDir, '.config', 'goose'), { recursive: true });
+    assert.equal(agent('goose').detect(tempDir), true);
+
+    assert.equal(agent('gemini').detect(tempDir), false);
+    mkdirSync(join(tempDir, '.gemini'), { recursive: true });
+    assert.equal(agent('gemini').detect(tempDir), true);
+  });
+
+  it('detects cline from the VS Code extension storage alone', () => {
+    mkdirSync(join(vscodeUserDirectory(tempDir), 'globalStorage', 'saoudrizwan.claude-dev'), { recursive: true });
+    assert.equal(agent('cline').detect(tempDir), true);
   });
 
   it('detects claude from ~/.claude.json alone', () => {
@@ -251,6 +325,53 @@ describe('agent definitions', () => {
       mcpServers: Record<string, unknown>;
     };
     assert.deepEqual(parsed.mcpServers[MCP_SERVER_NAME], { url: MCP_SERVER_URL });
+  });
+
+  it('configures cline in every surface that exists', () => {
+    mkdirSync(join(tempDir, '.cline'), { recursive: true });
+    mkdirSync(join(vscodeUserDirectory(tempDir), 'globalStorage', 'saoudrizwan.claude-dev'), { recursive: true });
+    const outcomes = agent('cline').user(tempDir, false);
+    assert.equal(outcomes.length, 2);
+    for (const file of [
+      join(vscodeUserDirectory(tempDir), 'globalStorage', 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json'),
+      join(tempDir, '.cline', 'data', 'settings', 'cline_mcp_settings.json'),
+    ]) {
+      const parsed = JSON.parse(readFileSync(file, 'utf-8')) as { mcpServers: Record<string, unknown> };
+      assert.deepEqual(parsed.mcpServers[MCP_SERVER_NAME], { type: 'streamableHttp', url: MCP_SERVER_URL });
+    }
+  });
+
+  it('falls back to the cline CLI location when neither surface exists', () => {
+    const outcomes = agent('cline').user(tempDir, false);
+    assert.equal(outcomes.length, 1);
+    assert.ok(existsSync(join(tempDir, '.cline', 'data', 'settings', 'cline_mcp_settings.json')));
+  });
+
+  it('configures roo with a streamable-http MCP entry', () => {
+    agent('roo').user(tempDir, false);
+    const parsed = JSON.parse(
+      readFileSync(
+        join(vscodeUserDirectory(tempDir), 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'mcp_settings.json'),
+        'utf-8'
+      )
+    ) as { mcpServers: Record<string, unknown> };
+    assert.deepEqual(parsed.mcpServers[MCP_SERVER_NAME], { type: 'streamable-http', url: MCP_SERVER_URL });
+  });
+
+  it('configures goose with a streamable_http extension in config.yaml', () => {
+    agent('goose').user(tempDir, false);
+    const yaml = readFileSync(join(tempDir, '.config', 'goose', 'config.yaml'), 'utf-8');
+    assert.ok(yaml.includes(`extensions:\n  ${MCP_SERVER_NAME}:`));
+    assert.ok(yaml.includes('type: streamable_http'));
+    assert.ok(yaml.includes(`uri: ${MCP_SERVER_URL}`));
+  });
+
+  it('configures gemini with an httpUrl MCP entry', () => {
+    agent('gemini').user(tempDir, false);
+    const parsed = JSON.parse(readFileSync(join(tempDir, '.gemini', 'settings.json'), 'utf-8')) as {
+      mcpServers: Record<string, unknown>;
+    };
+    assert.deepEqual(parsed.mcpServers[MCP_SERVER_NAME], { httpUrl: MCP_SERVER_URL });
   });
 
   it('configures windsurf with a serverUrl MCP entry only', () => {

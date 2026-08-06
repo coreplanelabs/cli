@@ -131,6 +131,53 @@ const HTTP_SERVER_ENTRY = { type: 'http', url: MCP_SERVER_URL };
 const URL_SERVER_ENTRY = { url: MCP_SERVER_URL };
 const CODEX_SECTION_HEADER = `[mcp_servers.${MCP_SERVER_NAME}]`;
 const CODEX_SECTION_BODY = `url = "${MCP_SERVER_URL}"\n`;
+// Cline wants "streamableHttp", Roo wants "streamable-http" (it rejects the
+// entry otherwise), Gemini keys HTTP streaming off "httpUrl" — none of these
+// are interchangeable.
+const CLINE_SERVER_ENTRY = { type: 'streamableHttp', url: MCP_SERVER_URL };
+const ROO_SERVER_ENTRY = { type: 'streamable-http', url: MCP_SERVER_URL };
+const GEMINI_SERVER_ENTRY = { httpUrl: MCP_SERVER_URL };
+
+// Goose config is YAML (~/.config/goose/config.yaml). Same dependency-free
+// approach as upsertTomlSection: exact-string checks and line inserts under
+// the top-level `extensions:` block. Goose requires `uri` (not `url`) and
+// `streamable_http` (underscore).
+const GOOSE_EXTENSION_LINES = [
+  `  ${MCP_SERVER_NAME}:`,
+  `    enabled: true`,
+  `    type: streamable_http`,
+  `    name: ${MCP_SERVER_NAME}`,
+  `    uri: ${MCP_SERVER_URL}`,
+  `    timeout: 300`,
+];
+
+export function upsertGooseExtension(path: string, dryRun = false): WriteOutcome {
+  const label = 'MCP server';
+  if (!existsSync(path)) {
+    if (!dryRun) {
+      ensureDir(dirname(path));
+      writeFileSync(path, ['extensions:', ...GOOSE_EXTENSION_LINES, ''].join('\n'), 'utf-8');
+    }
+    return { label, path, action: 'created' };
+  }
+  const current = readFileSync(path, 'utf-8');
+  const lines = current.split('\n');
+  if (lines.some((l) => l.startsWith(`  ${MCP_SERVER_NAME}:`))) {
+    return { label, path, action: 'unchanged' };
+  }
+  const blockStart = lines.findIndex((l) => /^extensions:\s*$/.test(l));
+  if (blockStart >= 0) {
+    lines.splice(blockStart + 1, 0, ...GOOSE_EXTENSION_LINES);
+    if (!dryRun) writeFileSync(path, lines.join('\n'), 'utf-8');
+    return { label, path, action: 'updated' };
+  }
+  if (/^extensions:/m.test(current)) {
+    return { label, path, action: 'skipped', detail: '`extensions:` is not a plain block; add the entry manually', needsManualStep: true };
+  }
+  const separator = current.endsWith('\n') || current === '' ? '' : '\n';
+  if (!dryRun) writeFileSync(path, `${current}${separator}\nextensions:\n${GOOSE_EXTENSION_LINES.join('\n')}\n`, 'utf-8');
+  return { label, path, action: 'updated' };
+}
 
 export interface AgentSetup {
   id: string;
@@ -236,6 +283,60 @@ export const AGENTS: AgentSetup[] = [
     project: (projectDir, dryRun) => [
       writeSkillFile(skillFile(join(projectDir, '.warp')), dryRun),
       upsertJsonEntry(join(projectDir, '.warp', '.mcp.json'), ['mcpServers', MCP_SERVER_NAME], URL_SERVER_ENTRY, dryRun),
+    ],
+  },
+  {
+    id: 'cline',
+    name: 'Cline',
+    // Two Cline surfaces share one config format: the VS Code extension
+    // (globalStorage) and the Cline CLI (~/.cline). Write to whichever exists
+    // so we never create VS Code's storage tree for an uninstalled extension.
+    detect: (home) =>
+      existsSync(join(vscodeUserDirectory(home), 'globalStorage', 'saoudrizwan.claude-dev')) ||
+      existsSync(join(home, '.cline')),
+    user: (home, dryRun) => {
+      const outcomes: WriteOutcome[] = [];
+      const extensionDir = join(vscodeUserDirectory(home), 'globalStorage', 'saoudrizwan.claude-dev');
+      if (existsSync(extensionDir)) {
+        outcomes.push(
+          upsertJsonEntry(join(extensionDir, 'settings', 'cline_mcp_settings.json'), ['mcpServers', MCP_SERVER_NAME], CLINE_SERVER_ENTRY, dryRun)
+        );
+      }
+      // Fall back to the CLI location when neither surface exists yet, so an
+      // explicit `--agent cline` always has an effect.
+      if (existsSync(join(home, '.cline')) || outcomes.length === 0) {
+        outcomes.push(
+          upsertJsonEntry(join(home, '.cline', 'data', 'settings', 'cline_mcp_settings.json'), ['mcpServers', MCP_SERVER_NAME], CLINE_SERVER_ENTRY, dryRun)
+        );
+      }
+      return outcomes;
+    },
+  },
+  {
+    id: 'roo',
+    name: 'Roo Code',
+    detect: (home) => existsSync(join(vscodeUserDirectory(home), 'globalStorage', 'rooveterinaryinc.roo-cline')),
+    user: (home, dryRun) => [
+      upsertJsonEntry(
+        join(vscodeUserDirectory(home), 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'mcp_settings.json'),
+        ['mcpServers', MCP_SERVER_NAME],
+        ROO_SERVER_ENTRY,
+        dryRun
+      ),
+    ],
+  },
+  {
+    id: 'goose',
+    name: 'Goose',
+    detect: (home) => existsSync(join(home, '.config', 'goose')),
+    user: (home, dryRun) => [upsertGooseExtension(join(home, '.config', 'goose', 'config.yaml'), dryRun)],
+  },
+  {
+    id: 'gemini',
+    name: 'Gemini CLI',
+    detect: (home) => existsSync(join(home, '.gemini')),
+    user: (home, dryRun) => [
+      upsertJsonEntry(join(home, '.gemini', 'settings.json'), ['mcpServers', MCP_SERVER_NAME], GEMINI_SERVER_ENTRY, dryRun),
     ],
   },
   {
