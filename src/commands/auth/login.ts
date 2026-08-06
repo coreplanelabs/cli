@@ -3,7 +3,7 @@ import type { Config } from '../../config/schema';
 import type { GlobalFlags } from '../../types/flags';
 import { promptPassword, promptSelect, intro, outro } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
-import { oauthBrowserFlow, oauthDeviceCodeFlow } from '../../auth/oauth';
+import { oauthBrowserFlow, oauthDeviceCodeFlow, type BrowserFlowOptions } from '../../auth/oauth';
 import { writeCredentials } from '../../auth/credentials';
 import type { OAuthCredential } from '../../auth/types';
 import { writeConfigFile } from '../../config/loader';
@@ -117,8 +117,12 @@ async function apiKeyLogin(config: Config, key: string): Promise<void> {
   outro(`API key saved to ~/.polylane/config.json`);
 }
 
-async function oauthLogin(config: Config, useBrowser: boolean): Promise<void> {
-  const tokens = useBrowser ? await oauthBrowserFlow(config) : await oauthDeviceCodeFlow(config);
+export async function oauthLogin(
+  config: Config,
+  useBrowser: boolean,
+  browserOptions?: BrowserFlowOptions
+): Promise<void> {
+  const tokens = useBrowser ? await oauthBrowserFlow(config, browserOptions) : await oauthDeviceCodeFlow(config);
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
   const userRes = await fetch(`https://${config.domain}/v1/oauth/userinfo`, {

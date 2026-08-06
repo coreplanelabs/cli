@@ -10,6 +10,8 @@ const CALLBACK_PORT = 18991;
 const CALLBACK_PATH = '/callback';
 const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`;
 const BROWSER_TIMEOUT_MS = 120_000;
+// Creating an account (provider round-trip + consent) takes longer than a sign-in.
+const SIGNUP_BROWSER_TIMEOUT_MS = 300_000;
 
 export const DEFAULT_CLIENT_ID = process.env.POLYLANE_OAUTH_CLIENT_ID || 'polylane-cli';
 export const DEFAULT_CLIENT_SECRET = process.env.POLYLANE_OAUTH_CLIENT_SECRET || '';
@@ -257,7 +259,7 @@ interface BrowserFlowResult {
   code: string;
 }
 
-async function startCallbackServer(expectedState: string): Promise<BrowserFlowResult> {
+async function startCallbackServer(expectedState: string, timeoutMs: number): Promise<BrowserFlowResult> {
   return new Promise<BrowserFlowResult>((resolve, reject) => {
     const server = createServer((req, res) => {
       const url = new URL(req.url || '/', `http://localhost:${CALLBACK_PORT}`);
@@ -311,7 +313,7 @@ async function startCallbackServer(expectedState: string): Promise<BrowserFlowRe
     setTimeout(() => {
       server.close();
       reject(new CLIError('OAuth flow timed out', ExitCode.TIMEOUT));
-    }, BROWSER_TIMEOUT_MS);
+    }, timeoutMs);
   });
 }
 
@@ -329,7 +331,20 @@ function consoleBaseUrl(config: Config): string {
   return `https://${host}`;
 }
 
-export async function oauthBrowserFlow(config: Config): Promise<OAuthTokenResponse> {
+export interface BrowserFlowOptions {
+  // Open the console signup page first, carrying the consent URL in ?redirect=
+  // (the console keeps it alive across the provider round-trip), so a brand-new
+  // user creates the account and lands on the consent screen in one browser trip.
+  signupEntry?: boolean;
+  // Which provider the user picked in the CLI. The signup page ignores it today;
+  // sent so the console can auto-start that provider without another click.
+  provider?: 'google' | 'github';
+}
+
+export async function oauthBrowserFlow(
+  config: Config,
+  options: BrowserFlowOptions = {}
+): Promise<OAuthTokenResponse> {
   const oidc = await fetchOIDCConfig(config.domain);
   const verifier = generateCodeVerifier();
   const challenge = generateCodeChallenge(verifier);
@@ -344,11 +359,21 @@ export async function oauthBrowserFlow(config: Config): Promise<OAuthTokenRespon
   authUrl.searchParams.set('code_challenge_method', 'S256');
   authUrl.searchParams.set('response_type', 'code');
 
-  process.stderr.write(`Opening your browser to sign in…\n`);
-  process.stderr.write(`If it doesn't open, visit:\n  ${authUrl.toString()}\n\n`);
+  let openUrl = authUrl;
+  let timeoutMs = BROWSER_TIMEOUT_MS;
+  if (options.signupEntry) {
+    openUrl = new URL(`${consoleBaseUrl(config)}/signup`);
+    openUrl.searchParams.set('redirect', `${authUrl.pathname}${authUrl.search}`);
+    if (options.provider) openUrl.searchParams.set('provider', options.provider);
+    timeoutMs = SIGNUP_BROWSER_TIMEOUT_MS;
+  }
 
-  const serverPromise = startCallbackServer(state);
-  openBrowser(authUrl.toString());
+  const verb = options.signupEntry ? 'create your account' : 'sign in';
+  process.stderr.write(`Opening your browser to ${verb}…\n`);
+  process.stderr.write(`If it doesn't open, visit:\n  ${openUrl.toString()}\n\n`);
+
+  const serverPromise = startCallbackServer(state, timeoutMs);
+  openBrowser(openUrl.toString());
   const { code } = await serverPromise;
 
   const tokenRes = await fetch(oidc.token_endpoint, {

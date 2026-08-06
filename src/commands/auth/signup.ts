@@ -4,7 +4,7 @@ import { formatOutput } from '../../output/formatter';
 import { getArgString, promptIfMissing } from '../helpers';
 import { promptPassword, promptSelect, promptText, intro, outro, note } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
-import { openBrowser } from '../../utils/browser';
+import { oauthLogin } from './login';
 import { writeCredentials } from '../../auth/credentials';
 import { parseSessionExpiresAt } from '../../auth/signup-helpers';
 import type { OAuthCredential } from '../../auth/types';
@@ -97,23 +97,22 @@ function nextSteps(expiresAt: string, workspaceSlug?: string): string {
   ].join('\n');
 }
 
-// The OAuth callback completes in the browser (it lands in the console with a
-// web session), so the CLI's job ends at opening the authorization URL. The
-// user then runs `auth login` to get CLI credentials from that session.
+// One browser trip does both signup and CLI login: the browser lands on the
+// console signup page with ?redirect= pointing at the CLI's OAuth consent URL.
+// The console keeps that redirect alive across the provider round-trip, so
+// after the account is created the user falls straight onto the consent
+// screen, and the loopback redirect hands the CLI a full token pair
+// (access + refresh) — same as `auth login`.
 async function oauthSignup(config: Config, provider: 'google' | 'github'): Promise<void> {
   const label = OAUTH_PROVIDER_LABELS[provider];
-  const res = await request(config, { method: 'GET', url: `/v1/auth/${provider}/login`, noAuth: true });
-  if (!res.ok) {
-    throw new CLIError(`Could not start ${label} sign up (${res.status})`, ExitCode.GENERAL);
-  }
-  // This endpoint returns bare `{ url }`, not the success/result envelope.
-  const json = (await res.json()) as { url?: string };
-  if (!json.url) {
-    throw new CLIError(`The server did not return a ${label} authorization URL`, ExitCode.GENERAL);
-  }
-  openBrowser(json.url);
-  note(`If your browser didn't open, use this link:\n\n${json.url}`, `Sign up with ${label}`);
-  outro('Finish signing up in the browser, then run `polylane auth login` to authenticate the CLI.');
+  note(
+    [
+      `Your browser will open the Polylane signup page.`,
+      `Pick "${label}" there, then approve the CLI's access when asked.`,
+    ].join('\n'),
+    `Sign up with ${label}`
+  );
+  await oauthLogin(config, true, { signupEntry: true, provider });
 }
 
 // Returns null when the server rejects the code (invalid or expired) so the

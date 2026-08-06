@@ -203,7 +203,7 @@ OAuth is the default way to connect — including for agents. Use an API key onl
 | `polylane auth login` | Interactive OAuth (browser, PKCE) — the default |
 | `polylane auth login --no-browser` | OAuth device code (SSH / headless) |
 | `polylane auth login --api-key sk_...` | Scripts / CI / machines that cannot complete OAuth |
-| `polylane auth signup` | Create an account — Google/GitHub (opens the browser) or email + password |
+| `polylane auth signup` | Create an account — Google/GitHub (one browser trip: signup + CLI OAuth) or email + password |
 | `polylane auth signup --email … --password …` | Bootstrap a fresh account from an agent; finish with `--code <code>` from the verification email |
 
 OAuth credentials live at `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. `polylane auth status` reports the active source.
