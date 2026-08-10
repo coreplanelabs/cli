@@ -7,6 +7,10 @@ export interface PromptContext {
   nonInteractive: boolean;
 }
 
+// Returned instead of a value when the user backs out of a wizard step,
+// either via the "← Back" option or by cancelling (Ctrl+C) the prompt.
+export const BACK = Symbol('back');
+
 function ensureInteractive(ctx: PromptContext, fieldName: string): void {
   if (!isInteractive(ctx.nonInteractive)) {
     throw new CLIError(
@@ -17,11 +21,26 @@ function ensureInteractive(ctx: PromptContext, fieldName: string): void {
   }
 }
 
+function throwIfBack<T>(result: T | typeof BACK): T {
+  if (result === BACK) {
+    throw new CLIError('Cancelled', ExitCode.GENERAL);
+  }
+  return result;
+}
+
 export async function promptText(
   ctx: PromptContext,
   message: string,
   options: { placeholder?: string; defaultValue?: string; validate?: (v: string) => string | undefined } = {}
 ): Promise<string> {
+  return throwIfBack(await promptTextOrBack(ctx, message, options));
+}
+
+export async function promptTextOrBack(
+  ctx: PromptContext,
+  message: string,
+  options: { placeholder?: string; defaultValue?: string; validate?: (v: string) => string | undefined } = {}
+): Promise<string | typeof BACK> {
   ensureInteractive(ctx, message);
   const result = await p.text({
     message,
@@ -29,19 +48,20 @@ export async function promptText(
     defaultValue: options.defaultValue,
     validate: options.validate,
   });
-  if (p.isCancel(result)) {
-    throw new CLIError('Cancelled', ExitCode.GENERAL);
-  }
-  return result;
+  return p.isCancel(result) ? BACK : result;
 }
 
 export async function promptPassword(ctx: PromptContext, message: string): Promise<string> {
+  return throwIfBack(await promptPasswordOrBack(ctx, message));
+}
+
+export async function promptPasswordOrBack(
+  ctx: PromptContext,
+  message: string
+): Promise<string | typeof BACK> {
   ensureInteractive(ctx, message);
   const result = await p.password({ message });
-  if (p.isCancel(result)) {
-    throw new CLIError('Cancelled', ExitCode.GENERAL);
-  }
-  return result;
+  return p.isCancel(result) ? BACK : result;
 }
 
 export async function promptSelect<T extends string>(
@@ -60,20 +80,43 @@ export async function promptSelect<T extends string>(
   return result as T;
 }
 
+export async function promptSelectOrBack<T extends string>(
+  ctx: PromptContext,
+  message: string,
+  options: Array<{ value: T; label: string; hint?: string }>,
+  backLabel = '← Back'
+): Promise<T | typeof BACK> {
+  ensureInteractive(ctx, message);
+  type NavOption =
+    | { value: string; label?: string; hint?: string }
+    | { value: typeof BACK; label: string; hint?: string };
+  const result = await p.select<NavOption[], string | typeof BACK>({
+    message,
+    options: [...options, { value: BACK, label: backLabel }],
+  });
+  if (result === BACK || p.isCancel(result)) return BACK;
+  return result as T;
+}
+
 export async function promptConfirm(
   ctx: PromptContext,
   message: string,
   defaultValue = false
 ): Promise<boolean> {
+  return throwIfBack(await promptConfirmOrBack(ctx, message, defaultValue));
+}
+
+export async function promptConfirmOrBack(
+  ctx: PromptContext,
+  message: string,
+  defaultValue = false
+): Promise<boolean | typeof BACK> {
   ensureInteractive(ctx, message);
   const result = await p.confirm({
     message,
     initialValue: defaultValue,
   });
-  if (p.isCancel(result)) {
-    throw new CLIError('Cancelled', ExitCode.GENERAL);
-  }
-  return result;
+  return p.isCancel(result) ? BACK : result;
 }
 
 export function intro(message: string): void {
@@ -82,6 +125,10 @@ export function intro(message: string): void {
 
 export function outro(message: string): void {
   p.outro(message);
+}
+
+export function cancel(message: string): void {
+  p.cancel(message);
 }
 
 const NOTE_MAX_WIDTH = 76;
