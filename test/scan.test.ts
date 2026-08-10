@@ -1,6 +1,20 @@
-import { describe, it } from 'node:test';
+import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import {
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { ScanTarget } from '../src/commands/scan';
+import type { ScanReport, ScanReportRisk } from '../src/client/scan-reports';
+
+// Point HOME at a temp dir before importing any source module, so credential
+// resolution never reads the developer's real ~/.polylane/credentials.json
+// (an expiring stored token would trigger a refresh fetch inside mocked-fetch
+// tests). Same pattern as signup.test.ts.
+const tempHome = mkdtempSync(join(tmpdir(), 'polylane-scan-test-'));
+process.env.HOME = tempHome;
+after(() => rmSync(tempHome, { recursive: true, force: true }));
+
+const {
   buildRiskNavigatorOptions,
   issueConsoleUrl,
   rankRisks,
@@ -10,11 +24,9 @@ import {
   scanProgressLabel,
   scansIndexUrl,
   seedInvestigations,
-  type ScanTarget,
-} from '../src/commands/scan';
-import { investigateScanRisks } from '../src/client/scan-reports';
-import type { ScanReport, ScanReportRisk } from '../src/client/scan-reports';
-import { mockConfig } from './helpers/config';
+} = await import('../src/commands/scan');
+const { investigateScanRisks } = await import('../src/client/scan-reports');
+const { mockConfig } = await import('./helpers/config');
 
 function risk(severity: ScanReportRisk['severity'], title: string): ScanReportRisk {
   return { title, detail: '', severity, resourceIds: [], resourceTypes: [] };
