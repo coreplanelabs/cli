@@ -138,6 +138,15 @@ async function confirmBrowserConnect(
   }
 }
 
+function printConnectSuccess(config: Config, integration: Integration, label: string): void {
+  if (config.output === 'json') {
+    formatOutput(config, integration);
+    return;
+  }
+  const detail = integration.name && integration.name !== label ? `: ${integration.name}` : '';
+  process.stderr.write(`✓ ${label} connected${detail}\n`);
+}
+
 async function openOrPrintInstallUrl(config: Config, url: string, label: string, noBrowser: boolean): Promise<void> {
   if (config.output === 'json') {
     formatOutput(config, { url });
@@ -249,7 +258,7 @@ async function connectMcp(
     ...(bearerToken ? { bearerToken } : {}),
     ...(extraHeaders ? { extraHeaders } : {}),
   });
-  formatOutput(config, integration);
+  printConnectSuccess(config, integration, name);
   return;
 }
 
@@ -479,7 +488,7 @@ async function connectWithCredentials(
   }
 
   const integration = await api.integrationsConnect(body);
-  formatOutput(config, integration);
+  printConnectSuccess(config, integration, TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
   return;
 }
 
