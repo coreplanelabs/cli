@@ -16,6 +16,7 @@ export interface ResourceGroup {
 }
 
 const RESOURCE_ORDER: Record<string, ResourceGroup> = {
+  scan: { name: 'scan', description: 'Scan connected cloud accounts and integrations for key risks', order: 4 },
   feed: { name: 'feed', description: 'Workspace activity feed (what just happened)', order: 6 },
   issue: { name: 'issue', description: 'Detected issues (anomalies + alerts) and their timelines', order: 8 },
   service: { name: 'service', description: 'Cloud infrastructure (nodes, logs, metrics, graph)', order: 20 },

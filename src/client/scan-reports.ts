@@ -1,0 +1,64 @@
+import type { Config } from '../config/schema';
+import { requestJson } from './http';
+
+export type ScanReportStatus = 'running' | 'ready' | 'failed';
+export type ScanRiskSeverity = 'low' | 'medium' | 'high';
+
+export interface ScanReportRisk {
+  id?: string;
+  title: string;
+  detail: string;
+  severity: ScanRiskSeverity;
+  resourceIds: string[];
+  resourceTypes: string[];
+}
+
+export interface ScanReport {
+  id: string;
+  workspaceId: string;
+  kind: 'cloud' | 'integration';
+  provider: string;
+  alias: string | null;
+  status: ScanReportStatus;
+  risks: ScanReportRisk[];
+  riskCount: number;
+  highRiskCount: number;
+  _html_url?: string;
+}
+
+export interface GenerateScanReportBody {
+  workspaceId: string;
+  kind: 'cloud' | 'integration';
+  provider: string;
+  id?: string;
+}
+
+export interface GenerateScanReportResult {
+  id: string | null;
+  status: 'running' | 'failed';
+}
+
+// The scan_reports routes are deployed but marked hide:true in the OpenAPI
+// spec, so the generated client never includes them — call them with literal
+// paths until nominal exposes them.
+export async function generateScanReport(
+  config: Config,
+  body: GenerateScanReportBody
+): Promise<GenerateScanReportResult> {
+  return requestJson<GenerateScanReportResult>(config, {
+    method: 'POST',
+    url: '/v1/scan_reports',
+    body,
+  });
+}
+
+export async function getScanReport(
+  config: Config,
+  workspaceId: string,
+  id: string
+): Promise<ScanReport> {
+  return requestJson<ScanReport>(config, {
+    method: 'GET',
+    url: `/v1/scan_reports/${encodeURIComponent(workspaceId)}/${encodeURIComponent(id)}`,
+  });
+}
