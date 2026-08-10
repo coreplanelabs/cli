@@ -13,6 +13,15 @@ export interface ScanReportRisk {
   resourceTypes: string[];
 }
 
+export type ScanInvestigationStatus = 'running' | 'done' | 'failed';
+
+export interface ScanRiskInvestigation {
+  riskId: string;
+  threadId: string;
+  issueId?: string | null;
+  status: ScanInvestigationStatus;
+}
+
 export interface ScanReport {
   id: string;
   workspaceId: string;
@@ -21,6 +30,7 @@ export interface ScanReport {
   alias: string | null;
   status: ScanReportStatus;
   risks: ScanReportRisk[];
+  riskInvestigations?: ScanRiskInvestigation[];
   riskCount: number;
   highRiskCount: number;
   _html_url?: string;
@@ -60,5 +70,29 @@ export async function getScanReport(
   return requestJson<ScanReport>(config, {
     method: 'GET',
     url: `/v1/scan_reports/${encodeURIComponent(workspaceId)}/${encodeURIComponent(id)}`,
+  });
+}
+
+export interface InvestigateScanRisksBody {
+  workspaceId: string;
+  scanReportId: string;
+  riskIds?: string[];
+}
+
+export interface InvestigateScanRisksResult {
+  investigations: ScanRiskInvestigation[];
+}
+
+// Starts a background investigation per risk: each risk gets its own issue
+// (origin "scan") and investigation thread, and the response carries the
+// report's full investigation list including previously started ones.
+export async function investigateScanRisks(
+  config: Config,
+  body: InvestigateScanRisksBody
+): Promise<InvestigateScanRisksResult> {
+  return requestJson<InvestigateScanRisksResult>(config, {
+    method: 'POST',
+    url: '/v1/scan_reports/investigate',
+    body,
   });
 }

@@ -1,14 +1,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildRiskNavigatorOptions,
+  issueConsoleUrl,
   rankRisks,
   renderRiskLines,
+  riskKey,
   runScans,
   scanProgressLabel,
   scansIndexUrl,
+  seedInvestigations,
   type ScanTarget,
 } from '../src/commands/scan';
+import { investigateScanRisks } from '../src/client/scan-reports';
 import type { ScanReport, ScanReportRisk } from '../src/client/scan-reports';
+import { mockConfig } from './helpers/config';
 
 function risk(severity: ScanReportRisk['severity'], title: string): ScanReportRisk {
   return { title, detail: '', severity, resourceIds: [], resourceTypes: [] };
@@ -52,6 +58,156 @@ describe('rankRisks', () => {
     ]);
     assert.equal(ranked[0]!.source, 'prod');
     assert.equal(ranked[1]!.source, 'cloudflare');
+  });
+
+  it('carries the risk id, report id, and report console url', () => {
+    const ranked = rankRisks([
+      report({
+        id: 'scan_report_9',
+        _html_url: 'https://console.polylane.com/acme/scans/scan_report_9',
+        risks: [{ ...risk('high', 'a'), id: 'risk_1' }, risk('low', 'b')],
+      }),
+    ]);
+    assert.equal(ranked[0]!.id, 'risk_1');
+    assert.equal(ranked[0]!.reportId, 'scan_report_9');
+    assert.equal(ranked[0]!.reportHtmlUrl, 'https://console.polylane.com/acme/scans/scan_report_9');
+    assert.equal(ranked[1]!.id, undefined);
+    assert.equal(ranked[1]!.reportId, 'scan_report_9');
+  });
+});
+
+describe('issueConsoleUrl', () => {
+  it('rewrites a report console url to the issue page on the same slug', () => {
+    assert.equal(
+      issueConsoleUrl('https://console.polylane.com/acme/scans/scan_report_abc', 'issue_1'),
+      'https://console.polylane.com/acme/issues/issue_1'
+    );
+  });
+
+  it('rewrites a scans index url too', () => {
+    assert.equal(
+      issueConsoleUrl('https://console.polylane.com/acme/scans', 'issue_1'),
+      'https://console.polylane.com/acme/issues/issue_1'
+    );
+  });
+
+  it('returns null without a scan console url', () => {
+    assert.equal(issueConsoleUrl(null, 'issue_1'), null);
+    assert.equal(issueConsoleUrl(undefined, 'issue_1'), null);
+    assert.equal(issueConsoleUrl('https://console.polylane.com/acme/issues', 'issue_1'), null);
+  });
+});
+
+describe('seedInvestigations', () => {
+  it('maps already-investigated risks to their issue ids', () => {
+    const seeded = seedInvestigations([
+      report({
+        id: 'scan_report_9',
+        riskInvestigations: [
+          { riskId: 'risk_1', threadId: 'thread_1', issueId: 'issue_1', status: 'running' },
+          { riskId: 'risk_2', threadId: 'thread_2', status: 'running' },
+        ],
+      }),
+      report({ id: 'scan_report_10' }),
+    ]);
+    assert.equal(seeded.size, 2);
+    assert.equal(seeded.get('scan_report_9:risk_1'), 'issue_1');
+    assert.equal(seeded.get('scan_report_9:risk_2'), null);
+  });
+});
+
+describe('buildRiskNavigatorOptions', () => {
+  const ranked = rankRisks([
+    report({
+      id: 'scan_report_9',
+      alias: 'prod',
+      risks: [
+        { ...risk('high', 'Public bucket'), id: 'risk_1' },
+        { ...risk('low', 'Old key'), id: 'risk_2' },
+        risk('medium', 'No id, not selectable'),
+      ],
+    }),
+  ]);
+
+  it('only offers risks that have an id', () => {
+    const options = buildRiskNavigatorOptions(ranked, new Set(), false);
+    assert.deepEqual(
+      options.map((o) => o.value),
+      ['scan_report_9:risk_1', 'scan_report_9:risk_2']
+    );
+  });
+
+  it('shows the source as the hint for uninvestigated risks', () => {
+    const options = buildRiskNavigatorOptions(ranked, new Set(), false);
+    assert.equal(options[0]!.label, '  HIGH    Public bucket');
+    assert.equal(options[0]!.hint, 'prod');
+  });
+
+  it('marks already-investigated risks', () => {
+    const options = buildRiskNavigatorOptions(ranked, new Set(['scan_report_9:risk_1']), false);
+    assert.equal(options[0]!.label, '✔ HIGH    Public bucket');
+    assert.equal(options[0]!.hint, 'issue created · investigating');
+    assert.equal(options[1]!.label, '  LOW     Old key');
+  });
+
+  it('colors the severity tag when enabled', () => {
+    const options = buildRiskNavigatorOptions(ranked, new Set(), true);
+    assert.ok(options[0]!.label.includes('\x1B[1;31mHIGH  \x1B[0m'));
+  });
+});
+
+describe('riskKey', () => {
+  it('is stable across reports', () => {
+    assert.equal(riskKey({ reportId: 'scan_report_9', id: 'risk_1' }), 'scan_report_9:risk_1');
+    assert.equal(riskKey({ reportId: 'scan_report_9' }), 'scan_report_9:');
+  });
+});
+
+describe('investigateScanRisks', () => {
+  it('POSTs the risk ids and unwraps the investigations envelope', async () => {
+    const calls: Array<{ url: string; init: { method?: string; body?: unknown } }> = [];
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = ((url: unknown, init?: { method?: string; body?: unknown }) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            message: null,
+            success: true,
+            error: null,
+            result: {
+              investigations: [
+                { riskId: 'risk_1', threadId: 'thread_1', issueId: 'issue_1', status: 'running' },
+              ],
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      );
+    }) as typeof fetch;
+    try {
+      const result = await investigateScanRisks(mockConfig({ apiKey: 'sk_test' }), {
+        workspaceId: 'ws_1',
+        scanReportId: 'scan_report_1',
+        riskIds: ['risk_1'],
+      });
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0]!.url, 'https://api.example.test/v1/scan_reports/investigate');
+      assert.equal(calls[0]!.init.method, 'POST');
+      assert.deepEqual(JSON.parse(String(calls[0]!.init.body)), {
+        workspaceId: 'ws_1',
+        scanReportId: 'scan_report_1',
+        riskIds: ['risk_1'],
+      });
+      assert.deepEqual(result.investigations[0], {
+        riskId: 'risk_1',
+        threadId: 'thread_1',
+        issueId: 'issue_1',
+        status: 'running',
+      });
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 });
 

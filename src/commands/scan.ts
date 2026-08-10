@@ -5,7 +5,9 @@ import { PolylaneAPI } from '../generated/client';
 import {
   generateScanReport,
   getScanReport,
+  investigateScanRisks,
   type ScanReport,
+  type ScanRiskInvestigation,
   type ScanRiskSeverity,
 } from '../client/scan-reports';
 import { authLoginCommand } from './auth/login';
@@ -18,7 +20,15 @@ import { Spinner } from '../output/progress';
 import { outputJson } from '../output/json';
 import { showStatusBar } from '../output/status-bar';
 import { isInteractive, shouldUseColor } from '../utils/env';
-import { promptSelect } from '../utils/prompt';
+import { openBrowser } from '../utils/browser';
+import {
+  BACK,
+  note,
+  promptConfirmOrBack,
+  promptSelect,
+  promptSelectOrBack,
+  type PromptContext,
+} from '../utils/prompt';
 
 const POLL_INTERVAL_MS = 3_000;
 const SCAN_TIMEOUT_MS = 180_000;
@@ -96,6 +106,9 @@ export interface RankedRisk {
   severity: ScanRiskSeverity;
   title: string;
   source: string;
+  id?: string;
+  reportId: string;
+  reportHtmlUrl?: string;
 }
 
 const SEVERITY_RANK: Record<ScanRiskSeverity, number> = { high: 0, medium: 1, low: 2 };
@@ -108,6 +121,9 @@ export function rankRisks(reports: ScanReport[]): RankedRisk[] {
         severity: risk.severity,
         title: risk.title,
         source: report.alias || report.provider,
+        ...(risk.id ? { id: risk.id } : {}),
+        reportId: report.id,
+        ...(report._html_url ? { reportHtmlUrl: report._html_url } : {}),
       });
     }
   }
@@ -160,6 +176,60 @@ export function scansIndexUrl(reportHtmlUrl: string): string {
   return reportHtmlUrl.replace(/\/[^/]+$/, '');
 }
 
+// Scan console URLs look like https://console…/{slug}/scans[/{id}]; the issue
+// page lives at https://console…/{slug}/issues/{issueId} on the same slug.
+export function issueConsoleUrl(
+  scanConsoleUrl: string | null | undefined,
+  issueId: string
+): string | null {
+  if (!scanConsoleUrl) return null;
+  const match = scanConsoleUrl.match(/^(.*)\/scans(\/[^/]*)?$/);
+  if (!match) return null;
+  return `${match[1]}/issues/${encodeURIComponent(issueId)}`;
+}
+
+export function riskKey(risk: Pick<RankedRisk, 'reportId' | 'id'>): string {
+  return `${risk.reportId}:${risk.id ?? ''}`;
+}
+
+// Risks that already have an investigation (from an earlier run or another
+// user) seed the navigator's marker state; the value is the issue id when the
+// API recorded one.
+export function seedInvestigations(reports: ScanReport[]): Map<string, string | null> {
+  const seeded = new Map<string, string | null>();
+  for (const report of reports) {
+    for (const investigation of report.riskInvestigations ?? []) {
+      seeded.set(riskKey({ reportId: report.id, id: investigation.riskId }), investigation.issueId ?? null);
+    }
+  }
+  return seeded;
+}
+
+export interface RiskNavigatorOption {
+  value: string;
+  label: string;
+  hint?: string;
+}
+
+export function buildRiskNavigatorOptions(
+  ranked: RankedRisk[],
+  investigated: ReadonlySet<string>,
+  useColor: boolean
+): RiskNavigatorOption[] {
+  return ranked
+    .filter((risk): risk is RankedRisk & { id: string } => Boolean(risk.id))
+    .map((risk) => {
+      const key = riskKey(risk);
+      const done = investigated.has(key);
+      const tag = color(risk.severity.toUpperCase().padEnd(6), SEVERITY_COLOR[risk.severity] ?? '0', useColor);
+      return {
+        value: key,
+        label: `${done ? '✔ ' : '  '}${tag}  ${risk.title}`,
+        hint: done ? 'issue created · investigating' : risk.source,
+      };
+    });
+}
+
 function resolveConsoleUrl(results: ScanRunResult[]): string | null {
   const withUrl = results.filter((r) => r.report?._html_url);
   if (withUrl.length === 0) return null;
@@ -203,6 +273,84 @@ async function resolveWorkspaceId(config: Config, api: PolylaneAPI): Promise<str
       '        POLYLANE_WORKSPACE_ID=<id>                     (environment variable)\n' +
       'List workspaces with: polylane workspace list'
   );
+}
+
+async function offerToOpen(ctx: PromptContext, url: string): Promise<void> {
+  const open = await promptConfirmOrBack(ctx, 'Open the issue in your browser?', false);
+  if (open === true) openBrowser(url);
+}
+
+async function runRiskNavigator(
+  cfg: Config,
+  workspaceId: string,
+  ranked: RankedRisk[],
+  seeded: Map<string, string | null>,
+  scanConsoleUrl: string | null
+): Promise<void> {
+  const ctx: PromptContext = { nonInteractive: cfg.nonInteractive };
+  const useColor = shouldUseColor(cfg.noColor);
+  const issueIds = new Map(seeded);
+
+  for (;;) {
+    const options = buildRiskNavigatorOptions(ranked, new Set(issueIds.keys()), useColor);
+    if (options.length === 0) return;
+    const choice = await promptSelectOrBack<string>(
+      ctx,
+      'Investigate a risk (Enter creates an issue; Polylane investigates in the background)',
+      options,
+      'Done'
+    );
+    if (choice === BACK) return;
+    const risk = ranked.find((r) => r.id && riskKey(r) === choice);
+    if (!risk?.id) continue;
+
+    if (issueIds.has(choice)) {
+      const knownIssueId = issueIds.get(choice) ?? null;
+      const url = knownIssueId
+        ? issueConsoleUrl(risk.reportHtmlUrl ?? scanConsoleUrl, knownIssueId)
+        : null;
+      note(
+        'An issue is already open for this risk and Polylane is investigating it.' +
+          (url ? `\n\nView the issue in the console:\n  ${url}` : ''),
+        'Already under investigation'
+      );
+      if (url) await offerToOpen(ctx, url);
+      continue;
+    }
+
+    const spinner = new Spinner(`Creating an issue for "${risk.title}"…`);
+    spinner.start();
+    let investigation: ScanRiskInvestigation | undefined;
+    try {
+      const res = await investigateScanRisks(cfg, {
+        workspaceId,
+        scanReportId: risk.reportId,
+        riskIds: [risk.id],
+      });
+      investigation = res.investigations.find((inv) => inv.riskId === risk.id);
+      spinner.stop();
+    } catch (err) {
+      spinner.stop();
+      const message = err instanceof Error ? err.message : String(err);
+      note(
+        `The issue was not created (${message}).\nPick the risk again to retry, or investigate it from the console.`,
+        'Nothing changed'
+      );
+      continue;
+    }
+
+    issueIds.set(choice, investigation?.issueId ?? null);
+    const url = investigation?.issueId
+      ? issueConsoleUrl(risk.reportHtmlUrl ?? scanConsoleUrl, investigation.issueId)
+      : null;
+    note(
+      `Issue created for "${risk.title}".\n` +
+        'Polylane is investigating this risk in the background and will post what it finds on the issue. You can keep working; nothing else is needed from you.' +
+        (url ? `\n\nView the issue in the console:\n  ${url}` : ''),
+      'Investigation started'
+    );
+    if (url) await offerToOpen(ctx, url);
+  }
 }
 
 export const scanCommand: Command = {
@@ -324,6 +472,17 @@ export const scanCommand: Command = {
     }
     if (consoleUrl) {
       process.stdout.write(`\nInvestigate: ${consoleUrl}\n`);
+    }
+
+    if (!cfg.quiet && isInteractive(cfg.nonInteractive) && ranked.some((r) => r.id)) {
+      process.stdout.write('\n');
+      await runRiskNavigator(
+        cfg,
+        workspaceId,
+        ranked,
+        seedInvestigations(ready.map((r) => r.report!)),
+        consoleUrl
+      );
     }
   },
 };
