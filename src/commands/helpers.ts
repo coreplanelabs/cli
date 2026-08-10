@@ -2,7 +2,15 @@ import type { Config } from '../config/schema';
 import type { GlobalFlags } from '../types/flags';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
-import { promptText, promptSelect, promptPassword, note } from '../utils/prompt';
+import {
+  BACK,
+  promptText,
+  promptSelect,
+  promptTextOrBack,
+  promptSelectOrBack,
+  promptPasswordOrBack,
+  note,
+} from '../utils/prompt';
 import { isInteractive } from '../utils/env';
 import { Spinner } from '../output/progress';
 import { consoleBaseUrl } from '../auth/oauth';
@@ -119,22 +127,118 @@ export async function promptChoice<T extends string>(
   return promptSelect<T>({ nonInteractive: config.nonInteractive }, message, options);
 }
 
-// Mirrors the console connect flows: short instructions and a direct link to
-// the page where the credential is created, then a hidden input.
-export async function promptSecret(
+export const SKIPPED = Symbol('skipped');
+
+export type WizardStep = () => Promise<typeof BACK | typeof SKIPPED | void>;
+
+// Runs wizard steps in order. A step returns BACK when the user backs out of
+// its prompt, and SKIPPED when it didn't prompt (value already provided by a
+// flag), so walking backwards lands on the previous step that actually
+// prompted. Returns false when the user backs out of the wizard entirely.
+export async function runSteps(steps: WizardStep[]): Promise<boolean> {
+  let i = 0;
+  let direction: 1 | -1 = 1;
+  while (i < steps.length) {
+    const outcome = await steps[i]!();
+    if (outcome === BACK) direction = -1;
+    else if (outcome !== SKIPPED) direction = 1;
+    i += direction;
+    if (i < 0) return false;
+  }
+  return true;
+}
+
+export function textStep(
+  config: Config,
+  args: Record<string, unknown>,
+  key: string,
+  message: string,
+  flag: string,
+  set: (value: string) => void
+): WizardStep {
+  return async () => {
+    const fromFlag = args[key];
+    if (typeof fromFlag === 'string' && fromFlag.length > 0) {
+      set(fromFlag);
+      return SKIPPED;
+    }
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(`Missing required flag: ${flag}`, ExitCode.USAGE);
+    }
+    const value = await promptTextOrBack({ nonInteractive: config.nonInteractive }, message);
+    if (value === BACK) return BACK;
+    set(value);
+    return;
+  };
+}
+
+export function choiceStep<T extends string>(
   config: Config,
   args: Record<string, unknown>,
   key: string,
   flag: string,
-  opts: { message: string; instructions: string; link: string; linkLabel: string }
-): Promise<string> {
-  const fromFlag = getArgString(args, key);
-  if (fromFlag !== undefined) return fromFlag;
-  if (!isInteractive(config.nonInteractive)) {
-    throw new CLIError(`Missing required flag: ${flag}`, ExitCode.USAGE);
-  }
-  note(`${opts.instructions}\n\n${opts.linkLabel}:\n  ${opts.link}`, opts.message);
-  return promptPassword({ nonInteractive: config.nonInteractive }, opts.message);
+  message: string,
+  options: Array<{ value: T; label: string; hint?: string }>,
+  set: (value: T) => void,
+  opts: { strict?: boolean } = {}
+): WizardStep {
+  return async () => {
+    const fromFlag = getArgString(args, key);
+    if (fromFlag !== undefined) {
+      if (opts.strict && !options.some((o) => o.value === fromFlag)) {
+        throw new CLIError(
+          `Invalid value for ${flag}: "${fromFlag}"`,
+          ExitCode.USAGE,
+          `Use one of: ${options.map((o) => o.value).join(', ')}`
+        );
+      }
+      set(fromFlag as T);
+      return SKIPPED;
+    }
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(`Missing required flag: ${flag}`, ExitCode.USAGE);
+    }
+    const value = await promptSelectOrBack<T>({ nonInteractive: config.nonInteractive }, message, options);
+    if (value === BACK) return BACK;
+    set(value);
+    return;
+  };
+}
+
+export interface SecretPromptOptions {
+  message: string;
+  instructions: string;
+  link: string;
+  linkLabel: string;
+}
+
+// Mirrors the console connect flows: short instructions and a direct link to
+// the page where the credential is created, then a hidden input. Options can
+// be a thunk when they depend on values from earlier steps.
+export function secretStep(
+  config: Config,
+  args: Record<string, unknown>,
+  key: string,
+  flag: string,
+  opts: SecretPromptOptions | (() => SecretPromptOptions),
+  set: (value: string) => void
+): WizardStep {
+  return async () => {
+    const fromFlag = getArgString(args, key);
+    if (fromFlag !== undefined) {
+      set(fromFlag);
+      return SKIPPED;
+    }
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(`Missing required flag: ${flag}`, ExitCode.USAGE);
+    }
+    const resolved = typeof opts === 'function' ? opts() : opts;
+    note(`${resolved.instructions}\n\n${resolved.linkLabel}:\n  ${resolved.link}`, resolved.message);
+    const value = await promptPasswordOrBack({ nonInteractive: config.nonInteractive }, resolved.message);
+    if (value === BACK) return BACK;
+    set(value);
+    return;
+  };
 }
 
 // Browser connect flows enter through the console's /cli/connect page: it
