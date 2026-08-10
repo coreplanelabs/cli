@@ -80,7 +80,9 @@ export const configSetCommand: Command = {
     }
 
     if (config.dryRun) {
-      process.stderr.write(`[dry-run] Would set ${key} = ${value}\n`);
+      // Never echo credentials, even in dry-run output.
+      const shown = key === 'api_key' ? '<redacted>' : value;
+      process.stderr.write(`[dry-run] Would set ${key} = ${shown}\n`);
       return;
     }
 
