@@ -12,7 +12,7 @@ import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { Spinner } from '../../output/progress';
 
-interface WhoamiResult {
+export interface WhoamiResult {
   id: string;
   forename?: string;
   surname?: string | null;
@@ -63,7 +63,7 @@ async function validateApiKey(config: Config, key: string): Promise<WhoamiResult
   }
 }
 
-async function selectWorkspace(config: Config, user: WhoamiResult): Promise<string | undefined> {
+export async function selectWorkspace(config: Config, user: WhoamiResult): Promise<string | undefined> {
   const spinner = new Spinner('Fetching workspaces…');
   spinner.start();
   try {

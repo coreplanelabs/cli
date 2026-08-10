@@ -4,11 +4,12 @@ import { formatOutput } from '../../output/formatter';
 import { getArgString, promptIfMissing } from '../helpers';
 import { promptPassword, promptSelect, promptText, intro, outro, note } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
-import { oauthLogin } from './login';
+import { oauthLogin, selectWorkspace, type WhoamiResult } from './login';
 import { writeCredentials } from '../../auth/credentials';
 import { parseSessionExpiresAt } from '../../auth/signup-helpers';
 import type { OAuthCredential } from '../../auth/types';
-import { request } from '../../client/http';
+import { writeConfigFile } from '../../config/loader';
+import { request, requestJson } from '../../client/http';
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import type { User } from '../../generated/types';
@@ -26,15 +27,29 @@ interface SignupEnvelope {
   error: ApiErrorBody | null;
 }
 
+export interface Landing {
+  kind:
+    | 'existing'
+    | 'created'
+    | 'joined'
+    | 'verify_email'
+    | 'verify_to_join'
+    | 'workspace_full'
+    | 'invite_at_capacity'
+    | 'none';
+  workspaceSlug?: string;
+  workspace?: { id: string; name: string };
+}
+
 interface VerifyEmailEnvelope {
   success: boolean;
-  result: { token?: string; workspaceSlug?: string };
+  result: { token?: string; landing?: Landing };
   error: ApiErrorBody | null;
 }
 
 interface VerifiedSession {
   token?: string;
-  workspaceSlug?: string;
+  landing?: Landing;
   expiresAt: string;
 }
 
@@ -58,20 +73,37 @@ function writeSessionCredential(token: string, expiresAt: string, account: strin
   writeCredentials(cred);
 }
 
-function nextSteps(expiresAt: string, workspaceSlug?: string): string {
-  const workspaceStep = workspaceSlug
-    ? [
-        `  1. Your first workspace ("${workspaceSlug}") was created — set it as the default`,
-        `     polylane workspace list`,
-        `     polylane workspace use <id>`,
-      ]
-    : [`  1. Create a workspace`, `     polylane workspace create --name "My Workspace"`];
+function workspaceStep(landing?: Landing): string[] {
+  const setDefault = [`     polylane workspace list`, `     polylane workspace use <id>`];
+  switch (landing?.kind) {
+    case 'created':
+      return [
+        landing.workspaceSlug
+          ? `  1. Your first workspace ("${landing.workspaceSlug}") was created — set it as the default`
+          : `  1. Your first workspace was created — set it as the default`,
+        ...setDefault,
+      ];
+    case 'joined':
+      return [
+        landing.workspaceSlug
+          ? `  1. You joined the "${landing.workspaceSlug}" workspace — set it as the default`
+          : `  1. You joined an existing workspace — set it as the default`,
+        ...setDefault,
+      ];
+    case 'existing':
+      return [`  1. Set your default workspace`, ...setDefault];
+    default:
+      return [`  1. Create a workspace`, `     polylane workspace create --name "My Workspace"`];
+  }
+}
+
+export function nextSteps(expiresAt: string, landing?: Landing): string {
   return [
     `Signed in. Session valid until ${expiresAt}.`,
     ``,
     `Onboarding (in order):`,
     ``,
-    ...workspaceStep,
+    ...workspaceStep(landing),
     ``,
     `  2. Browse what you can connect`,
     `     polylane integration catalog`,
@@ -137,15 +169,31 @@ async function verifyEmail(config: Config, email: string, code: string): Promise
   return { ...json.result, expiresAt };
 }
 
-function finishEmailSignIn(config: Config, email: string, session: VerifiedSession): void {
+async function persistDefaultWorkspace(config: Config): Promise<void> {
+  try {
+    const user = await requestJson<WhoamiResult>(config, {
+      method: 'GET',
+      url: '/v1/auth/whoami',
+    });
+    const wsId = await selectWorkspace(config, user);
+    if (wsId) {
+      writeConfigFile({ workspace_id: wsId });
+    }
+  } catch {
+    // non-fatal
+  }
+}
+
+async function finishEmailSignIn(config: Config, email: string, session: VerifiedSession): Promise<void> {
   if (!session.token) {
-    formatOutput(config, { workspaceSlug: session.workspaceSlug });
+    formatOutput(config, { landing: session.landing });
     outro('Email verified, but no session was returned. Run `polylane auth login`.');
     return;
   }
   writeSessionCredential(session.token, session.expiresAt, email);
-  formatOutput(config, { token: session.token, workspaceSlug: session.workspaceSlug });
-  note(nextSteps(session.expiresAt, session.workspaceSlug), 'Next steps');
+  await persistDefaultWorkspace(config);
+  formatOutput(config, { token: session.token, landing: session.landing });
+  note(nextSteps(session.expiresAt, session.landing), 'Next steps');
   outro('Signed in.');
 }
 
@@ -163,7 +211,7 @@ async function emailSignup(config: Config, args: Record<string, unknown>): Promi
         'Codes expire after 15 minutes. Re-run `polylane auth signup` to get a new one.'
       );
     }
-    finishEmailSignIn(config, email, session);
+    await finishEmailSignIn(config, email, session);
     return;
   }
 
@@ -244,7 +292,7 @@ async function emailSignup(config: Config, args: Record<string, unknown>): Promi
     );
     const session = await verifyEmail(config, email, code.trim());
     if (session) {
-      finishEmailSignIn(config, email, session);
+      await finishEmailSignIn(config, email, session);
       return;
     }
     if (attempt < CODE_ATTEMPTS) {
