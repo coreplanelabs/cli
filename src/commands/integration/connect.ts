@@ -23,6 +23,7 @@ import { isInteractive } from '../../utils/env';
 import {
   BACK,
   cancel,
+  note,
   promptSelectOrBack,
   promptPasswordOrBack,
   promptConfirmOrBack,
@@ -68,25 +69,35 @@ const DATADOG_SITES = [
   { value: 'ddog-gov.com', label: 'US1-FED (ddog-gov.com)' },
 ];
 
+// Datadog's console host only carries the app. prefix on the three original
+// sites; regional sites (us3, us5, ap1, ...) are served from the bare host.
+// https://docs.datadoghq.com/getting_started/site/
+function datadogConsoleUrl(site: string): string {
+  const appPrefixed = site === 'datadoghq.com' || site === 'datadoghq.eu' || site === 'ddog-gov.com';
+  return appPrefixed ? `https://app.${site}` : `https://${site}`;
+}
+
 const CODE_AGENTS = {
   devin: {
     name: 'Devin',
-    instructions: 'Create a service user and copy its API key (cog_…).',
+    instructions:
+      'In Devin, go to Settings > Service users, create a service user and generate its API key. Create it inside the organization, not in Enterprise settings (an enterprise-scoped key is rejected). Give it the Member role; on a custom enterprise role select ManageOrgSessions, ViewOrgSessions and UseDevinSessions. The key starts with cog_ and is shown only once.',
     link: 'https://app.devin.ai/settings/devin-api?tab=service-users',
-    linkLabel: 'Open Devin service users',
+    linkLabel: 'Create service user',
   },
   cursor: {
     name: 'Cursor',
     instructions:
-      'Create an API key (key_…) under Cursor → Settings. Make sure your target repositories are connected to your Cursor account.',
-    link: 'https://cursor.com/dashboard/api?section=user-keys#user-api-keys',
-    linkLabel: 'Open Cursor settings',
+      'Create a user API key under Dashboard > API Keys. Pick a user key, not a service account key (service account keys are rejected). There are no scopes to select. Keys start with crsr_ (older ones with key_). Your target repositories must be connected to Cursor\'s GitHub App.',
+    link: 'https://cursor.com/dashboard/api',
+    linkLabel: 'Open Cursor API keys',
   },
   factory: {
     name: 'Factory',
-    instructions: 'Create an API key (fk-…) in your Factory settings.',
+    instructions:
+      'Create an API key in your Factory settings. Prefer a service account key (org-owned; creating one needs the Owner or Manager role). Factory keys have no scope options. The key starts with fk- and is shown only once.',
     link: 'https://app.factory.ai/settings/api-keys',
-    linkLabel: 'Open Factory settings',
+    linkLabel: 'Create API key',
   },
 } as const;
 
@@ -192,6 +203,10 @@ async function connectMcp(
     },
     async () => {
       if (authMethod !== 'bearer' || bearerToken !== undefined) return SKIPPED;
+      note(
+        'Paste the bare token, without the "Bearer " prefix. Polylane adds that.\nGet it from whoever runs this MCP server. MCP defines no standard console or scope names.\nThe token needs whatever the server requires for tools/list and tools/call. Polylane calls nothing else.',
+        'Bearer token'
+      );
       const token = await promptPasswordOrBack(ctx, 'Bearer token');
       if (token === BACK) return BACK;
       bearerToken = token;
@@ -264,8 +279,8 @@ async function connectWithCredentials(
         () => ({
           message: 'Datadog API key',
           instructions:
-            'Create an API key in your Datadog organization settings, then paste it here. This is an org-level credential used to authenticate requests.',
-          link: `https://app.${site}/organization-settings/api-keys`,
+            'Organization Settings > API Keys > New Key. An org-level credential with no permissions to choose. Opaque hex string, no prefix.',
+          link: `${datadogConsoleUrl(site)}/organization-settings/api-keys`,
           linkLabel: 'Create API key',
         }),
         (v) => {
@@ -280,8 +295,8 @@ async function connectWithCredentials(
         () => ({
           message: 'Datadog application key',
           instructions:
-            'Create an application key, then paste it here. This is a user-level credential that controls what data Polylane can access.',
-          link: `https://app.${site}/organization-settings/application-keys`,
+            'Organization Settings > Application Keys > New Key. Create it as a Datadog Admin (connect reads your org, which needs the org_management permission) and leave it unscoped so it inherits your role. Opaque hex string; on newer orgs it is shown only once.',
+          link: `${datadogConsoleUrl(site)}/organization-settings/application-keys`,
           linkLabel: 'Create application key',
         }),
         (v) => {
@@ -315,13 +330,13 @@ async function connectWithCredentials(
         args,
         'apiKey',
         '--api-key',
-        {
+        () => ({
           message: 'Honeycomb configuration API key',
           instructions:
-            'In your Honeycomb environment settings, open API Keys, switch to the Configuration tab, and create a key named "polylane" with these permissions: Create Datasets, Manage Queries and Columns, Manage Public Boards, Manage Triggers, Manage Recipients, Manage Markers.',
-          link: 'https://ui.honeycomb.io',
-          linkLabel: 'Open Honeycomb settings',
-        },
+            'In Honeycomb, go to Environments > Manage Environments, pick your environment, open API Keys, switch to the Configuration tab, and create a key named "polylane" with these permissions: Create Datasets, Manage Queries and Columns, Run Queries, Manage Public Boards, Manage SLOs, Manage Triggers, Manage Recipients, Manage Markers. Leave Send Events and Read Service Maps off. The key is an opaque string with no prefix.',
+          link: region === 'eu' ? 'https://ui.eu1.honeycomb.io' : 'https://ui.honeycomb.io',
+          linkLabel: 'Open Honeycomb',
+        }),
         (v) => {
           apiKey = v;
         }
@@ -356,9 +371,9 @@ async function connectWithCredentials(
         {
           message: 'Axiom API token',
           instructions:
-            'In your Axiom settings, navigate to API Tokens and create a new token named "polylane" with all permissions.',
-          link: 'https://app.axiom.co',
-          linkLabel: 'Open Axiom settings',
+            'In Axiom, go to Settings > API tokens > New API token. Pick Advanced > Custom, select all datasets and grant Query. Org level permissions: Datasets read; Dashboards read; Monitors read and update; Notifiers create, read and delete. The token starts with xaat-.',
+          link: 'https://app.axiom.co/settings/api-tokens',
+          linkLabel: 'Create API token',
         },
         (v) => {
           apiToken = v;
@@ -380,7 +395,7 @@ async function connectWithCredentials(
         {
           message: 'Better Stack global API token',
           instructions:
-            'In Better Stack, open your organization settings, navigate to API tokens, and create a global API token.',
+            'In Better Stack, open API tokens and create a token in the Global API tokens section. It is valid across all your teams; Better Stack tokens have no scope options.',
           link: 'https://betterstack.com/settings/global-api-tokens',
           linkLabel: 'Create global API token',
         },
@@ -396,9 +411,9 @@ async function connectWithCredentials(
         {
           message: 'Better Stack Uptime API token',
           instructions:
-            "In the API token settings, switch to the Team-based tokens tab and copy your team's Uptime API token.",
-          link: 'https://betterstack.com/settings/global-api-tokens',
-          linkLabel: 'Open API token settings',
+            'On the API tokens page, switch to Team-based tokens, select the team that owns your monitors, and copy its Uptime API token. No scopes to pick; the token can create monitors and webhooks in that team.',
+          link: 'https://betterstack.com/settings/api-tokens/0',
+          linkLabel: 'Open team API tokens',
         },
         (v) => {
           uptimeApiToken = v;
@@ -412,9 +427,9 @@ async function connectWithCredentials(
         {
           message: 'Better Stack Telemetry API token',
           instructions:
-            'In Telemetry, open your team settings, navigate to API tokens, and copy your Telemetry API token.',
-          link: 'https://telemetry.betterstack.com',
-          linkLabel: 'Open Telemetry settings',
+            'Same page: API tokens > Team-based tokens, same team as above. Copy the token from the Telemetry API tokens section. This is not a source ingest token.',
+          link: 'https://betterstack.com/settings/api-tokens/0',
+          linkLabel: 'Open team API tokens',
         },
         (v) => {
           telemetryApiToken = v;
@@ -527,7 +542,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type honeycomb --region us --api-key ...',
     'polylane integration connect --type axiom --region us-east-1 --api-token ...',
     'polylane integration connect --type betterstack --api-token ... --uptime-api-token ... --telemetry-api-token ...',
-    'polylane integration connect --type cursor --api-key key_...',
+    'polylane integration connect --type cursor --api-key crsr_...',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP"',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP" --oauth',
   ],
