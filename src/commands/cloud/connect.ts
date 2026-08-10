@@ -223,7 +223,7 @@ export const cloudConnectCommand: Command = {
         throw new CLIError(
           'PlanetScale service-token connect needs --token-id, --token and --organization',
           ExitCode.USAGE,
-          'Or pass none of them to authorize in the browser instead'
+          'Create a service token at https://app.planetscale.com/~/settings/service-tokens with organization access read_organization and, for all databases, read_database and read_branch. Or pass none of the flags to authorize in the browser instead.'
         );
       }
       const result = await api.cloudAccountsConnect({ workspaceId, provider: 'planetscale', tokenId, token, organization });
@@ -256,7 +256,7 @@ export const cloudConnectCommand: Command = {
       const token = await promptSecret(config, args, 'token', '--token', {
         message: 'Cloudflare API token',
         instructions:
-          'Create an API token for your account, then paste it here. The docs page has links that pre-fill the permissions Polylane needs (read-only or read-write).',
+          'Create an account-owned API token: Manage Account > Account API Tokens (you must be a Super Administrator on the account). The docs page has links that pre-fill the exact permissions Polylane needs; leave the pre-filled set as it is, or use the read-only variant. New account tokens start with cfat_ and are shown only once.',
         link: 'https://docs.polylane.com/integrations/cloudflare',
         linkLabel: 'How to create the token',
       });
@@ -272,7 +272,8 @@ export const cloudConnectCommand: Command = {
     } else if (provider === 'fly') {
       const token = await promptSecret(config, args, 'token', '--token', {
         message: 'Fly.io API token',
-        instructions: 'Open your Fly.io dashboard, navigate to Tokens, create a new token, then paste it here.',
+        instructions:
+          'In the Fly.io dashboard, pick your organization, then Tokens, and create an org token. An org token is needed for image rollback remediation; a read-only token ("fly tokens create readonly -o <org>") covers sync and metrics only. Paste the whole value, including the leading "FlyV1 " prefix.',
         link: 'https://fly.io/dashboard',
         linkLabel: 'Open Fly.io dashboard',
       });
@@ -280,8 +281,9 @@ export const cloudConnectCommand: Command = {
     } else if (provider === 'render') {
       const apiKey = await promptSecret(config, args, 'apiKey', '--api-key', {
         message: 'Render API key',
-        instructions: 'Create a new API key in your Render account settings, then paste it here.',
-        link: 'https://dashboard.render.com/u/settings#api-keys',
+        instructions:
+          'Create a new API key in your Render account settings. Render keys have no scopes; the key acts as you in every workspace you belong to. Create it from an account with the Developer or Admin role (Viewer and Contributor cannot read env vars or connection strings). Starts with rnd_ and is shown only once.',
+        link: 'https://dashboard.render.com/u/settings?add-api-key',
         linkLabel: 'Create API key',
       });
       body = { workspaceId, provider: 'render', apiKey };
@@ -289,7 +291,7 @@ export const cloudConnectCommand: Command = {
       const tokenId = await promptSecret(config, args, 'tokenId', '--token-id', {
         message: 'Modal token ID',
         instructions:
-          'Create a new token in your Modal settings. It gives you a token ID starting with ak- and a token secret starting with as-.',
+          'Create a new token in your Modal settings; one token covers one workspace. Modal tokens have no scope picker and carry the creating account\'s access. On Team or Enterprise plans, create a Service User instead and give it the Viewer role on each environment. You get a token ID starting with ak- and a token secret starting with as-.',
         link: 'https://modal.com/settings/tokens',
         linkLabel: 'Create token',
       });
@@ -309,7 +311,7 @@ export const cloudConnectCommand: Command = {
           throw new CLIError(`Missing required flag: --kubeconfig`, ExitCode.USAGE);
         }
         note(
-          'Polylane connects with a kubeconfig file. Prefer the in-cluster agent (Helm install, no credentials to paste)? Use the console — see the docs:\n  https://docs.polylane.com/integrations/kubernetes',
+          'Polylane uploads this kubeconfig\'s current-context credentials, which are often cluster-admin.\nSafer: a dedicated ServiceAccount bound cluster-wide to the read-only ClusterRole "view", with a long-lived token ("kubectl create token" expires).\n"view" omits Secrets, nodes, persistentvolumes, storageclasses and RBAC objects; grant get/list on those for full inventory.\nPrefer no pasted credentials at all? Install the in-cluster agent (Helm) from the console, see the docs:\n  https://docs.polylane.com/integrations/kubernetes',
           'Connect Kubernetes'
         );
         kubeconfigPath = await promptText(
