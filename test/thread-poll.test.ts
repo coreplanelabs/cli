@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { waitForAssistantReply, extractMessageText, type ThreadPollApi } from '../src/client/thread-poll';
 import type { Message } from '../src/generated/types';
 
-function message(role: Message['role'], parts: unknown[]): Message {
-  return { role, parts } as unknown as Message;
+function message(role: Message['role'], parts: unknown[], id = `msg_${role}`): Message {
+  return { id, role, parts } as unknown as Message;
 }
 
 function fakeApi(
@@ -25,7 +25,7 @@ function fakeApi(
       };
     },
     async messagesList() {
-      return { items: current().messages };
+      return { items: [...current().messages].reverse() };
     },
   };
 }
@@ -96,6 +96,25 @@ describe('waitForAssistantReply', () => {
     });
     assert.equal(result.status, 'timeout');
     assert.equal(result.text, 'partial');
+  });
+
+  it('ignores pre-existing messages when ignoreIds is set', async () => {
+    const oldUser = message('user', [{ type: 'text', text: 'first question' }], 'msg_1');
+    const oldReply = message('assistant', [{ type: 'text', text: 'first answer' }], 'msg_2');
+    const newUser = message('user', [{ type: 'text', text: 'follow-up' }], 'msg_3');
+    const newReply = message('assistant', [{ type: 'text', text: 'second answer' }], 'msg_4');
+    const api = fakeApi([
+      { running: false, messages: [oldUser, oldReply] },
+      { running: true, messages: [oldUser, oldReply, newUser] },
+      { running: false, messages: [oldUser, oldReply, newUser, newReply] },
+    ]);
+    const result = await waitForAssistantReply(api, 'ws_x', 'thrd_x', {
+      intervalMs: 1,
+      ignoreIds: new Set(['msg_1', 'msg_2']),
+    });
+    assert.equal(result.status, 'complete');
+    assert.equal(result.text, 'second answer');
+    assert.equal(result.assistantMessages.length, 1);
   });
 
   it('emits incremental deltas while streaming', async () => {

@@ -21,6 +21,7 @@ export interface ThreadPollApi {
 export interface WaitForReplyOptions {
   intervalMs?: number;
   timeoutMs?: number;
+  ignoreIds?: ReadonlySet<string>;
   onText?: (delta: string) => void;
 }
 
@@ -57,6 +58,7 @@ export async function waitForAssistantReply(
 ): Promise<WaitForReplyResult> {
   const intervalMs = options.intervalMs ?? POLL_INTERVAL_MS;
   const deadline = Date.now() + (options.timeoutMs ?? WAIT_TIMEOUT_MS);
+  const ignoreIds = options.ignoreIds;
   let sawRunning = false;
   let idlePollsWithoutText = 0;
   let emitted = '';
@@ -94,10 +96,13 @@ export async function waitForAssistantReply(
       try {
         const { items } = await api.messagesList(workspaceId, threadId, {
           perPage: 100,
-          order: 'asc',
+          order: 'desc',
           orderBy: 'createdAt',
         });
-        lastMessages = items;
+        const chronological = [...items].reverse();
+        lastMessages = ignoreIds
+          ? chronological.filter((m) => !ignoreIds.has(m.id))
+          : chronological;
       } catch {
         // transient failure — keep polling
       }

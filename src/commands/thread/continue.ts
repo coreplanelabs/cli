@@ -6,25 +6,8 @@ import { requireWorkspace, requirePositional, getAllPositional, getArgBoolean } 
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { Spinner } from '../../output/progress';
-import {
-  sendThreadMessage,
-  extractText as extractStreamedText,
-  type UIMessage,
-} from '../../client/thread-chat';
-import type { Message } from '../../generated/types';
-
-function toUIMessage(m: Message): UIMessage {
-  const rawParts = Array.isArray(m.parts) ? m.parts : [];
-  const parts: UIMessage['parts'] = [];
-  for (const rp of rawParts) {
-    if (rp === null || typeof rp !== 'object') continue;
-    const rec = rp as Record<string, unknown>;
-    const type = typeof rec.type === 'string' ? rec.type : undefined;
-    const text = typeof rec.text === 'string' ? rec.text : undefined;
-    if (type) parts.push(text !== undefined ? { type, text } : { type });
-  }
-  return { id: m.id, role: m.role, parts };
-}
+import { waitForAssistantReply } from '../../client/thread-poll';
+import { threadConsoleUrl } from './console-url';
 
 export const threadContinueCommand: Command = {
   name: 'thread continue',
@@ -35,7 +18,7 @@ export const threadContinueCommand: Command = {
     { name: 'prompt', description: 'Message to send', variadic: true },
   ],
   options: [
-    { flag: '--stream', description: 'Stream assistant tokens as they arrive (requires OAuth)', type: 'boolean' },
+    { flag: '--stream', description: 'Print the reply as it is generated', type: 'boolean' },
     { flag: '--no-wait', description: 'Return immediately after sending', type: 'boolean' },
   ],
   examples: [
@@ -54,61 +37,73 @@ export const threadContinueCommand: Command = {
     const noWait = getArgBoolean(args, 'noWait') === true;
 
     const api = new PolylaneAPI(config);
+    const { thread } = await api.threadsGet(workspaceId, threadId);
+    const existing = await api.messagesList(workspaceId, threadId, {
+      perPage: 100,
+      order: 'desc',
+    });
+    const ignoreIds = new Set(existing.items.map((m) => m.id));
+    await api.messagesPost({ workspaceId, threadId, prompt });
+    const url = await threadConsoleUrl(config, api, thread);
 
     if (noWait) {
-      await api.messagesPost({ workspaceId, threadId, prompt });
-      formatOutput(config, { id: threadId, status: 'accepted' });
+      formatOutput(config, { id: thread.id, name: thread.name, url, status: 'accepted' });
       return;
     }
 
-    if (stream) {
-      const existing = await api.messagesList(workspaceId, threadId, {
-        perPage: 100,
-        order: 'asc',
-      });
-      const history = existing.items.map((m) => toUIMessage(m as unknown as Message));
-
-      const result = await sendThreadMessage(config, workspaceId, threadId, history, prompt, {
-        onStreamChunk: (chunk: string): void => {
-          process.stdout.write(chunk);
-        },
-      });
-      const text = extractStreamedText(result.assistantMessage);
-      if (config.output === 'json') {
-        formatOutput(config, { thread: { id: threadId }, message: result.assistantMessage, text });
-        return;
-      }
-      if (!text.endsWith('\n')) process.stdout.write('\n');
-      return;
+    const streamToStdout = stream && config.output !== 'json';
+    if (!config.quiet && config.output !== 'json') {
+      process.stderr.write(`Thread: ${url}\n\n`);
     }
 
-    const useSpinner = !config.quiet && config.output !== 'json';
-    const spinner = useSpinner ? new Spinner(`Waiting for reply on ${threadId}…`) : null;
+    const useSpinner = !config.quiet && config.output !== 'json' && !streamToStdout;
+    const spinner = useSpinner ? new Spinner('Waiting for the reply…') : null;
     if (spinner) spinner.start();
 
+    let result;
     try {
-      const existing = await api.messagesList(workspaceId, threadId, {
-        perPage: 100,
-        order: 'asc',
+      result = await waitForAssistantReply(api, workspaceId, thread.id, {
+        ignoreIds,
+        ...(streamToStdout
+          ? { onText: (delta: string): void => { process.stdout.write(delta); } }
+          : {}),
       });
-      const history = existing.items.map((m) => toUIMessage(m as unknown as Message));
-
-      const result = await sendThreadMessage(config, workspaceId, threadId, history, prompt);
-      if (spinner) spinner.stop();
-
-      const message = result.assistantMessage;
-      const text = extractStreamedText(message);
-
-      if (config.output === 'json') {
-        formatOutput(config, { thread: { id: threadId }, message, text });
-        return;
-      }
-
-      process.stdout.write(text);
-      if (!text.endsWith('\n')) process.stdout.write('\n');
     } catch (err) {
       if (spinner) spinner.fail();
       throw err;
     }
+    if (spinner) spinner.stop();
+
+    if (config.output === 'json') {
+      formatOutput(config, {
+        thread: { id: thread.id, name: thread.name, url },
+        status: result.status === 'complete' ? 'complete' : 'pending',
+        text: result.text,
+        messages: result.assistantMessages,
+      });
+      return;
+    }
+
+    if (streamToStdout && result.text.length > 0 && !result.text.endsWith('\n')) {
+      process.stdout.write('\n');
+    }
+
+    if (result.status === 'timeout') {
+      if (!config.quiet) {
+        process.stderr.write(`The reply is still being generated. View it at:\n  ${url}\n`);
+      }
+      return;
+    }
+
+    if (result.text.length === 0) {
+      if (!config.quiet) {
+        process.stderr.write(`The agent finished without a text reply. View the thread at:\n  ${url}\n`);
+      }
+      return;
+    }
+
+    if (streamToStdout) return;
+    process.stdout.write(result.text);
+    if (!result.text.endsWith('\n')) process.stdout.write('\n');
   },
 };

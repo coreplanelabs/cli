@@ -1,12 +1,11 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { PolylaneAPI } from '../../generated/client';
-import type { Thread } from '../../generated/types';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getAllPositional, getArgString, getArgBoolean } from '../helpers';
 import { Spinner } from '../../output/progress';
-import { consoleBaseUrl } from '../../auth/oauth';
 import { waitForAssistantReply } from '../../client/thread-poll';
+import { threadConsoleUrl } from './console-url';
 
 type ContextType =
   | 'repository'
@@ -21,16 +20,6 @@ function inferContextType(id: string): ContextType {
   if (id.startsWith('thrd_')) return 'thread';
   if (id.startsWith('mem_')) return 'memory';
   return 'infrastructure_node';
-}
-
-async function threadConsoleUrl(config: Config, api: PolylaneAPI, thread: Thread): Promise<string> {
-  if (thread._html_url) return thread._html_url;
-  try {
-    const workspace = await api.workspacesGet(thread.workspaceId);
-    return `${consoleBaseUrl(config)}/${workspace.slug}/threads/${thread.id}`;
-  } catch {
-    return consoleBaseUrl(config);
-  }
 }
 
 export const threadAskCommand: Command = {
