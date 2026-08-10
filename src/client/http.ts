@@ -3,7 +3,6 @@ import { resolveCredential, getAuthHeader } from '../auth/resolver';
 import { mapApiError, type ApiErrorPayload } from '../errors/api';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
-import { maskToken } from '../utils/token';
 import { showStatusBar } from '../output/status-bar';
 import { recordHttpRequest } from '../telemetry/http-counter';
 import { getCliVersion } from '../version';
@@ -80,11 +79,10 @@ export async function request(config: Config, opts: RequestOpts): Promise<Respon
 
   logVerbose(config, '>', `${method} ${fullUrl}`);
   if (headers['x-api-key']) {
-    logVerbose(config, '>', `x-api-key: ${maskToken(headers['x-api-key'])}`);
+    logVerbose(config, '>', 'x-api-key: <redacted>');
   }
   if (headers['Authorization']) {
-    const token = headers['Authorization'].replace(/^Bearer\s+/i, '');
-    logVerbose(config, '>', `Authorization: Bearer ${maskToken(token)}`);
+    logVerbose(config, '>', 'Authorization: Bearer <redacted>');
   }
 
   if (config.dryRun) {
