@@ -74,7 +74,6 @@ Combine these for non-interactive (agent / CI) contexts:
 | `--output json` | Force JSON regardless of TTY state |
 | `--full` | Disable narrow projection on list commands |
 | `--no-wait` | Return immediately (fire-and-forget) on `thread ask` / `thread continue` |
-| `--stream` | Stream assistant tokens over WebSocket on `thread ask` / `thread continue` |
 | `--dry-run` | Show the request without sending |
 | `--verbose` | Log HTTP method / URL / response status |
 | `--yes` | Skip destructive-action confirmation prompts |
@@ -199,11 +198,11 @@ Read-only by default. Write-capable tools need a key/token with the `agent_tools
 ### Talking to the agent
 
 ```bash
-# Start a thread (blocking — returns the full reply)
+# Start a thread (text mode streams the reply to stdout as it is generated)
 polylane thread ask "<prompt>" [--context <comma-separated-ids>]
 
-# Start a thread (streaming — tokens stream to stdout)
-polylane thread ask "<prompt>" --stream
+# Wait for the complete reply as JSON
+polylane thread ask "<prompt>" --output json
 
 # Fire-and-forget — returns 202, poll later
 TID=$(polylane thread ask "<prompt>" --no-wait --output json --quiet | jq -r '.id')

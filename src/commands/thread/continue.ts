@@ -18,12 +18,12 @@ export const threadContinueCommand: Command = {
     { name: 'prompt', description: 'Message to send', variadic: true },
   ],
   options: [
-    { flag: '--stream', description: 'Print the reply as it is generated', type: 'boolean' },
+    { flag: '--stream', description: 'Deprecated: streaming is the default in text mode', type: 'boolean' },
     { flag: '--no-wait', description: 'Return immediately after sending', type: 'boolean' },
   ],
   examples: [
     'polylane thread continue thrd_xxx "and what about staging?"',
-    'polylane thread continue thrd_xxx "expand on point 2" --stream',
+    'polylane thread continue thrd_xxx "expand on point 2" --output json',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
@@ -33,7 +33,6 @@ export const threadContinueCommand: Command = {
       throw new CLIError('Missing <prompt>', ExitCode.USAGE);
     }
     const prompt = promptParts.join(' ');
-    const stream = getArgBoolean(args, 'stream') === true;
     const noWait = getArgBoolean(args, 'noWait') === true;
 
     const api = new PolylaneAPI(config);
@@ -51,28 +50,32 @@ export const threadContinueCommand: Command = {
       return;
     }
 
-    const streamToStdout = stream && config.output !== 'json';
-    if (!config.quiet && config.output !== 'json') {
+    const textMode = config.output !== 'json';
+    if (!config.quiet && textMode) {
       process.stderr.write(`Thread: ${url}\n\n`);
     }
 
-    const useSpinner = !config.quiet && config.output !== 'json' && !streamToStdout;
-    const spinner = useSpinner ? new Spinner('Waiting for the reply…') : null;
+    const spinner = !config.quiet && textMode ? new Spinner('Waiting for the reply…') : null;
     if (spinner) spinner.start();
+    let spinnerStopped = false;
+    const stopSpinner = (): void => {
+      if (spinner && !spinnerStopped) spinner.stop();
+      spinnerStopped = true;
+    };
 
     let result;
     try {
       result = await waitForAssistantReply(api, workspaceId, thread.id, {
         ignoreIds,
-        ...(streamToStdout
-          ? { onText: (delta: string): void => { process.stdout.write(delta); } }
+        ...(textMode
+          ? { onText: (delta: string): void => { stopSpinner(); process.stdout.write(delta); } }
           : {}),
       });
     } catch (err) {
-      if (spinner) spinner.fail();
+      if (spinner && !spinnerStopped) spinner.fail();
       throw err;
     }
-    if (spinner) spinner.stop();
+    stopSpinner();
 
     if (config.output === 'json') {
       formatOutput(config, {
@@ -84,7 +87,7 @@ export const threadContinueCommand: Command = {
       return;
     }
 
-    if (streamToStdout && result.text.length > 0 && !result.text.endsWith('\n')) {
+    if (result.text.length > 0 && !result.text.endsWith('\n')) {
       process.stdout.write('\n');
     }
 
@@ -95,15 +98,8 @@ export const threadContinueCommand: Command = {
       return;
     }
 
-    if (result.text.length === 0) {
-      if (!config.quiet) {
-        process.stderr.write(`The agent finished without a text reply. View the thread at:\n  ${url}\n`);
-      }
-      return;
+    if (result.text.length === 0 && !config.quiet) {
+      process.stderr.write(`The agent finished without a text reply. View the thread at:\n  ${url}\n`);
     }
-
-    if (streamToStdout) return;
-    process.stdout.write(result.text);
-    if (!result.text.endsWith('\n')) process.stdout.write('\n');
   },
 };
