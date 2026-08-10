@@ -30,6 +30,7 @@ const NO_AUTH_COMMANDS = new Set([
   'telemetry disable',
   'integration catalog',
   'help',
+  'scan',
   'setup',
   'update',
   'version',
