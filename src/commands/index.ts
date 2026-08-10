@@ -21,6 +21,7 @@ import { skillCommands } from './skill';
 import { noteCommands } from './note';
 import { autofixCommands } from './autofix';
 import { artifactCommands } from './artifact';
+import { datasetCommands } from './dataset';
 import { toolsCommands } from './tools';
 
 let registered = false;
@@ -44,6 +45,7 @@ export function registerAllCommands(): void {
     ...noteCommands,
     ...autofixCommands,
     ...artifactCommands,
+    ...datasetCommands,
     ...toolsCommands,
     ...authCommands,
     ...configCommands,

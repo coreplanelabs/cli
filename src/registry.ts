@@ -29,6 +29,7 @@ const RESOURCE_ORDER: Record<string, ResourceGroup> = {
   skill: { name: 'skill', description: 'Reusable agent skills (catalog, install, docs)', order: 63 },
   automation: { name: 'automation', description: 'Automations and executions', order: 65 },
   autofix: { name: 'autofix', description: 'Automated code fixes (read-only)', order: 66 },
+  dataset: { name: 'dataset', description: 'Telemetry datasets (ingest config, sampling, scrubbing)', order: 67 },
   integration: { name: 'integration', description: 'Observability tools and cloud providers', order: 68 },
   cloud: { name: 'cloud', description: 'Cloud accounts (aws, cloudflare, fly, render, vercel)', order: 69 },
   workspace: { name: 'workspace', description: 'Workspaces', order: 70 },

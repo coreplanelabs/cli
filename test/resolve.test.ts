@@ -51,6 +51,7 @@ describe('command resolution', () => {
       'automation',
       'cloud',
       'config',
+      'dataset',
       'feed',
       'help',
       'integration',
