@@ -111,7 +111,7 @@ polylane thread list --type investigation         # investigation threads
 polylane issue note <issue-id> "rolled back deploy"
 polylane service logs <service> --since 1h --grep error
 polylane tools run findNodes --params '{"query":"api"}'
-polylane thread ask "<prompt>" --stream
+polylane thread ask "<prompt>"
 polylane memory save "<finding>"
 ```
 
@@ -136,7 +136,7 @@ polylane api call <operation-id> [--body '{...}' | --body-file path]
 | **List projections** | Narrow set of useful fields; `--full` dumps complete objects |
 | **Single object reads** | Full object, with a `Console: …` / `Next: …` footer surfacing `_html_url` and `_links` |
 | **Errors** | Every error ends with the exact command that fixes it (see [ERRORS.md](ERRORS.md)) |
-| **Streaming** | `thread ask` / `thread continue` stream via WebSocket when `--stream` is passed |
+| **Streaming** | `thread ask` / `thread continue` print the reply incrementally in text mode; `--output json` waits for the complete reply |
 | **Non-interactive** | `--non-interactive` fails fast on missing args instead of prompting |
 
 ## Agent flags
@@ -154,7 +154,6 @@ polylane ... --non-interactive --quiet --output json
 | `--output json` | Force JSON regardless of TTY state |
 | `--full` | Disable narrow projection on list commands |
 | `--no-wait` | Return immediately (send-and-forget) |
-| `--stream` | Stream assistant tokens |
 | `--dry-run` | Show the request that would be sent without executing |
 | `--verbose` | Log HTTP method / URL / response status |
 | `--yes` | Skip destructive-action confirmations |

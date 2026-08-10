@@ -127,7 +127,7 @@ Inside `src/`:
 - `commands/<resource>/<verb>.ts` — one file per command. `commands/<resource>/index.ts` collects them; `commands/index.ts` registers every group.
 - `commands/helpers.ts` — shared helpers (`requireWorkspace`, `requirePositional`, `parseDuration`, `promptIfMissing`, arg accessors).
 - `client/http.ts` — auth-injecting `fetch` + envelope parsing.
-- `client/thread-chat.ts` — durable-thread WebSocket streaming.
+- `client/thread-poll.ts` — poll a thread until the agent's reply lands.
 - `auth/` — credentials, OAuth (PKCE + device code), signup helpers.
 - `config/` — schema, loader, paths.
 - `errors/` — `CLIError`, exit codes, API error mapping, handler.
