@@ -1,10 +1,12 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { PolylaneAPI } from '../../generated/client';
+import type { Thread } from '../../generated/types';
 import { formatOutput } from '../../output/formatter';
 import { requireWorkspace, requirePositional, getAllPositional, getArgString, getArgBoolean } from '../helpers';
 import { Spinner } from '../../output/progress';
-import { sendThreadMessage, extractText as extractStreamedText } from '../../client/thread-chat';
+import { consoleBaseUrl } from '../../auth/oauth';
+import { waitForAssistantReply } from '../../client/thread-poll';
 
 type ContextType =
   | 'repository'
@@ -21,6 +23,16 @@ function inferContextType(id: string): ContextType {
   return 'infrastructure_node';
 }
 
+async function threadConsoleUrl(config: Config, api: PolylaneAPI, thread: Thread): Promise<string> {
+  if (thread._html_url) return thread._html_url;
+  try {
+    const workspace = await api.workspacesGet(thread.workspaceId);
+    return `${consoleBaseUrl(config)}/${workspace.slug}/threads/${thread.id}`;
+  } catch {
+    return consoleBaseUrl(config);
+  }
+}
+
 export const threadAskCommand: Command = {
   name: 'thread ask',
   description: 'Start a new conversation thread and wait for the reply',
@@ -30,7 +42,7 @@ export const threadAskCommand: Command = {
     { flag: '--context <ids>', description: 'Comma-separated resource IDs to attach as context', type: 'string' },
     { flag: '--name <n>', description: 'Name for the thread (default: auto-derived)', type: 'string' },
     { flag: '--visibility <v>', description: 'workspace | private | workspace_and_github_org | public (default: workspace)', type: 'string' },
-    { flag: '--stream', description: 'Stream assistant tokens as they arrive (requires OAuth)', type: 'boolean' },
+    { flag: '--stream', description: 'Print the reply as it is generated', type: 'boolean' },
     { flag: '--no-wait', description: 'Return immediately after sending', type: 'boolean' },
   ],
   examples: [
@@ -61,55 +73,66 @@ export const threadAskCommand: Command = {
       ...(name ? { name } : {}),
       ...(context.length > 0 ? { context } : {}),
     });
+    await api.messagesPost({ workspaceId, threadId: thread.id, prompt });
+    const url = await threadConsoleUrl(config, api, thread);
 
     if (noWait) {
-      await api.messagesPost({ workspaceId, threadId: thread.id, prompt });
-      formatOutput(config, { id: thread.id, name: thread.name, status: 'accepted' });
+      formatOutput(config, { id: thread.id, name: thread.name, url, status: 'accepted' });
       return;
     }
 
-    if (stream) {
-      if (!config.quiet && config.output !== 'json') {
-        process.stderr.write(`Thread: ${thread.id}\n\n`);
-      }
-      const result = await sendThreadMessage(config, workspaceId, thread.id, [], prompt, {
-        onStreamChunk: (chunk: string): void => {
-          process.stdout.write(chunk);
-        },
-      });
-      const text = extractStreamedText(result.assistantMessage);
-      if (config.output === 'json') {
-        formatOutput(config, { thread: { id: thread.id, name: thread.name }, message: result.assistantMessage, text });
-        return;
-      }
-      if (!text.endsWith('\n')) process.stdout.write('\n');
-      return;
+    const streamToStdout = stream && config.output !== 'json';
+    if (!config.quiet && config.output !== 'json') {
+      process.stderr.write(`Thread: ${url}\n\n`);
     }
 
-    const useSpinner = !config.quiet && config.output !== 'json';
-    const spinner = useSpinner ? new Spinner(`Waiting for reply on ${thread.id}…`) : null;
+    const useSpinner = !config.quiet && config.output !== 'json' && !streamToStdout;
+    const spinner = useSpinner ? new Spinner('Waiting for the reply…') : null;
     if (spinner) spinner.start();
 
+    let result;
     try {
-      const result = await sendThreadMessage(config, workspaceId, thread.id, [], prompt);
-      if (spinner) spinner.stop();
-
-      const message = result.assistantMessage;
-      const text = extractStreamedText(message);
-
-      if (config.output === 'json') {
-        formatOutput(config, { thread: { id: thread.id, name: thread.name }, message, text });
-        return;
-      }
-
-      if (!config.quiet) {
-        process.stderr.write(`Thread: ${thread.id}\n\n`);
-      }
-      process.stdout.write(text);
-      if (!text.endsWith('\n')) process.stdout.write('\n');
+      result = await waitForAssistantReply(api, workspaceId, thread.id, {
+        ...(streamToStdout
+          ? { onText: (delta: string): void => { process.stdout.write(delta); } }
+          : {}),
+      });
     } catch (err) {
       if (spinner) spinner.fail();
       throw err;
     }
+    if (spinner) spinner.stop();
+
+    if (config.output === 'json') {
+      formatOutput(config, {
+        thread: { id: thread.id, name: thread.name, url },
+        status: result.status === 'complete' ? 'complete' : 'pending',
+        text: result.text,
+        messages: result.assistantMessages,
+      });
+      return;
+    }
+
+    if (streamToStdout && result.text.length > 0 && !result.text.endsWith('\n')) {
+      process.stdout.write('\n');
+    }
+
+    if (result.status === 'timeout') {
+      if (!config.quiet) {
+        process.stderr.write(`The reply is still being generated. View it at:\n  ${url}\n`);
+      }
+      return;
+    }
+
+    if (result.text.length === 0) {
+      if (!config.quiet) {
+        process.stderr.write(`The agent finished without a text reply. View the thread at:\n  ${url}\n`);
+      }
+      return;
+    }
+
+    if (streamToStdout) return;
+    process.stdout.write(result.text);
+    if (!result.text.endsWith('\n')) process.stdout.write('\n');
   },
 };
