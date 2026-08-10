@@ -109,6 +109,22 @@ async function confirmBrowserConnect(
   }
 }
 
+type ConnectResult = Awaited<ReturnType<PolylaneAPI['cloudAccountsConnect']>>;
+
+function printConnectSuccess(config: Config, result: ConnectResult): void {
+  if (config.output === 'json' || !('accounts' in result)) {
+    formatOutput(config, result);
+    return;
+  }
+  for (const account of result.accounts) {
+    const detail = [account.account, account.region].filter(Boolean).join(', ');
+    process.stderr.write(`✓ Connected: ${account.alias || account.account}${detail ? ` (${detail})` : ''}\n`);
+  }
+  for (const failure of result.failures) {
+    process.stderr.write(`Failed to connect ${failure.account}: ${failure.message}\n`);
+  }
+}
+
 async function openOrPrintInstallUrl(config: Config, url: string, label: string, noBrowser: boolean): Promise<void> {
   if (config.output === 'json') {
     formatOutput(config, { url });
@@ -227,7 +243,7 @@ export const cloudConnectCommand: Command = {
         );
       }
       const result = await api.cloudAccountsConnect({ workspaceId, provider: 'planetscale', tokenId, token, organization });
-      formatOutput(config, result);
+      printConnectSuccess(config, result);
       return;
     }
 
@@ -344,10 +360,6 @@ export const cloudConnectCommand: Command = {
     }
 
     // All other providers return { accounts, failures } synchronously.
-    formatOutput(config, result);
-    if ('failures' in result && result.failures.length > 0 && !config.quiet) {
-      const n = result.failures.length;
-      process.stderr.write(`\n${n} account${n === 1 ? '' : 's'} failed to connect — see "failures" above.\n`);
-    }
+    printConnectSuccess(config, result);
   },
 };
