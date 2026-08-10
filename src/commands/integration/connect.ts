@@ -6,18 +6,27 @@ import {
   requireWorkspace,
   getArgString,
   getArgBoolean,
-  promptIfMissing,
   promptChoice,
-  promptSecret,
   parseJsonArg,
   canWaitForBrowser,
   waitForBrowserCompletion,
   cliConnectUrl,
+  runSteps,
+  textStep,
+  choiceStep,
+  secretStep,
+  SKIPPED,
 } from '../helpers';
 import type { Integration } from '../../generated/types';
 import { openBrowser } from '../../utils/browser';
 import { isInteractive } from '../../utils/env';
-import { promptSelect, promptPassword, promptConfirm } from '../../utils/prompt';
+import {
+  BACK,
+  cancel,
+  promptSelectOrBack,
+  promptPasswordOrBack,
+  promptConfirmOrBack,
+} from '../../utils/prompt';
 
 type ConnectBody = Parameters<PolylaneAPI['integrationsConnect']>[0];
 
@@ -148,6 +157,351 @@ async function openOrPrintInstallUrl(config: Config, url: string, label: string,
   }
 }
 
+// --- MCP: direct connect or OAuth ---
+async function connectMcp(
+  config: Config,
+  api: PolylaneAPI,
+  args: Record<string, unknown>,
+  workspaceId: string,
+  noBrowser: boolean
+): Promise<typeof BACK | void> {
+  const ctx = { nonInteractive: config.nonInteractive };
+  let url = '';
+  let name = '';
+  let authMethod = 'none' as 'none' | 'bearer' | 'oauth';
+  let bearerToken = getArgString(args, 'bearerToken');
+  const ok = await runSteps([
+    textStep(config, args, 'url', 'MCP server URL', '--url', (v) => {
+      url = v;
+    }),
+    textStep(config, args, 'name', 'Display name', '--name', (v) => {
+      name = v;
+    }),
+    async () => {
+      if (getArgBoolean(args, 'oauth') === true) {
+        authMethod = 'oauth';
+        return SKIPPED;
+      }
+      if (bearerToken !== undefined) {
+        authMethod = 'bearer';
+        return SKIPPED;
+      }
+      if (!isInteractive(config.nonInteractive)) {
+        authMethod = 'none';
+        return SKIPPED;
+      }
+      const picked = await promptSelectOrBack<'none' | 'bearer' | 'oauth'>(ctx, 'Authentication', [
+        { value: 'none', label: 'No authentication', hint: 'Public server' },
+        { value: 'bearer', label: 'Bearer token', hint: 'API key / token' },
+        { value: 'oauth', label: 'OAuth', hint: 'Opens browser to authorize' },
+      ]);
+      if (picked === BACK) return BACK;
+      authMethod = picked;
+      return;
+    },
+    async () => {
+      if (authMethod !== 'bearer' || bearerToken !== undefined) return SKIPPED;
+      const token = await promptPasswordOrBack(ctx, 'Bearer token');
+      if (token === BACK) return BACK;
+      bearerToken = token;
+      return;
+    },
+  ]);
+  if (!ok) return BACK;
+
+  const transport = (getArgString(args, 'transport') ?? 'http') as 'http' | 'sse';
+  const extraHeadersRaw = getArgString(args, 'extraHeaders');
+  const extraHeaders = extraHeadersRaw
+    ? (parseJsonArg(extraHeadersRaw, '--extra-headers') as Record<string, string>)
+    : undefined;
+
+  if (authMethod === 'oauth') {
+    const scope = getArgString(args, 'scope');
+    const check = canWaitForBrowser(config) ? await integrationArrivalCheck(api, workspaceId, 'mcp') : null;
+    const result = await api.integrationsMcpOauthStart({
+      workspaceId,
+      url,
+      name,
+      ...(transport !== 'http' ? { transport } : {}),
+      ...(scope ? { scope } : {}),
+      ...(extraHeaders ? { extraHeaders } : {}),
+    });
+    await openOrPrintInstallUrl(config, result.authorizeUrl, 'the MCP server authorization page', noBrowser);
+    if (!config.quiet && config.output !== 'json') {
+      process.stderr.write(`\nPending integration: ${result.pendingId}\n`);
+    }
+    await confirmBrowserConnect(config, check, name);
+    return;
+  }
+
+  const integration = await api.integrationsMcpConnect({
+    type: 'mcp',
+    workspaceId,
+    url,
+    name,
+    ...(transport !== 'http' ? { transport } : {}),
+    ...(bearerToken ? { bearerToken } : {}),
+    ...(extraHeaders ? { extraHeaders } : {}),
+  });
+  printConnectSuccess(config, integration, name);
+  return;
+}
+
+// --- Credential-based connects: each wizard step can go back to the previous
+// one, and backing out of the first returns BACK to re-open type selection ---
+async function connectWithCredentials(
+  config: Config,
+  api: PolylaneAPI,
+  args: Record<string, unknown>,
+  workspaceId: string,
+  type: Exclude<ConnectableType, 'github' | 'slack' | 'sentry' | 'mcp'>
+): Promise<typeof BACK | void> {
+  let body: ConnectBody;
+  if (type === 'datadog') {
+    let site = '';
+    let apiKey = '';
+    let appKey = '';
+    const ok = await runSteps([
+      choiceStep(config, args, 'site', '--site', 'Datadog site — the one in your Datadog URL', DATADOG_SITES, (v) => {
+        site = v;
+      }),
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        () => ({
+          message: 'Datadog API key',
+          instructions:
+            'Create an API key in your Datadog organization settings, then paste it here. This is an org-level credential used to authenticate requests.',
+          link: `https://app.${site}/organization-settings/api-keys`,
+          linkLabel: 'Create API key',
+        }),
+        (v) => {
+          apiKey = v;
+        }
+      ),
+      secretStep(
+        config,
+        args,
+        'appKey',
+        '--app-key',
+        () => ({
+          message: 'Datadog application key',
+          instructions:
+            'Create an application key, then paste it here. This is a user-level credential that controls what data Polylane can access.',
+          link: `https://app.${site}/organization-settings/application-keys`,
+          linkLabel: 'Create application key',
+        }),
+        (v) => {
+          appKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'datadog', workspaceId, site, apiKey, appKey };
+  } else if (type === 'honeycomb') {
+    let region: 'us' | 'eu' = 'us';
+    let apiKey = '';
+    const ok = await runSteps([
+      choiceStep<'us' | 'eu'>(
+        config,
+        args,
+        'region',
+        '--region',
+        'Honeycomb region — the one in your Honeycomb URL',
+        [
+          { value: 'us', label: 'US (api.honeycomb.io)' },
+          { value: 'eu', label: 'EU (api.eu1.honeycomb.io)' },
+        ],
+        (v) => {
+          region = v;
+        },
+        { strict: true }
+      ),
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: 'Honeycomb configuration API key',
+          instructions:
+            'In your Honeycomb environment settings, open API Keys, switch to the Configuration tab, and create a key named "polylane" with these permissions: Create Datasets, Manage Queries and Columns, Manage Public Boards, Manage Triggers, Manage Recipients, Manage Markers.',
+          link: 'https://ui.honeycomb.io',
+          linkLabel: 'Open Honeycomb settings',
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'honeycomb', workspaceId, region, apiKey };
+  } else if (type === 'axiom') {
+    let region: 'us-east-1' | 'eu-central-1' = 'us-east-1';
+    let apiToken = '';
+    const ok = await runSteps([
+      choiceStep<'us-east-1' | 'eu-central-1'>(
+        config,
+        args,
+        'region',
+        '--region',
+        'Axiom edge deployment region — see your organization settings (https://app.axiom.co/settings/org)',
+        [
+          { value: 'us-east-1', label: 'US East 1' },
+          { value: 'eu-central-1', label: 'EU Central 1' },
+        ],
+        (v) => {
+          region = v;
+        },
+        { strict: true }
+      ),
+      secretStep(
+        config,
+        args,
+        'apiToken',
+        '--api-token',
+        {
+          message: 'Axiom API token',
+          instructions:
+            'In your Axiom settings, navigate to API Tokens and create a new token named "polylane" with all permissions.',
+          link: 'https://app.axiom.co',
+          linkLabel: 'Open Axiom settings',
+        },
+        (v) => {
+          apiToken = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'axiom', workspaceId, region, apiToken };
+  } else if (type === 'betterstack') {
+    let apiToken = '';
+    let uptimeApiToken = '';
+    let telemetryApiToken = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiToken',
+        '--api-token',
+        {
+          message: 'Better Stack global API token',
+          instructions:
+            'In Better Stack, open your organization settings, navigate to API tokens, and create a global API token.',
+          link: 'https://betterstack.com/settings/global-api-tokens',
+          linkLabel: 'Create global API token',
+        },
+        (v) => {
+          apiToken = v;
+        }
+      ),
+      secretStep(
+        config,
+        args,
+        'uptimeApiToken',
+        '--uptime-api-token',
+        {
+          message: 'Better Stack Uptime API token',
+          instructions:
+            "In the API token settings, switch to the Team-based tokens tab and copy your team's Uptime API token.",
+          link: 'https://betterstack.com/settings/global-api-tokens',
+          linkLabel: 'Open API token settings',
+        },
+        (v) => {
+          uptimeApiToken = v;
+        }
+      ),
+      secretStep(
+        config,
+        args,
+        'telemetryApiToken',
+        '--telemetry-api-token',
+        {
+          message: 'Better Stack Telemetry API token',
+          instructions:
+            'In Telemetry, open your team settings, navigate to API tokens, and copy your Telemetry API token.',
+          link: 'https://telemetry.betterstack.com',
+          linkLabel: 'Open Telemetry settings',
+        },
+        (v) => {
+          telemetryApiToken = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'betterstack', workspaceId, apiToken, uptimeApiToken, telemetryApiToken };
+  } else {
+    const agent = CODE_AGENTS[type];
+    let apiKey = '';
+    // Matches the console default: route autofixes through the agent unless
+    // the user opts out.
+    let useAsDefaultExecutor = getArgBoolean(args, 'noDefaultExecutor') !== true;
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: `${agent.name} API key`,
+          instructions: agent.instructions,
+          link: agent.link,
+          linkLabel: agent.linkLabel,
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+      async () => {
+        if (getArgBoolean(args, 'noDefaultExecutor') === true || !isInteractive(config.nonInteractive)) {
+          return SKIPPED;
+        }
+        const answer = await promptConfirmOrBack(
+          { nonInteractive: config.nonInteractive },
+          `Use ${agent.name} for all autofixes? (instead of the Polylane executor — you can change this later)`,
+          true
+        );
+        if (answer === BACK) return BACK;
+        useAsDefaultExecutor = answer;
+        return;
+      },
+    ]);
+    if (!ok) return BACK;
+    body = { type, workspaceId, apiKey, useAsDefaultExecutor };
+  }
+
+  const integration = await api.integrationsConnect(body);
+  printConnectSuccess(config, integration, TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
+  return;
+}
+
+async function connectType(
+  config: Config,
+  api: PolylaneAPI,
+  args: Record<string, unknown>,
+  workspaceId: string,
+  type: ConnectableType,
+  noBrowser: boolean
+): Promise<typeof BACK | void> {
+  // --- Install-URL flows: the browser enters via the console's /cli/connect
+  // page (which ends the journey on its "go back to your terminal" page),
+  // while the CLI waits for the integration to appear ---
+  if (type === 'github' || type === 'slack' || type === 'sentry') {
+    const labels = { github: 'the GitHub App', slack: 'the Slack app', sentry: 'the Sentry integration' } as const;
+    const names = { github: 'GitHub', slack: 'Slack', sentry: 'Sentry' } as const;
+    const check = canWaitForBrowser(config) ? await integrationArrivalCheck(api, workspaceId, type) : null;
+    await openOrPrintInstallUrl(config, cliConnectUrl(config, type, workspaceId), labels[type], noBrowser);
+    await confirmBrowserConnect(config, check, names[type]);
+    return;
+  }
+  if (type === 'mcp') {
+    return connectMcp(config, api, args, workspaceId, noBrowser);
+  }
+  return connectWithCredentials(config, api, args, workspaceId, type);
+}
+
 export const integrationConnectCommand: Command = {
   name: 'integration connect',
   description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, Devin, Cursor, Factory, MCP)',
@@ -188,209 +542,34 @@ export const integrationConnectCommand: Command = {
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
-    const type = await promptChoice<ConnectableType>(
-      config,
-      args,
-      'type',
-      '--type',
-      'Which integration do you want to connect?',
-      TYPE_OPTIONS,
-      { strict: true }
-    );
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
     const api = new PolylaneAPI(config);
+    const typeFromFlag = getArgString(args, 'type') !== undefined;
 
-    // --- Install-URL flows: the browser enters via the console's /cli/connect
-    // page (which ends the journey on its "go back to your terminal" page),
-    // while the CLI waits for the integration to appear ---
-    if (type === 'github' || type === 'slack' || type === 'sentry') {
-      const labels = { github: 'the GitHub App', slack: 'the Slack app', sentry: 'the Sentry integration' } as const;
-      const names = { github: 'GitHub', slack: 'Slack', sentry: 'Sentry' } as const;
-      const check = canWaitForBrowser(config) ? await integrationArrivalCheck(api, workspaceId, type) : null;
-      await openOrPrintInstallUrl(config, cliConnectUrl(config, type, workspaceId), labels[type], noBrowser);
-      await confirmBrowserConnect(config, check, names[type]);
-      return;
+    // Type selection restarts whenever the user backs out of the first step of
+    // the chosen flow, so nothing is committed until a flow completes.
+    for (;;) {
+      const type =
+        typeFromFlag || !isInteractive(config.nonInteractive)
+          ? await promptChoice<ConnectableType>(
+              config,
+              args,
+              'type',
+              '--type',
+              'Which integration do you want to connect?',
+              TYPE_OPTIONS,
+              { strict: true }
+            )
+          : await promptSelectOrBack<ConnectableType>(
+              { nonInteractive: config.nonInteractive },
+              'Which integration do you want to connect?',
+              TYPE_OPTIONS,
+              'Cancel'
+            );
+      if (type === BACK) break;
+      if ((await connectType(config, api, args, workspaceId, type, noBrowser)) !== BACK) return;
+      if (typeFromFlag) break;
     }
-
-    // --- MCP: direct connect or OAuth ---
-    if (type === 'mcp') {
-      const url = await promptIfMissing(config, args, 'url', 'MCP server URL', '--url');
-      const name = await promptIfMissing(config, args, 'name', 'Display name', '--name');
-      const transport = (getArgString(args, 'transport') ?? 'http') as 'http' | 'sse';
-      const extraHeadersRaw = getArgString(args, 'extraHeaders');
-      const extraHeaders = extraHeadersRaw
-        ? (parseJsonArg(extraHeadersRaw, '--extra-headers') as Record<string, string>)
-        : undefined;
-
-      // Determine auth method. If --oauth or --bearer-token is passed
-      // explicitly, honour it. Otherwise prompt interactively.
-      let authMethod: 'none' | 'bearer' | 'oauth' = 'none';
-      if (getArgBoolean(args, 'oauth') === true) {
-        authMethod = 'oauth';
-      } else if (getArgString(args, 'bearerToken') !== undefined) {
-        authMethod = 'bearer';
-      } else if (isInteractive(config.nonInteractive)) {
-        authMethod = await promptSelect<'none' | 'bearer' | 'oauth'>(
-          { nonInteractive: config.nonInteractive },
-          'Authentication',
-          [
-            { value: 'none', label: 'No authentication', hint: 'Public server' },
-            { value: 'bearer', label: 'Bearer token', hint: 'API key / token' },
-            { value: 'oauth', label: 'OAuth', hint: 'Opens browser to authorize' },
-          ]
-        );
-      }
-
-      if (authMethod === 'oauth') {
-        const scope = getArgString(args, 'scope');
-        const check = canWaitForBrowser(config) ? await integrationArrivalCheck(api, workspaceId, 'mcp') : null;
-        const result = await api.integrationsMcpOauthStart({
-          workspaceId,
-          url,
-          name,
-          ...(transport !== 'http' ? { transport } : {}),
-          ...(scope ? { scope } : {}),
-          ...(extraHeaders ? { extraHeaders } : {}),
-        });
-        await openOrPrintInstallUrl(config, result.authorizeUrl, 'the MCP server authorization page', noBrowser);
-        if (!config.quiet && config.output !== 'json') {
-          process.stderr.write(`\nPending integration: ${result.pendingId}\n`);
-        }
-        await confirmBrowserConnect(config, check, name);
-        return;
-      }
-
-      let bearerToken = getArgString(args, 'bearerToken');
-      if (authMethod === 'bearer' && !bearerToken) {
-        bearerToken = await promptPassword({ nonInteractive: config.nonInteractive }, 'Bearer token');
-      }
-
-      const integration = await api.integrationsMcpConnect({
-        type: 'mcp',
-        workspaceId,
-        url,
-        name,
-        ...(transport !== 'http' ? { transport } : {}),
-        ...(bearerToken ? { bearerToken } : {}),
-        ...(extraHeaders ? { extraHeaders } : {}),
-      });
-      printConnectSuccess(config, integration, name);
-      return;
-    }
-
-    // --- Credential-based connects ---
-    let body: ConnectBody;
-    if (type === 'datadog') {
-      const site = await promptChoice(
-        config,
-        args,
-        'site',
-        '--site',
-        'Datadog site — the one in your Datadog URL',
-        DATADOG_SITES
-      );
-      const apiKey = await promptSecret(config, args, 'apiKey', '--api-key', {
-        message: 'Datadog API key',
-        instructions:
-          'Create an API key in your Datadog organization settings, then paste it here. This is an org-level credential used to authenticate requests.',
-        link: `https://app.${site}/organization-settings/api-keys`,
-        linkLabel: 'Create API key',
-      });
-      const appKey = await promptSecret(config, args, 'appKey', '--app-key', {
-        message: 'Datadog application key',
-        instructions:
-          'Create an application key, then paste it here. This is a user-level credential that controls what data Polylane can access.',
-        link: `https://app.${site}/organization-settings/application-keys`,
-        linkLabel: 'Create application key',
-      });
-      body = { type: 'datadog', workspaceId, site, apiKey, appKey };
-    } else if (type === 'honeycomb') {
-      const region = await promptChoice<'us' | 'eu'>(
-        config,
-        args,
-        'region',
-        '--region',
-        'Honeycomb region — the one in your Honeycomb URL',
-        [
-          { value: 'us', label: 'US (api.honeycomb.io)' },
-          { value: 'eu', label: 'EU (api.eu1.honeycomb.io)' },
-        ],
-        { strict: true }
-      );
-      const apiKey = await promptSecret(config, args, 'apiKey', '--api-key', {
-        message: 'Honeycomb configuration API key',
-        instructions:
-          'In your Honeycomb environment settings, open API Keys, switch to the Configuration tab, and create a key named "polylane" with these permissions: Create Datasets, Manage Queries and Columns, Manage Public Boards, Manage Triggers, Manage Recipients, Manage Markers.',
-        link: 'https://ui.honeycomb.io',
-        linkLabel: 'Open Honeycomb settings',
-      });
-      body = { type: 'honeycomb', workspaceId, region, apiKey };
-    } else if (type === 'axiom') {
-      const region = await promptChoice<'us-east-1' | 'eu-central-1'>(
-        config,
-        args,
-        'region',
-        '--region',
-        'Axiom edge deployment region — see your organization settings (https://app.axiom.co/settings/org)',
-        [
-          { value: 'us-east-1', label: 'US East 1' },
-          { value: 'eu-central-1', label: 'EU Central 1' },
-        ],
-        { strict: true }
-      );
-      const apiToken = await promptSecret(config, args, 'apiToken', '--api-token', {
-        message: 'Axiom API token',
-        instructions:
-          'In your Axiom settings, navigate to API Tokens and create a new token named "polylane" with all permissions.',
-        link: 'https://app.axiom.co',
-        linkLabel: 'Open Axiom settings',
-      });
-      body = { type: 'axiom', workspaceId, region, apiToken };
-    } else if (type === 'betterstack') {
-      const apiToken = await promptSecret(config, args, 'apiToken', '--api-token', {
-        message: 'Better Stack global API token',
-        instructions:
-          'In Better Stack, open your organization settings, navigate to API tokens, and create a global API token.',
-        link: 'https://betterstack.com/settings/global-api-tokens',
-        linkLabel: 'Create global API token',
-      });
-      const uptimeApiToken = await promptSecret(config, args, 'uptimeApiToken', '--uptime-api-token', {
-        message: 'Better Stack Uptime API token',
-        instructions:
-          "In the API token settings, switch to the Team-based tokens tab and copy your team's Uptime API token.",
-        link: 'https://betterstack.com/settings/global-api-tokens',
-        linkLabel: 'Open API token settings',
-      });
-      const telemetryApiToken = await promptSecret(config, args, 'telemetryApiToken', '--telemetry-api-token', {
-        message: 'Better Stack Telemetry API token',
-        instructions:
-          'In Telemetry, open your team settings, navigate to API tokens, and copy your Telemetry API token.',
-        link: 'https://telemetry.betterstack.com',
-        linkLabel: 'Open Telemetry settings',
-      });
-      body = { type: 'betterstack', workspaceId, apiToken, uptimeApiToken, telemetryApiToken };
-    } else {
-      const agent = CODE_AGENTS[type];
-      const apiKey = await promptSecret(config, args, 'apiKey', '--api-key', {
-        message: `${agent.name} API key`,
-        instructions: agent.instructions,
-        link: agent.link,
-        linkLabel: agent.linkLabel,
-      });
-      // Matches the console default: route autofixes through the agent unless
-      // the user opts out.
-      let useAsDefaultExecutor = getArgBoolean(args, 'noDefaultExecutor') !== true;
-      if (useAsDefaultExecutor && isInteractive(config.nonInteractive)) {
-        useAsDefaultExecutor = await promptConfirm(
-          { nonInteractive: config.nonInteractive },
-          `Use ${agent.name} for all autofixes? (instead of the Polylane executor — you can change this later)`,
-          true
-        );
-      }
-      body = { type, workspaceId, apiKey, useAsDefaultExecutor };
-    }
-
-    const integration = await api.integrationsConnect(body);
-    printConnectSuccess(config, integration, TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
+    cancel('Nothing connected.');
   },
 };
