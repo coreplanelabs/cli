@@ -9,9 +9,11 @@ import {
   promptTextOrBack,
   promptSelectOrBack,
   promptPasswordOrBack,
+  promptConfirmOrBack,
   note,
 } from '../utils/prompt';
 import { isInteractive } from '../utils/env';
+import { openBrowser } from '../utils/browser';
 import { Spinner } from '../output/progress';
 import { consoleBaseUrl } from '../auth/oauth';
 
@@ -213,8 +215,9 @@ export interface SecretPromptOptions {
 }
 
 // Mirrors the console connect flows: short instructions and a direct link to
-// the page where the credential is created, then a hidden input. Options can
-// be a thunk when they depend on values from earlier steps.
+// the page where the credential is created — with an offer to open it in the
+// browser — then a hidden input to paste the credential. Options can be a
+// thunk when they depend on values from earlier steps.
 export function secretStep(
   config: Config,
   args: Record<string, unknown>,
@@ -230,11 +233,29 @@ export function secretStep(
       return SKIPPED;
     }
     if (!isInteractive(config.nonInteractive)) {
-      throw new CLIError(`Missing required flag: ${flag}`, ExitCode.USAGE);
+      const resolved = typeof opts === 'function' ? opts() : opts;
+      throw new CLIError(
+        `Missing required flag: ${flag}`,
+        ExitCode.USAGE,
+        `${resolved.linkLabel}: ${resolved.link}`
+      );
     }
     const resolved = typeof opts === 'function' ? opts() : opts;
-    note(`${resolved.instructions}\n\n${resolved.linkLabel}:\n  ${resolved.link}`, resolved.message);
-    const value = await promptPasswordOrBack({ nonInteractive: config.nonInteractive }, resolved.message);
+    note(
+      `You need to create a credential and paste it here.\n\n${resolved.instructions}\n\n${resolved.linkLabel}:\n  ${resolved.link}`,
+      resolved.message
+    );
+    const open = await promptConfirmOrBack(
+      { nonInteractive: config.nonInteractive },
+      `Open ${resolved.link} in your browser?`,
+      true
+    );
+    if (open === BACK) return BACK;
+    if (open) openBrowser(resolved.link);
+    const value = await promptPasswordOrBack(
+      { nonInteractive: config.nonInteractive },
+      `${resolved.message} (paste it here)`
+    );
     if (value === BACK) return BACK;
     set(value);
     return;
