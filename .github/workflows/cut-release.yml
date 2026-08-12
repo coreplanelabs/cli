@@ -1,0 +1,83 @@
+name: Cut Release
+
+# CI replacement for running ./release.sh on a laptop. Kick it off from the
+# Actions tab ("Cut Release" → Run workflow) with the version to release.
+#
+# This runs release.sh itself — one source of truth: bump package.json →
+# typecheck (against the live prod OpenAPI spec) + lint + test + build →
+# commit → tag → push. Nothing is committed, tagged, or pushed unless every
+# check passes. Once the v* tag reaches origin, release.yml takes over
+# (npm publish, GitHub release, Homebrew bump), exactly as before.
+#
+# The push uses the RELEASE_PUSH_TOKEN secret (a PAT with contents: write on
+# this repo), NOT the default GITHUB_TOKEN — tags pushed with GITHUB_TOKEN
+# do not trigger other workflows, so release.yml would never fire.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (no v prefix, e.g. 0.3.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run: bump + run all checks, but do not commit/tag/push'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: cut-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read # pushes go through RELEASE_PUSH_TOKEN, not GITHUB_TOKEN
+
+jobs:
+  cut:
+    name: Bump, verify, tag, push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure RELEASE_PUSH_TOKEN is configured
+        if: ${{ !inputs.dry_run }}
+        env:
+          RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_PUSH_TOKEN" ]; then
+            echo "::error::RELEASE_PUSH_TOKEN secret is not set. Add a fine-grained PAT with contents:read/write on coreplanelabs/cli (Settings → Secrets and variables → Actions). The default GITHUB_TOKEN cannot be used: tags it pushes do not trigger release.yml."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          # release.sh pushes a commit + tag back to this branch; the PAT in
+          # the remote URL is what lets that push trigger release.yml.
+          token: ${{ secrets.RELEASE_PUSH_TOKEN || github.token }}
+          fetch-depth: 0
+
+      # Node 24 to match release.yml (see the npm/Trusted Publishers note there).
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure git author
+        run: |
+          git config user.name  'coreplane-bot'
+          git config user.email 'bot@coreplane.dev'
+
+      # release.sh runs the full gate before touching git: typecheck (codegen
+      # against the live prod spec — hard gate, the polylane.com installer
+      # serves the latest release), lint, test, build.
+      - name: Run release.sh
+        env:
+          VERSION: ${{ inputs.version }}
+          RELEASE_DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          POLYLANE_API_DOMAIN: ${{ secrets.POLYLANE_API_DOMAIN }}
+          POLYLANE_OAUTH_CLIENT_ID: ${{ secrets.POLYLANE_OAUTH_CLIENT_ID }}
+          POLYLANE_OAUTH_CLIENT_SECRET: ${{ secrets.POLYLANE_OAUTH_CLIENT_SECRET }}
+        run: ./release.sh "$VERSION"
