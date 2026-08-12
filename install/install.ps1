@@ -3,7 +3,7 @@
 #   irm https://polylane.com/install.ps1 | iex
 #
 # Installs the bundled CLI to $env:USERPROFILE\.polylane\bin\ and (if needed)
-# prints the line to add to your PATH. Node 20+ must be installed.
+# adds it to your user PATH. Node 20+ must be installed.
 # Override the version or install prefix with env vars:
 #
 #   $env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/install.ps1 | iex
@@ -23,6 +23,23 @@ function Die([string]$msg) {
 }
 function Info([string]$msg) { Write-Host $msg -ForegroundColor DarkGray }
 function Ok([string]$msg)   { Write-Host "✓ $msg" -ForegroundColor Green }
+
+# True if $PathString (a ';'-separated PATH value) already contains $Dir,
+# comparing case-insensitively and ignoring trailing backslashes.
+function Test-PathHasDir([string]$PathString, [string]$Dir) {
+  $norm = $Dir.TrimEnd('\')
+  foreach ($entry in ($PathString -split ';')) {
+    if ($entry -and ($entry.TrimEnd('\') -ieq $norm)) { return $true }
+  }
+  return $false
+}
+
+# Returns $PathString with $Dir appended (unchanged if already present).
+function Add-DirToPath([string]$PathString, [string]$Dir) {
+  if (Test-PathHasDir $PathString $Dir) { return $PathString }
+  if ([string]::IsNullOrWhiteSpace($PathString)) { return $Dir }
+  return $PathString.TrimEnd(';') + ';' + $Dir
+}
 
 # --- preflight --------------------------------------------------------------
 
@@ -83,15 +100,26 @@ try {
   # non-fatal — user can still run it manually
 }
 
-# --- PATH hint -------------------------------------------------------------
+# --- PATH -------------------------------------------------------------------
 
+# Persist $PrefixDir on the user PATH (never setx — it truncates long PATHs,
+# and never the merged Machine+User value — only the User value is rewritten).
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-if ($userPath -notlike "*$PrefixDir*") {
-  Write-Host ''
-  Info "Add $PrefixDir to your PATH:"
-  Write-Host "    setx PATH `"$PrefixDir;%PATH%`""
-  Info 'Or set permanently with PowerShell:'
-  Write-Host "    [Environment]::SetEnvironmentVariable('Path', '$PrefixDir;' + [Environment]::GetEnvironmentVariable('Path','User'), 'User')"
+if (-not (Test-PathHasDir $userPath $PrefixDir)) {
+  try {
+    [Environment]::SetEnvironmentVariable('Path', (Add-DirToPath $userPath $PrefixDir), 'User')
+    Ok "added $PrefixDir to your PATH"
+    Info 'New terminals pick it up automatically.'
+  } catch {
+    Info "could not add $PrefixDir to your PATH automatically ($_)"
+    Info 'Add it yourself with PowerShell:'
+    Write-Host "    [Environment]::SetEnvironmentVariable('Path', '$PrefixDir;' + [Environment]::GetEnvironmentVariable('Path','User'), 'User')"
+  }
+}
+
+# Make `polylane` work in this session too, without a restart.
+if (-not (Test-PathHasDir $env:Path $PrefixDir)) {
+  $env:Path = "$PrefixDir;$env:Path"
 }
 
 Write-Host ''
