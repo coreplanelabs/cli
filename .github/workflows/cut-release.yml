@@ -1,0 +1,97 @@
+name: Cut Release
+
+# CI replacement for running ./release.sh on a laptop. Kick it off from the
+# Actions tab ("Cut Release" → Run workflow) with the version to release.
+#
+# This runs release.sh itself — one source of truth: bump package.json →
+# typecheck (against the live prod OpenAPI spec) + lint + test + build →
+# commit → tag → push. Nothing is committed, tagged, or pushed unless every
+# check passes. Once the v* tag reaches origin, release.yml takes over
+# (npm publish, GitHub release, Homebrew bump), exactly as before.
+#
+# The push uses a short-lived coreplane-bot GitHub App token (credentials
+# loaded from the 1Password CI vault), NOT the default GITHUB_TOKEN — tags
+# pushed with GITHUB_TOKEN do not trigger other workflows, so release.yml
+# would never fire.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (no v prefix, e.g. 0.3.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run: bump + run all checks, but do not commit/tag/push'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: cut-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read # pushes go through the coreplane-bot App token, not GITHUB_TOKEN
+
+jobs:
+  cut:
+    name: Bump, verify, tag, push
+    runs-on: ubuntu-latest
+    steps:
+      # Dry runs never push, so they skip the 1Password/App-token steps and
+      # check out with the default read-only GITHUB_TOKEN.
+      - name: Load secrets from 1Password
+        if: ${{ !inputs.dry_run }}
+        uses: 1password/load-secrets-action@eb2efd0703da22a93c467f2d1ffbb6826c11e19c # v4.1.1
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          # Syntax: op://<vault-name>/<item-name>/<field-name>
+          COREPLANE_CLIENT_ID: op://CI/coreplane-bot/client-id
+          COREPLANE_PRIVATE_SIGNING_KEY: op://CI/coreplane-bot/private-key
+
+      # Tags pushed with the default GITHUB_TOKEN don't trigger release.yml; the App token does.
+      - name: Generate a token
+        if: ${{ !inputs.dry_run }}
+        id: generate-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ env.COREPLANE_CLIENT_ID }}
+          private-key: ${{ env.COREPLANE_PRIVATE_SIGNING_KEY }}
+          permission-contents: write
+
+      - uses: actions/checkout@v4
+        with:
+          # release.sh pushes a commit + tag back to this branch; the App
+          # token in the remote URL is what lets that push trigger release.yml.
+          token: ${{ steps.generate-token.outputs.token || github.token }}
+          fetch-depth: 0
+
+      # Node 24 to match release.yml (see the npm/Trusted Publishers note there).
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure git author
+        run: |
+          git config user.name  'coreplane-bot'
+          git config user.email 'bot@coreplane.dev'
+
+      # release.sh runs the full gate before touching git: typecheck (codegen
+      # against the live prod spec — hard gate, the polylane.com installer
+      # serves the latest release), lint, test, build.
+      - name: Run release.sh
+        env:
+          VERSION: ${{ inputs.version }}
+          RELEASE_DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          POLYLANE_API_DOMAIN: ${{ secrets.POLYLANE_API_DOMAIN }}
+          POLYLANE_OAUTH_CLIENT_ID: ${{ secrets.POLYLANE_OAUTH_CLIENT_ID }}
+          POLYLANE_OAUTH_CLIENT_SECRET: ${{ secrets.POLYLANE_OAUTH_CLIENT_SECRET }}
+        run: ./release.sh "$VERSION"

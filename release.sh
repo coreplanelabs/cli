@@ -2,10 +2,17 @@
 # Cut a new release of the polylane CLI.
 #
 #   ./release.sh 0.1.0
-#   ./release.sh               # prompts for version
+#   ./release.sh               # prompts for version (interactive only)
 #
 # Steps: bump package.json → typecheck + lint + test + build → commit → tag →
 # push. `release.yml` takes over once the v* tag reaches origin.
+#
+# CI mode (CI env var set, as in GitHub Actions): no prompts — the version
+# argument is required and the branch must be main. Run via the "Cut Release"
+# workflow (.github/workflows/cut-release.yml) instead of a laptop.
+#
+# RELEASE_DRY_RUN=1 runs the version bump and all checks, then reverts the
+# bump and exits before committing, tagging, or pushing.
 
 set -euo pipefail
 
@@ -22,9 +29,12 @@ if [ -n "$(git status --porcelain)" ]; then
   die "working tree is dirty — commit or stash first"
 fi
 
-# Version: arg or prompt.
+# Version: arg or prompt (never prompt in CI).
 VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
+  if [ -n "${CI:-}" ]; then
+    die "version argument required in CI: ./release.sh <version>"
+  fi
   read -rp "Release version (no v prefix, e.g. 0.1.0): " VERSION
 fi
 VERSION="${VERSION#v}"
@@ -45,6 +55,9 @@ fi
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [ "$BRANCH" != "main" ]; then
+  if [ -n "${CI:-}" ]; then
+    die "refusing to release from '$BRANCH' in CI — releases are cut from main"
+  fi
   read -rp "Current branch is '$BRANCH', not 'main'. Continue? [y/N] " ans
   [[ "$ans" =~ ^[Yy]$ ]] || die "aborted"
 fi
@@ -65,6 +78,13 @@ npm run test
 info "build"
 npm run build
 ok "all checks passed"
+
+if [ -n "${RELEASE_DRY_RUN:-}" ]; then
+  info "dry run — reverting version bump; skipping commit, tag, and push"
+  git checkout -- package.json package-lock.json
+  ok "Dry run for $TAG passed all checks"
+  exit 0
+fi
 
 info "committing version bump"
 git add package.json package-lock.json
