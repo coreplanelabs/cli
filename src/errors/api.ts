@@ -8,14 +8,14 @@ export interface ApiErrorPayload {
 
 export function mapApiError(status: number, error: ApiErrorPayload | null): CLIError {
   const detail = error?.detail;
-  const message = error?.message ?? 'Unknown error';
+  const message = error?.message ?? `The request did not succeed (${status})`;
 
   switch (status) {
     case 400:
       return new CLIError(detail || 'Bad request', ExitCode.USAGE);
     case 401:
       return new CLIError(
-        detail || 'Not authenticated',
+        detail || 'Not signed in.',
         ExitCode.AUTH,
         'Run `polylane auth login`'
       );

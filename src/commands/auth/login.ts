@@ -27,7 +27,7 @@ interface WorkspaceItem {
 }
 
 async function validateApiKey(config: Config, key: string): Promise<WhoamiResult> {
-  const spinner = new Spinner('Validating API key…');
+  const spinner = new Spinner('Checking the API key…');
   spinner.start();
   try {
     const res = await request(
@@ -41,7 +41,11 @@ async function validateApiKey(config: Config, key: string): Promise<WhoamiResult
     );
     if (!res.ok) {
       spinner.stop();
-      throw new CLIError(`API key validation failed (${res.status})`, ExitCode.AUTH);
+      throw new CLIError(
+        `The API key was not accepted (${res.status})`,
+        ExitCode.AUTH,
+        'Check the key, or create a new one in the console'
+      );
     }
     const json = (await res.json()) as {
       success: boolean;
@@ -64,7 +68,7 @@ async function validateApiKey(config: Config, key: string): Promise<WhoamiResult
 }
 
 export async function selectWorkspace(config: Config, user: WhoamiResult): Promise<string | undefined> {
-  const spinner = new Spinner('Fetching workspaces…');
+  const spinner = new Spinner('Finding your workspaces…');
   spinner.start();
   try {
     const list = await requestJson<{ items: WorkspaceItem[]; count: number }>(

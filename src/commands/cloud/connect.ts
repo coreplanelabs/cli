@@ -115,7 +115,7 @@ async function confirmBrowserConnect(
       process.stderr.write(`✓ Connected: ${account.alias || account.account}${detail ? ` (${detail})` : ''}\n`);
     }
   } else {
-    process.stderr.write('Not seeing the connection yet — check with `polylane cloud list`.\n');
+    process.stderr.write("I don't see the connection yet. Check with `polylane cloud list`.\n");
   }
 }
 
@@ -131,7 +131,7 @@ function printConnectSuccess(config: Config, result: ConnectResult): void {
     process.stderr.write(`✓ Connected: ${account.alias || account.account}${detail ? ` (${detail})` : ''}\n`);
   }
   for (const failure of result.failures) {
-    process.stderr.write(`Failed to connect ${failure.account}: ${failure.message}\n`);
+    process.stderr.write(`I couldn't connect ${failure.account}: ${failure.message}\n`);
   }
 }
 
@@ -238,7 +238,7 @@ async function connectProvider(
         }
         const answer = await promptConfirmOrBack(
           ctx,
-          'Investigate alarms? (Polylane subscribes to all CloudWatch alarms in this account and investigates them when they fire)',
+          'Investigate alarms? (I subscribe to all CloudWatch alarms in this account and investigate them when they fire)',
           true
         );
         if (answer === BACK) return BACK;
@@ -268,7 +268,7 @@ async function connectProvider(
         {
           message: 'Cloudflare API token',
           instructions:
-            'Create an account-owned API token: Manage Account > Account API Tokens (you must be a Super Administrator on the account). The docs page has links that pre-fill the exact permissions Polylane needs; leave the pre-filled set as it is, or use the read-only variant. New account tokens start with cfat_ and are shown only once.',
+            'Create an account-owned API token: Manage Account > Account API Tokens (you must be a Super Administrator on the account). The docs page has links that pre-fill the exact permissions I need; leave the pre-filled set as it is, or use the read-only variant. New account tokens start with cfat_ and are shown only once.',
           link: 'https://docs.polylane.com/integrations/cloudflare',
           linkLabel: 'How to create the token',
         },

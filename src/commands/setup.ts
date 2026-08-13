@@ -443,7 +443,7 @@ export const setupCommand: Command = {
       : AGENTS.filter((a) => a.detect(home));
 
     if (selected.length === 0) {
-      say('No coding agents detected.');
+      say("I didn't find any coding agents on this machine.");
       say(`Configure one anyway with --agent <id> (${AGENTS.map((a) => a.id).join(', ')}).`);
       return;
     }
@@ -455,7 +455,7 @@ export const setupCommand: Command = {
       let outcomes: WriteOutcome[];
       if (project) {
         if (!agent.project) {
-          say(`${agent.id}: skipped — no project-level convention; run without --project`);
+          say(`${agent.id}: skipped, no project-level convention; run without --project`);
           continue;
         }
         outcomes = agent.project(process.cwd(), config.dryRun);
@@ -471,7 +471,7 @@ export const setupCommand: Command = {
         const detail = outcome.detail ? ` (${outcome.detail})` : '';
         say(`${agent.id}: ${outcome.label} ${state}: ${outcome.path}${detail}`);
         if (outcome.needsManualStep) {
-          say(`${agent.id}: register it manually — see https://docs.polylane.com/coding-agents/platform-mcp`);
+          say(`${agent.id}: register it manually: https://docs.polylane.com/coding-agents/platform-mcp`);
         }
       }
     }

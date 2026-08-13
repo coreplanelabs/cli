@@ -79,15 +79,15 @@ function workspaceStep(landing?: Landing): string[] {
     case 'created':
       return [
         landing.workspaceSlug
-          ? `  1. Your first workspace ("${landing.workspaceSlug}") was created — set it as the default`
-          : `  1. Your first workspace was created — set it as the default`,
+          ? `  1. Your first workspace ("${landing.workspaceSlug}") was created: set it as the default`
+          : `  1. Your first workspace was created: set it as the default`,
         ...setDefault,
       ];
     case 'joined':
       return [
         landing.workspaceSlug
-          ? `  1. You joined the "${landing.workspaceSlug}" workspace — set it as the default`
-          : `  1. You joined an existing workspace — set it as the default`,
+          ? `  1. You joined the "${landing.workspaceSlug}" workspace: set it as the default`
+          : `  1. You joined an existing workspace: set it as the default`,
         ...setDefault,
       ];
     case 'existing':
@@ -159,7 +159,7 @@ async function verifyEmail(config: Config, email: string, code: string): Promise
   const json = (await res.json()) as VerifyEmailEnvelope;
   if (res.status === 400) return null;
   if (!res.ok || !json.success) {
-    throw new CLIError(json.error?.detail ?? json.error?.message ?? 'Email verification failed', ExitCode.GENERAL);
+    throw new CLIError(json.error?.detail ?? json.error?.message ?? 'Email verification did not complete', ExitCode.GENERAL);
   }
   const expiresAt =
     parseSessionExpiresAt(res.headers.get('set-cookie')) ??
@@ -233,7 +233,7 @@ async function emailSignup(config: Config, args: Record<string, unknown>): Promi
   });
   const json = (await res.json()) as SignupEnvelope;
   if (!res.ok || !json.success) {
-    throw new CLIError(json.error?.detail ?? json.error?.message ?? 'Signup failed', ExitCode.GENERAL);
+    throw new CLIError(json.error?.detail ?? json.error?.message ?? 'Signup did not complete', ExitCode.GENERAL);
   }
   const { user, token } = json.result;
   if (!user) {
@@ -300,7 +300,7 @@ async function emailSignup(config: Config, args: Record<string, unknown>): Promi
     }
   }
   throw new CLIError(
-    'Email verification failed',
+    'Email verification did not complete',
     ExitCode.GENERAL,
     `Re-run \`polylane auth signup\` for a fresh code, or finish later with: polylane auth signup --email ${email} --code <code>`
   );

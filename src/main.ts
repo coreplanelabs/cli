@@ -12,6 +12,7 @@ import {
   renderGroupHelp,
   renderCommandHelp,
   buildStatusLine,
+  unknownCommandMessage,
 } from './registry';
 import type { Config } from './config/schema';
 import type { Credential } from './auth/types';
@@ -103,7 +104,7 @@ async function run(): Promise<void> {
     const config = loadConfig(flags as GlobalFlags);
     handleError(
       new CLIError(
-        `Unknown command: polylane ${commandPath.join(' ')}`,
+        unknownCommandMessage(commandPath, registry.suggestCommand(commandPath)),
         ExitCode.USAGE,
         'Run `polylane --help` to list commands'
       ),

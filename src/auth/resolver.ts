@@ -38,9 +38,9 @@ export async function resolveCredential(config: Config): Promise<Credential> {
   }
 
   throw new CLIError(
-    'Not authenticated',
+    'Not signed in.',
     ExitCode.AUTH,
-    'Run `polylane auth login` to authenticate'
+    'Run `polylane auth login`'
   );
 }
 

@@ -22,7 +22,7 @@ export const memoryDeleteCommand: Command = {
         false
       );
       if (!ok) {
-        process.stderr.write('Cancelled\n');
+        process.stderr.write('Cancelled. Nothing changed.\n');
         return;
       }
     }

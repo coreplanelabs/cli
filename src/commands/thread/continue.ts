@@ -55,7 +55,7 @@ export const threadContinueCommand: Command = {
       process.stderr.write(`Thread: ${url}\n\n`);
     }
 
-    const spinner = !config.quiet && textMode ? new Spinner('Waiting for the reply…') : null;
+    const spinner = !config.quiet && textMode ? new Spinner('Working on the reply…') : null;
     if (spinner) spinner.start();
     let spinnerStopped = false;
     const stopSpinner = (): void => {
@@ -93,13 +93,13 @@ export const threadContinueCommand: Command = {
 
     if (result.status === 'timeout') {
       if (!config.quiet) {
-        process.stderr.write(`The reply is still being generated. View it at:\n  ${url}\n`);
+        process.stderr.write(`I'm still writing the reply. View it at:\n  ${url}\n`);
       }
       return;
     }
 
     if (result.text.length === 0 && !config.quiet) {
-      process.stderr.write(`The agent finished without a text reply. View the thread at:\n  ${url}\n`);
+      process.stderr.write(`I finished without a text reply. View the thread at:\n  ${url}\n`);
     }
   },
 };

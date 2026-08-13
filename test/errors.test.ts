@@ -30,7 +30,7 @@ describe('mapApiError', () => {
   it('maps 401 -> AUTH with hint', () => {
     const err = mapApiError(401, { message: 'Unauthorized' });
     assert.equal(err.exitCode, ExitCode.AUTH);
-    assert.equal(err.message, 'Not authenticated');
+    assert.equal(err.message, 'Not signed in.');
     assert.ok(err.hint?.includes('polylane auth login'));
   });
 

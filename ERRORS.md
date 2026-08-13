@@ -62,9 +62,9 @@ Every command inherits these. Specific messages are subject to change, but the *
 | Scenario | Typical message |
 |---|---|
 | No credentials | `Not signed in.` with a hint listing `auth login` variants |
-| HTTP 401 | `Not authenticated` |
+| HTTP 401 | `Not signed in.` |
 | HTTP 403 | `Permission denied` |
-| OAuth refresh failed | `Token refresh failed` with a hint to re-authenticate |
+| OAuth refresh failed | `Couldn't refresh your session (<status>)` with a hint to sign in again |
 | WebSocket upgrade rejected (for streaming commands) | `WebSocket upgrade rejected (<status>)` |
 
 ### Rate limit / plan (exit `4`)
@@ -78,7 +78,7 @@ Every command inherits these. Specific messages are subject to change, but the *
 
 | Scenario | Typical message |
 |---|---|
-| Unknown command | `Unknown command: polylane <path>` with a hint pointing at `polylane --help` |
+| Unknown command | `Unknown command: polylane <path>`, plus `Closest match: polylane <command>` when one is close, with a hint pointing at `polylane --help` |
 | Unknown flag | `Unknown flag: <flag>` |
 | Flag requires a value | `Flag <flag> requires a value` |
 | Flag expects a number | `Flag <flag> expects a number, got "<value>"` |
