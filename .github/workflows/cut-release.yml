@@ -1,7 +1,8 @@
 name: Cut Release
 
 # CI replacement for running ./release.sh on a laptop. Kick it off from the
-# Actions tab ("Cut Release" → Run workflow) with the version to release.
+# Actions tab ("Cut Release" → Run workflow). Leave the version empty to cut
+# the next patch release; give an explicit version to pin it.
 #
 # This runs release.sh itself — one source of truth: bump package.json →
 # typecheck (against the live prod OpenAPI spec) + lint + test + build →
@@ -14,12 +15,16 @@ name: Cut Release
 # pushed with GITHUB_TOKEN do not trigger other workflows, so release.yml
 # would never fire.
 
+run-name: >-
+  Cut Release — ${{ inputs.version || 'next patch' }}${{ inputs.dry_run && ' (dry run)' || '' }}
+
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (no v prefix, e.g. 0.3.0)'
-        required: true
+        description: 'Version to release (leave empty for the next patch; no v prefix, e.g. 0.3.0)'
+        required: false
+        default: ''
         type: string
       dry_run:
         description: 'Dry run: bump + run all checks, but do not commit/tag/push'
@@ -86,7 +91,8 @@ jobs:
 
       # release.sh runs the full gate before touching git: typecheck (codegen
       # against the live prod spec — hard gate, the polylane.com installer
-      # serves the latest release), lint, test, build.
+      # serves the latest release), lint, test, build. An empty VERSION makes
+      # release.sh bump the next patch version; the log shows the result.
       - name: Run release.sh
         env:
           VERSION: ${{ inputs.version }}
