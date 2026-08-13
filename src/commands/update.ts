@@ -50,7 +50,7 @@ export const updateCommand: Command = {
 
     const latest = await fetchLatest();
     if (!latest) {
-      process.stderr.write("I couldn't reach npm to check for updates. Try again later.\n");
+      process.stderr.write("Couldn't reach npm to check for updates. Try again later.\n");
       return;
     }
 

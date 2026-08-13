@@ -143,7 +143,7 @@ export function renderRiskLines(
   limit = MAX_RISK_LINES
 ): string[] {
   if (ranked.length === 0) {
-    return ['I found no key risks.'];
+    return ['No key risks found.'];
   }
   const lines = [color(`Key risks (${ranked.length})`, '1', useColor)];
   for (const risk of ranked.slice(0, limit)) {
@@ -296,7 +296,7 @@ async function runRiskNavigator(
     if (options.length === 0) return;
     const choice = await promptSelectOrBack<string>(
       ctx,
-      'Investigate a risk (Enter creates an issue; I investigate in the background)',
+      'Investigate a risk (Enter creates an issue; Polylane investigates in the background)',
       options,
       'Done'
     );
@@ -310,7 +310,7 @@ async function runRiskNavigator(
         ? issueConsoleUrl(risk.reportHtmlUrl ?? scanConsoleUrl, knownIssueId)
         : null;
       note(
-        "An issue is already open for this risk and I'm investigating it." +
+        'An issue is already open for this risk and Polylane is investigating it.' +
           (url ? `\n\nView the issue in the console:\n  ${url}` : ''),
         'Already under investigation'
       );
@@ -333,7 +333,7 @@ async function runRiskNavigator(
       spinner.stop();
       const message = err instanceof Error ? err.message : String(err);
       note(
-        `I couldn't create the issue (${message}).\nPick the risk again to retry, or investigate it from the console.`,
+        `The issue was not created (${message}).\nPick the risk again to retry, or investigate it from the console.`,
         'Nothing changed'
       );
       continue;
@@ -345,7 +345,7 @@ async function runRiskNavigator(
       : null;
     note(
       `Issue created for "${risk.title}".\n` +
-        "I'm investigating this risk in the background and will post what I find on the issue. You can keep working; nothing else is needed from you." +
+        'Polylane is investigating this risk in the background and will post what it finds on the issue. You can keep working; nothing else is needed from you.' +
         (url ? `\n\nView the issue in the console:\n  ${url}` : ''),
       'Investigation started'
     );
@@ -439,12 +439,12 @@ export const scanCommand: Command = {
     const consoleUrl = resolveConsoleUrl(results) ?? (await scansFallbackUrl(cfg, api, workspaceId));
 
     for (const f of failed) {
-      say(color(`I couldn't finish the ${f.target.label} scan${f.error ? ` (${f.error})` : ''}.`, '33', useColor));
+      say(color(`The ${f.target.label} scan didn't finish${f.error ? ` (${f.error})` : ''}.`, '33', useColor));
     }
     if (timedOut.length > 0) {
       say(
         color(
-          `I'm still running ${timedOut.length} scan${timedOut.length === 1 ? '' : 's'} in the background; view progress in the console.`,
+          `${timedOut.length} scan${timedOut.length === 1 ? ' is' : 's are'} still running; view progress in the console.`,
           '2',
           useColor
         )

@@ -44,7 +44,7 @@ function printOutcome(row: AutofixRow): void {
   }
   const reason = row.skippedReason || row.failureReason;
   if (reason) {
-    process.stdout.write(`\n${label} (${repoLabel(row)})\n  I held off: ${reason}\n`);
+    process.stdout.write(`\n${label} (${repoLabel(row)})\n  Polylane held off: ${reason}\n`);
     return;
   }
   process.stdout.write(`\n${label} (${repoLabel(row)}): ${row.status ?? 'unknown'}\n`);
@@ -52,7 +52,7 @@ function printOutcome(row: AutofixRow): void {
 
 export const autofixWatchCommand: Command = {
   name: 'autofix watch',
-  description: "Watch the pull requests I'm opening, live",
+  description: 'Watch pull requests Polylane is opening, live',
   options: [
     { flag: '--id <autofix-id>', description: 'Watch one autofix instead of the connect-time pair', type: 'string' },
     { flag: '--timeout <seconds>', description: `Stop waiting after this many seconds (default ${DEFAULT_TIMEOUT_SECONDS})`, type: 'number' },
@@ -80,7 +80,7 @@ export const autofixWatchCommand: Command = {
     }
 
     if (watched.size === 0) {
-      note("No pull request activity to watch yet. Connect a GitHub repository and I'll open a first pull request within minutes.");
+      note('No pull request activity to watch yet. Connect a GitHub repository and Polylane opens its first pull request within minutes.');
       return;
     }
 
@@ -96,7 +96,7 @@ export const autofixWatchCommand: Command = {
     }
     if ([...watched.values()].every((row) => isTerminal(row))) return;
 
-    const spinner = new Spinner('Working on the pull requests…');
+    const spinner = new Spinner('Watching Polylane work');
     const socketRef: { current: WorkspaceSocket | null } = { current: null };
 
     const finished = new Promise<void>((resolve) => {
@@ -109,7 +109,7 @@ export const autofixWatchCommand: Command = {
 
       const timer = setTimeout(() => {
         spinner.stop();
-        note("I'm still working. I'll email you when the pull request opens, and it will be in your console.");
+        note("Still working. You'll get an email when the pull request opens, and it will be in your console.");
         finish();
       }, timeoutSeconds * 1000);
       timer.unref?.();
@@ -125,7 +125,7 @@ export const autofixWatchCommand: Command = {
       const onSigint = () => {
         clearTimeout(timer);
         spinner.stop();
-        note('Stopped watching. I keep working; check your console or GitHub for the pull requests.');
+        note('Stopped watching. Polylane keeps working; check your console or GitHub for the pull requests.');
         finish();
       };
       process.once('SIGINT', onSigint);
@@ -172,7 +172,7 @@ export const autofixWatchCommand: Command = {
         .catch(() => {
           clearTimeout(timer);
           spinner.stop();
-          note("Live updates are unavailable right now. I'll email you when the pull request opens.");
+          note("Live updates are unavailable right now. You'll get an email when the pull request opens.");
           finish();
         });
     });

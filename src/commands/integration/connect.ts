@@ -134,7 +134,7 @@ async function confirmBrowserConnect(
   if (found) {
     process.stderr.write(`✓ ${label} connected: ${found.name}\n`);
   } else {
-    process.stderr.write("I don't see the connection yet. Check with `polylane integration list`.\n");
+    process.stderr.write('Not seeing the connection yet. Check with `polylane integration list`.\n');
   }
 }
 
@@ -213,7 +213,7 @@ async function connectMcp(
     async () => {
       if (authMethod !== 'bearer' || bearerToken !== undefined) return SKIPPED;
       note(
-        'Paste the bare token, without the "Bearer " prefix. I add that.\nGet it from whoever runs this MCP server. MCP defines no standard console or scope names.\nThe token needs whatever the server requires for tools/list and tools/call. I call nothing else.',
+        'Paste the bare token, without the "Bearer " prefix. Polylane adds that.\nGet it from whoever runs this MCP server. MCP defines no standard console or scope names.\nThe token needs whatever the server requires for tools/list and tools/call. Polylane calls nothing else.',
         'Bearer token'
       );
       const token = await promptPasswordOrBack(ctx, 'Bearer token');

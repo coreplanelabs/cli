@@ -243,7 +243,7 @@ describe('renderRiskLines', () => {
   });
 
   it('renders a single line when there are no risks', () => {
-    assert.deepEqual(renderRiskLines([], true), ['I found no key risks.']);
+    assert.deepEqual(renderRiskLines([], true), ['No key risks found.']);
   });
 
   it('colors severity tags when enabled', () => {

@@ -111,13 +111,13 @@ export const threadAskCommand: Command = {
 
     if (result.status === 'timeout') {
       if (!config.quiet) {
-        process.stderr.write(`I'm still writing the reply. View it at:\n  ${url}\n`);
+        process.stderr.write(`The reply is still being generated. View it at:\n  ${url}\n`);
       }
       return;
     }
 
     if (result.text.length === 0 && !config.quiet) {
-      process.stderr.write(`I finished without a text reply. View the thread at:\n  ${url}\n`);
+      process.stderr.write(`The agent finished without a text reply. View the thread at:\n  ${url}\n`);
     }
   },
 };

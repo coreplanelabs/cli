@@ -443,7 +443,7 @@ export const setupCommand: Command = {
       : AGENTS.filter((a) => a.detect(home));
 
     if (selected.length === 0) {
-      say("I didn't find any coding agents on this machine.");
+      say('No coding agents detected.');
       say(`Configure one anyway with --agent <id> (${AGENTS.map((a) => a.id).join(', ')}).`);
       return;
     }
