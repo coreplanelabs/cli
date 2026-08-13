@@ -409,7 +409,7 @@ export const scanCommand: Command = {
         outputJson({ workspaceId, targets: 0, reports: [], risks: [], consoleUrl: null });
         return;
       }
-      say('Nothing to scan — no cloud accounts or integrations are connected.');
+      say('Nothing to scan yet: no cloud accounts or integrations are connected.');
       say('Connect one with `polylane cloud connect` or `polylane integration connect`.');
       return;
     }
@@ -439,12 +439,12 @@ export const scanCommand: Command = {
     const consoleUrl = resolveConsoleUrl(results) ?? (await scansFallbackUrl(cfg, api, workspaceId));
 
     for (const f of failed) {
-      say(color(`Scan failed for ${f.target.label}${f.error ? ` (${f.error})` : ''}`, '33', useColor));
+      say(color(`The ${f.target.label} scan didn't finish${f.error ? ` (${f.error})` : ''}.`, '33', useColor));
     }
     if (timedOut.length > 0) {
       say(
         color(
-          `${timedOut.length} scan${timedOut.length === 1 ? ' is' : 's are'} still running — view progress in the console.`,
+          `${timedOut.length} scan${timedOut.length === 1 ? ' is' : 's are'} still running; view progress in the console.`,
           '2',
           useColor
         )

@@ -91,7 +91,7 @@ describe('unknown command handling', () => {
         helpCommand.execute(mockConfig(), {}, { _: ['nope', 'sub'] }),
         (err: unknown) => {
           assert.ok(err instanceof CLIError);
-          assert.equal(err.message, 'Unknown command: polylane nope sub');
+          assert.equal(err.message, 'Unknown command: polylane nope sub. Closest match: polylane note.');
           assert.equal(err.exitCode, ExitCode.USAGE);
           assert.ok(err.hint?.includes('polylane --help'));
           return true;

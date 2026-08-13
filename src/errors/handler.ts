@@ -23,7 +23,7 @@ function wrapUnknown(err: unknown): CLIError {
     }
     if (hasCode(err, 'ENOTFOUND')) {
       return new CLIError(
-        `DNS lookup failed: ${msg}`,
+        `Couldn't resolve the API host: ${msg}`,
         ExitCode.NETWORK,
         'Check your network connection and the --domain flag'
       );

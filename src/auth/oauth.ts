@@ -104,8 +104,9 @@ async function fetchOIDCConfig(domain: string): Promise<OIDCConfig> {
   const res = await fetch(url);
   if (!res.ok) {
     throw new CLIError(
-      `Failed to fetch OIDC config from ${url}: ${res.status}`,
-      ExitCode.NETWORK
+      `Couldn't fetch the sign-in configuration from ${url} (${res.status})`,
+      ExitCode.NETWORK,
+      'Check your network and the --domain flag, then try again'
     );
   }
   return (await res.json()) as OIDCConfig;
@@ -246,11 +247,11 @@ function renderErrorHtml(error: string): string {
     return map[c] ?? c;
   });
   return renderShell(
-    'Authentication failed',
+    'Sign-in did not complete',
     // Red-500 from Tailwind default — high-contrast destructive accent
     '#ef4444',
-    'Authentication failed',
-    safe,
+    'Sign-in did not complete',
+    `Close this tab and run <code>polylane auth login</code> again from your terminal. (${safe})`,
     ALERT_ICON
   );
 }
@@ -307,12 +308,20 @@ async function startCallbackServer(expectedState: string, timeoutMs: number): Pr
     });
 
     server.on('error', (err) => {
-      reject(new CLIError(`Failed to start callback server: ${err.message}`, ExitCode.GENERAL));
+      reject(
+        new CLIError(
+          `Couldn't start the local sign-in listener: ${err.message}`,
+          ExitCode.GENERAL,
+          `Check that port ${CALLBACK_PORT} is free, then run \`polylane auth login\` again`
+        )
+      );
     });
 
     setTimeout(() => {
       server.close();
-      reject(new CLIError('OAuth flow timed out', ExitCode.TIMEOUT));
+      reject(
+        new CLIError('Sign-in timed out', ExitCode.TIMEOUT, 'Run `polylane auth login` to try again')
+      );
     }, timeoutMs);
   });
 }
@@ -391,7 +400,11 @@ export async function oauthBrowserFlow(
 
   if (!tokenRes.ok) {
     const body = await tokenRes.text();
-    throw new CLIError(`Token exchange failed: ${tokenRes.status} ${body}`, ExitCode.AUTH);
+    throw new CLIError(
+      `Sign-in did not complete: the token exchange returned ${tokenRes.status} ${body}`,
+      ExitCode.AUTH,
+      'Run `polylane auth login` to try again'
+    );
   }
   return (await tokenRes.json()) as OAuthTokenResponse;
 }
@@ -463,12 +476,13 @@ export async function oauthDeviceCodeFlow(config: Config): Promise<OAuthTokenRes
       throw new CLIError('Device code expired', ExitCode.AUTH, 'Run `polylane auth login` again');
     }
     throw new CLIError(
-      `Device code flow failed: ${errBody.error ?? 'unknown error'}`,
-      ExitCode.AUTH
+      `Device code sign-in did not complete (${errBody.error ?? 'no error detail'})`,
+      ExitCode.AUTH,
+      'Run `polylane auth login` to try again'
     );
   }
 
-  throw new CLIError('Device code timed out', ExitCode.TIMEOUT);
+  throw new CLIError('Device code timed out', ExitCode.TIMEOUT, 'Run `polylane auth login` to try again');
 }
 
 export async function revokeToken(config: Config, token: string): Promise<void> {

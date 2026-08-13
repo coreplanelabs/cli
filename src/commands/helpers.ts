@@ -290,7 +290,7 @@ export async function waitForBrowserCompletion<T>(
   }
   const spinner = new Spinner(`Waiting for ${opts.waitingFor}… (Ctrl+C to stop waiting)`);
   const onSigint = (): void => {
-    spinner.stop(`Stopped waiting — the browser setup continues on its own. ${opts.interruptHint}`);
+    spinner.stop(`Stopped waiting. The browser setup continues on its own. ${opts.interruptHint}`);
     process.exit(0);
   };
   spinner.start();

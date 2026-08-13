@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { CommandRegistry } from '../src/registry';
+import { CommandRegistry, unknownCommandMessage } from '../src/registry';
 import type { Command } from '../src/command';
 
 const makeCmd = (name: string): Command => ({
@@ -42,6 +42,31 @@ describe('CommandRegistry', () => {
     const resolved = r.resolve(['only']);
     assert.ok(resolved);
     assert.equal(resolved.command.name, 'only sub');
+  });
+
+  it('suggests the closest command for a typo', () => {
+    const r = new CommandRegistry();
+    r.register(makeCmd('scan'));
+    r.register(makeCmd('setup'));
+    r.register(makeCmd('workspace list'));
+    assert.equal(r.suggestCommand(['scna']), 'scan');
+    assert.equal(r.suggestCommand(['workspce', 'list']), 'workspace');
+  });
+
+  it('suggests nothing when no command is close', () => {
+    const r = new CommandRegistry();
+    r.register(makeCmd('scan'));
+    r.register(makeCmd('workspace list'));
+    assert.equal(r.suggestCommand(['frobnicate']), null);
+    assert.equal(r.suggestCommand([]), null);
+  });
+
+  it('renders the unknown-command message with and without a suggestion', () => {
+    assert.equal(
+      unknownCommandMessage(['scna'], 'scan'),
+      'Unknown command: polylane scna. Closest match: polylane scan.'
+    );
+    assert.equal(unknownCommandMessage(['frobnicate'], null), 'Unknown command: polylane frobnicate');
   });
 
   it('groups commands by first path segment', () => {

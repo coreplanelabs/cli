@@ -28,7 +28,7 @@ export const cloudDisconnectCommand: Command = {
         false
       );
       if (!confirmed) {
-        process.stderr.write('Cancelled\n');
+        process.stderr.write('Cancelled. Nothing changed.\n');
         return;
       }
     }

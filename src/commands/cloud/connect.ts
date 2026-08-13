@@ -115,7 +115,7 @@ async function confirmBrowserConnect(
       process.stderr.write(`✓ Connected: ${account.alias || account.account}${detail ? ` (${detail})` : ''}\n`);
     }
   } else {
-    process.stderr.write('Not seeing the connection yet — check with `polylane cloud list`.\n');
+    process.stderr.write('Not seeing the connection yet. Check with `polylane cloud list`.\n');
   }
 }
 
@@ -131,7 +131,7 @@ function printConnectSuccess(config: Config, result: ConnectResult): void {
     process.stderr.write(`✓ Connected: ${account.alias || account.account}${detail ? ` (${detail})` : ''}\n`);
   }
   for (const failure of result.failures) {
-    process.stderr.write(`Failed to connect ${failure.account}: ${failure.message}\n`);
+    process.stderr.write(`Couldn't connect ${failure.account}: ${failure.message}\n`);
   }
 }
 

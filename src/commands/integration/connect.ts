@@ -52,9 +52,9 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string 
   { value: 'honeycomb', label: 'Honeycomb', hint: 'configuration API key' },
   { value: 'axiom', label: 'Axiom', hint: 'API token' },
   { value: 'betterstack', label: 'Better Stack', hint: 'global, Uptime and Telemetry tokens' },
-  { value: 'devin', label: 'Devin', hint: 'API key — coding agent' },
-  { value: 'cursor', label: 'Cursor', hint: 'API key — coding agent' },
-  { value: 'factory', label: 'Factory', hint: 'API key — coding agent' },
+  { value: 'devin', label: 'Devin', hint: 'API key · coding agent' },
+  { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent' },
+  { value: 'factory', label: 'Factory', hint: 'API key · coding agent' },
   { value: 'mcp', label: 'MCP server', hint: 'any MCP server by URL' },
 ];
 
@@ -134,7 +134,7 @@ async function confirmBrowserConnect(
   if (found) {
     process.stderr.write(`✓ ${label} connected: ${found.name}\n`);
   } else {
-    process.stderr.write('Not seeing the connection yet — check with `polylane integration list`.\n');
+    process.stderr.write('Not seeing the connection yet. Check with `polylane integration list`.\n');
   }
 }
 
@@ -277,7 +277,7 @@ async function connectWithCredentials(
     let apiKey = '';
     let appKey = '';
     const ok = await runSteps([
-      choiceStep(config, args, 'site', '--site', 'Datadog site — the one in your Datadog URL', DATADOG_SITES, (v) => {
+      choiceStep(config, args, 'site', '--site', 'Datadog site: the one in your Datadog URL', DATADOG_SITES, (v) => {
         site = v;
       }),
       secretStep(
@@ -324,7 +324,7 @@ async function connectWithCredentials(
         args,
         'region',
         '--region',
-        'Honeycomb region — the one in your Honeycomb URL',
+        'Honeycomb region: the one in your Honeycomb URL',
         [
           { value: 'us', label: 'US (api.honeycomb.io)' },
           { value: 'eu', label: 'EU (api.eu1.honeycomb.io)' },
@@ -362,7 +362,7 @@ async function connectWithCredentials(
         args,
         'region',
         '--region',
-        'Axiom edge deployment region — see your organization settings (https://app.axiom.co/settings/org)',
+        'Axiom edge deployment region: see your organization settings (https://app.axiom.co/settings/org)',
         [
           { value: 'us-east-1', label: 'US East 1' },
           { value: 'eu-central-1', label: 'EU Central 1' },
@@ -475,7 +475,7 @@ async function connectWithCredentials(
         }
         const answer = await promptConfirmOrBack(
           { nonInteractive: config.nonInteractive },
-          `Use ${agent.name} for all autofixes? (instead of the Polylane executor — you can change this later)`,
+          `Use ${agent.name} for all autofixes? (instead of the Polylane executor; you can change this later)`,
           true
         );
         if (answer === BACK) return BACK;

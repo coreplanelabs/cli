@@ -55,7 +55,7 @@ export const threadContinueCommand: Command = {
       process.stderr.write(`Thread: ${url}\n\n`);
     }
 
-    const spinner = !config.quiet && textMode ? new Spinner('Waiting for the reply…') : null;
+    const spinner = !config.quiet && textMode ? new Spinner('Working on the reply…') : null;
     if (spinner) spinner.start();
     let spinnerStopped = false;
     const stopSpinner = (): void => {

@@ -107,6 +107,22 @@ export class CommandRegistry {
     return [...this.all];
   }
 
+  suggestCommand(path: string[]): string | null {
+    const input = path[0];
+    if (!input) return null;
+    const candidates = new Set<string>();
+    for (const cmd of this.all) {
+      candidates.add(cmd.name.split(/\s+/)[0]!);
+    }
+    let best: { name: string; distance: number } | null = null;
+    for (const candidate of candidates) {
+      const distance = editDistance(input.toLowerCase(), candidate.toLowerCase());
+      if (distance > 2 || distance * 2 > candidate.length) continue;
+      if (!best || distance < best.distance) best = { name: candidate, distance };
+    }
+    return best ? best.name : null;
+  }
+
   getResourceGroups(): Array<{ resource: string; commands: Command[]; meta: ResourceGroup }> {
     const byResource = new Map<string, Command[]>();
     for (const cmd of this.all) {
@@ -127,6 +143,30 @@ export class CommandRegistry {
     groups.sort((a, b) => a.meta.order - b.meta.order);
     return groups;
   }
+}
+
+function editDistance(a: string, b: string): number {
+  const prev = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    let diagonal = prev[0]!;
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const next = Math.min(
+        prev[j]! + 1,
+        prev[j - 1]! + 1,
+        diagonal + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+      diagonal = prev[j]!;
+      prev[j] = next;
+    }
+  }
+  return prev[b.length]!;
+}
+
+export function unknownCommandMessage(path: string[], suggestion: string | null): string {
+  const base = `Unknown command: polylane ${path.join(' ')}`;
+  return suggestion ? `${base}. Closest match: polylane ${suggestion}.` : base;
 }
 
 export const registry = new CommandRegistry();
@@ -183,7 +223,7 @@ export function renderRootHelp(
     lines.push(dim(statusMessage));
     lines.push('');
   }
-  lines.push(`${bold('polylane')} — CLI for the Polylane platform`);
+  lines.push(`${bold('polylane')}: investigate production issues from your terminal`);
   lines.push('');
   lines.push(`${bold('Usage:')} polylane <resource> <command> [options]`);
   lines.push('');

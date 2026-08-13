@@ -50,7 +50,7 @@ export const updateCommand: Command = {
 
     const latest = await fetchLatest();
     if (!latest) {
-      process.stderr.write("Couldn't reach npm to check for updates\n");
+      process.stderr.write("Couldn't reach npm to check for updates. Try again later.\n");
       return;
     }
 
@@ -61,7 +61,7 @@ export const updateCommand: Command = {
       process.stderr.write(`Run: npm install -g @coreplane/polylane@${latest}\n`);
       process.stderr.write(`  or: brew upgrade polylane\n`);
     } else {
-      process.stderr.write(`Up to date\n`);
+      process.stderr.write(`You're up to date.\n`);
     }
   },
 };

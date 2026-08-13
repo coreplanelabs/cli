@@ -10,15 +10,15 @@ export async function ensureAuth(config: Config): Promise<void> {
 
   if (!isInteractive(config.nonInteractive)) {
     throw new CLIError(
-      'Not authenticated',
+      'Not signed in.',
       ExitCode.AUTH,
-      'Run `polylane auth login` to authenticate'
+      'Run `polylane auth login`'
     );
   }
 
   throw new CLIError(
-    'Not authenticated',
+    'Not signed in.',
     ExitCode.AUTH,
-    'Run `polylane auth login` to authenticate'
+    'Run `polylane auth login`'
   );
 }

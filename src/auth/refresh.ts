@@ -31,9 +31,9 @@ export async function refreshToken(
 
   if (!res.ok) {
     throw new CLIError(
-      `Token refresh failed: ${res.status}`,
+      `Couldn't refresh your session (${res.status})`,
       ExitCode.AUTH,
-      'Run `polylane auth login` to re-authenticate'
+      'Run `polylane auth login` to sign in again'
     );
   }
 
