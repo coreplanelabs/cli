@@ -9,9 +9,10 @@ name: Cut Release
 # check passes. Once the v* tag reaches origin, release.yml takes over
 # (npm publish, GitHub release, Homebrew bump), exactly as before.
 #
-# The push uses the RELEASE_PUSH_TOKEN secret (a PAT with contents: write on
-# this repo), NOT the default GITHUB_TOKEN — tags pushed with GITHUB_TOKEN
-# do not trigger other workflows, so release.yml would never fire.
+# The push uses a short-lived coreplane-bot GitHub App token (credentials
+# loaded from the 1Password CI vault), NOT the default GITHUB_TOKEN — tags
+# pushed with GITHUB_TOKEN do not trigger other workflows, so release.yml
+# would never fire.
 
 on:
   workflow_dispatch:
@@ -31,28 +32,41 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read # pushes go through RELEASE_PUSH_TOKEN, not GITHUB_TOKEN
+  contents: read # pushes go through the coreplane-bot App token, not GITHUB_TOKEN
 
 jobs:
   cut:
     name: Bump, verify, tag, push
     runs-on: ubuntu-latest
     steps:
-      - name: Ensure RELEASE_PUSH_TOKEN is configured
+      # Dry runs never push, so they skip the 1Password/App-token steps and
+      # check out with the default read-only GITHUB_TOKEN.
+      - name: Load secrets from 1Password
         if: ${{ !inputs.dry_run }}
+        uses: 1password/load-secrets-action@eb2efd0703da22a93c467f2d1ffbb6826c11e19c # v4.1.1
+        with:
+          export-env: true
         env:
-          RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
-        run: |
-          if [ -z "$RELEASE_PUSH_TOKEN" ]; then
-            echo "::error::RELEASE_PUSH_TOKEN secret is not set. Add a fine-grained PAT with contents:read/write on coreplanelabs/cli (Settings → Secrets and variables → Actions). The default GITHUB_TOKEN cannot be used: tags it pushes do not trigger release.yml."
-            exit 1
-          fi
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          # Syntax: op://<vault-name>/<item-name>/<field-name>
+          COREPLANE_CLIENT_ID: op://CI/coreplane-bot/client-id
+          COREPLANE_PRIVATE_SIGNING_KEY: op://CI/coreplane-bot/private-key
+
+      # Tags pushed with the default GITHUB_TOKEN don't trigger release.yml; the App token does.
+      - name: Generate a token
+        if: ${{ !inputs.dry_run }}
+        id: generate-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ env.COREPLANE_CLIENT_ID }}
+          private-key: ${{ env.COREPLANE_PRIVATE_SIGNING_KEY }}
+          permission-contents: write
 
       - uses: actions/checkout@v4
         with:
-          # release.sh pushes a commit + tag back to this branch; the PAT in
-          # the remote URL is what lets that push trigger release.yml.
-          token: ${{ secrets.RELEASE_PUSH_TOKEN || github.token }}
+          # release.sh pushes a commit + tag back to this branch; the App
+          # token in the remote URL is what lets that push trigger release.yml.
+          token: ${{ steps.generate-token.outputs.token || github.token }}
           fetch-depth: 0
 
       # Node 24 to match release.yml (see the npm/Trusted Publishers note there).
