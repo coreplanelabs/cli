@@ -2,14 +2,16 @@
 # Cut a new release of the polylane CLI.
 #
 #   ./release.sh 0.1.0
-#   ./release.sh               # prompts for version (interactive only)
+#   ./release.sh               # prompts for version (interactive only);
+#                              # empty answer = next patch version
 #
 # Steps: bump package.json → typecheck + lint + test + build → commit → tag →
 # push. `release.yml` takes over once the v* tag reaches origin.
 #
-# CI mode (CI env var set, as in GitHub Actions): no prompts — the version
-# argument is required and the branch must be main. Run via the "Cut Release"
-# workflow (.github/workflows/cut-release.yml) instead of a laptop.
+# CI mode (CI env var set, as in GitHub Actions): no prompts — no version
+# argument means "bump the next patch version" and the branch must be main.
+# Run via the "Cut Release" workflow (.github/workflows/cut-release.yml)
+# instead of a laptop.
 #
 # RELEASE_DRY_RUN=1 runs the version bump and all checks, then reverts the
 # bump and exits before committing, tagging, or pushing.
@@ -29,15 +31,23 @@ if [ -n "$(git status --porcelain)" ]; then
   die "working tree is dirty — commit or stash first"
 fi
 
-# Version: arg or prompt (never prompt in CI).
+# Version: arg or prompt (never prompt in CI). Empty means "next patch".
 VERSION="${1:-}"
-if [ -z "$VERSION" ]; then
-  if [ -n "${CI:-}" ]; then
-    die "version argument required in CI: ./release.sh <version>"
-  fi
-  read -rp "Release version (no v prefix, e.g. 0.1.0): " VERSION
+if [ -z "$VERSION" ] && [ -z "${CI:-}" ]; then
+  read -rp "Release version (no v prefix, e.g. 0.1.0; empty = next patch): " VERSION
 fi
 VERSION="${VERSION#v}"
+
+# No version given: compute the next patch from package.json, matching what
+# `npm version patch` would produce (a prerelease is promoted to its release).
+if [ -z "$VERSION" ]; then
+  CURRENT="$(node -p 'require("./package.json").version')"
+  VERSION="$(node -p '
+    const m = process.argv[1].match(/^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]*)?/);
+    m[4] ? `${m[1]}.${m[2]}.${m[3]}` : `${m[1]}.${m[2]}.${Number(m[3]) + 1}`
+  ' "$CURRENT")" || die "could not compute next patch version from '$CURRENT'"
+  info "no version given — next patch: $CURRENT → $VERSION"
+fi
 
 # Reject anything that isn't semver x.y.z[-prerelease][+build].
 if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
