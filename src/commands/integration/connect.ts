@@ -18,6 +18,8 @@ import {
   SKIPPED,
 } from '../helpers';
 import type { Integration } from '../../generated/types';
+import { CLIError } from '../../errors/base';
+import { ExitCode } from '../../errors/codes';
 import { openBrowser } from '../../utils/browser';
 import { isInteractive } from '../../utils/env';
 import {
@@ -44,19 +46,44 @@ type ConnectableType =
   | 'factory'
   | 'mcp';
 
-const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string }> = [
-  { value: 'github', label: 'GitHub', hint: 'install the GitHub App (browser)' },
-  { value: 'slack', label: 'Slack', hint: 'install the Slack app (browser)' },
-  { value: 'sentry', label: 'Sentry', hint: 'install the Sentry integration (browser)' },
-  { value: 'datadog', label: 'Datadog', hint: 'API + application keys' },
-  { value: 'honeycomb', label: 'Honeycomb', hint: 'configuration API key' },
-  { value: 'axiom', label: 'Axiom', hint: 'API token' },
-  { value: 'betterstack', label: 'Better Stack', hint: 'global, Uptime and Telemetry tokens' },
-  { value: 'devin', label: 'Devin', hint: 'API key · coding agent' },
-  { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent' },
-  { value: 'factory', label: 'Factory', hint: 'API key · coding agent' },
-  { value: 'mcp', label: 'MCP server', hint: 'any MCP server by URL' },
+// Mirrors each type's subcategory in the integrations catalog
+// (`polylane integration catalog`), so callers like the install script can
+// narrow the picker to one family of integrations.
+export const CONNECT_CATEGORIES = ['git', 'communication', 'observability', 'code-agent', 'protocol'] as const;
+type ConnectCategory = (typeof CONNECT_CATEGORIES)[number];
+
+const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string; category: ConnectCategory }> = [
+  { value: 'github', label: 'GitHub', hint: 'install the GitHub App (browser)', category: 'git' },
+  { value: 'slack', label: 'Slack', hint: 'install the Slack app (browser)', category: 'communication' },
+  { value: 'sentry', label: 'Sentry', hint: 'install the Sentry integration (browser)', category: 'observability' },
+  { value: 'datadog', label: 'Datadog', hint: 'API + application keys', category: 'observability' },
+  { value: 'honeycomb', label: 'Honeycomb', hint: 'configuration API key', category: 'observability' },
+  { value: 'axiom', label: 'Axiom', hint: 'API token', category: 'observability' },
+  { value: 'betterstack', label: 'Better Stack', hint: 'global, Uptime and Telemetry tokens', category: 'observability' },
+  { value: 'devin', label: 'Devin', hint: 'API key · coding agent', category: 'code-agent' },
+  { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent', category: 'code-agent' },
+  { value: 'factory', label: 'Factory', hint: 'API key · coding agent', category: 'code-agent' },
+  { value: 'mcp', label: 'MCP server', hint: 'any MCP server by URL', category: 'protocol' },
 ];
+
+export function typeOptionsForCategory(category: string | undefined): typeof TYPE_OPTIONS {
+  if (category === undefined) return TYPE_OPTIONS;
+  if (!(CONNECT_CATEGORIES as readonly string[]).includes(category)) {
+    throw new CLIError(
+      `Unknown category: "${category}"`,
+      ExitCode.USAGE,
+      `Supported categories: ${CONNECT_CATEGORIES.join(', ')}`
+    );
+  }
+  return TYPE_OPTIONS.filter((o) => o.category === category);
+}
+
+// The category is validated even when --type wins, so a typo always errors
+// instead of being silently ignored.
+export function resolveTypeOptions(category: string | undefined, typeFromFlag: boolean): typeof TYPE_OPTIONS {
+  const filtered = typeOptionsForCategory(category);
+  return typeFromFlag ? TYPE_OPTIONS : filtered;
+}
 
 // Same site list the console offers; the flag accepts any value so orgs on
 // sites not listed here (e.g. newer regions) are not locked out.
@@ -527,6 +554,11 @@ export const integrationConnectCommand: Command = {
       description: `${TYPE_OPTIONS.map((o) => o.value).join(' | ')} (prompted if omitted)`,
       type: 'string',
     },
+    {
+      flag: '--category <cat>',
+      description: `Only offer integrations in this category: ${CONNECT_CATEGORIES.join(' | ')} (--type wins over the filter)`,
+      type: 'string',
+    },
     { flag: '--site <site>', description: 'Datadog site (e.g. us5.datadoghq.com)', type: 'string' },
     { flag: '--region <region>', description: 'Honeycomb (us|eu) or Axiom (us-east-1|eu-central-1)', type: 'string' },
     { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / Devin / Cursor / Factory)', type: 'string' },
@@ -547,6 +579,7 @@ export const integrationConnectCommand: Command = {
   examples: [
     'polylane integration connect',
     'polylane integration connect --type github',
+    'polylane integration connect --category observability',
     'polylane integration connect --type datadog --site us5.datadoghq.com --api-key ... --app-key ...',
     'polylane integration connect --type honeycomb --region us --api-key ...',
     'polylane integration connect --type axiom --region us-east-1 --api-token ...',
@@ -560,6 +593,8 @@ export const integrationConnectCommand: Command = {
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
     const api = new PolylaneAPI(config);
     const typeFromFlag = getArgString(args, 'type') !== undefined;
+    // --type always wins: the category filter only narrows the picker.
+    const typeOptions = resolveTypeOptions(getArgString(args, 'category'), typeFromFlag);
 
     // Type selection restarts whenever the user backs out of the first step of
     // the chosen flow, so nothing is committed until a flow completes.
@@ -572,13 +607,13 @@ export const integrationConnectCommand: Command = {
               'type',
               '--type',
               'Which integration do you want to connect?',
-              TYPE_OPTIONS,
+              typeOptions,
               { strict: true }
             )
           : await promptSelectOrBack<ConnectableType>(
               { nonInteractive: config.nonInteractive },
               'Which integration do you want to connect?',
-              TYPE_OPTIONS,
+              typeOptions,
               'Cancel'
             );
       if (type === BACK) break;

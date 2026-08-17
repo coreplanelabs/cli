@@ -281,12 +281,12 @@ export function canWaitForBrowser(config: Config): boolean {
 export async function waitForBrowserCompletion<T>(
   config: Config,
   check: () => Promise<T | null>,
-  opts: { waitingFor: string; interruptHint: string; timeoutMs?: number; intervalMs?: number }
+  opts: { waitingFor: string; interruptHint: string; startHint?: string; timeoutMs?: number; intervalMs?: number }
 ): Promise<T | null> {
   const timeoutMs = opts.timeoutMs ?? 5 * 60_000;
   const intervalMs = opts.intervalMs ?? 3_000;
   if (!config.quiet) {
-    process.stderr.write('\nFinish in the browser, then come back to this terminal.\n');
+    process.stderr.write(`\n${opts.startHint ?? 'Finish in the browser, then come back to this terminal.'}\n`);
   }
   const spinner = new Spinner(`Waiting for ${opts.waitingFor}… (Ctrl+C to stop waiting)`);
   const onSigint = (): void => {
