@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CONNECT_CATEGORIES,
+  resolveTypeOptions,
   typeOptionsForCategory,
 } from '../src/commands/integration/connect';
 import { isCLIError } from '../src/errors/base';
@@ -31,6 +32,24 @@ describe('typeOptionsForCategory', () => {
   it('rejects an unknown category with a usage error', () => {
     try {
       typeOptionsForCategory('nonsense');
+      assert.fail('expected a CLIError');
+    } catch (err) {
+      assert.ok(isCLIError(err));
+      assert.match((err as Error).message, /Unknown category/);
+    }
+  });
+});
+
+describe('resolveTypeOptions', () => {
+  it('lets --type win over the filter', () => {
+    assert.equal(resolveTypeOptions('observability', true).length, 11);
+    assert.equal(resolveTypeOptions('observability', false).length, 5);
+    assert.equal(resolveTypeOptions(undefined, false).length, 11);
+  });
+
+  it('rejects an unknown category even when --type is present', () => {
+    try {
+      resolveTypeOptions('observabilty', true);
       assert.fail('expected a CLIError');
     } catch (err) {
       assert.ok(isCLIError(err));

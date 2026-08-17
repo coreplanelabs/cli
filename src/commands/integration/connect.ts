@@ -78,6 +78,13 @@ export function typeOptionsForCategory(category: string | undefined): typeof TYP
   return TYPE_OPTIONS.filter((o) => o.category === category);
 }
 
+// The category is validated even when --type wins, so a typo always errors
+// instead of being silently ignored.
+export function resolveTypeOptions(category: string | undefined, typeFromFlag: boolean): typeof TYPE_OPTIONS {
+  const filtered = typeOptionsForCategory(category);
+  return typeFromFlag ? TYPE_OPTIONS : filtered;
+}
+
 // Same site list the console offers; the flag accepts any value so orgs on
 // sites not listed here (e.g. newer regions) are not locked out.
 const DATADOG_SITES = [
@@ -549,7 +556,7 @@ export const integrationConnectCommand: Command = {
     },
     {
       flag: '--category <cat>',
-      description: `Only offer integrations in this category: ${CONNECT_CATEGORIES.join(' | ')} (ignored with --type)`,
+      description: `Only offer integrations in this category: ${CONNECT_CATEGORIES.join(' | ')} (--type wins over the filter)`,
       type: 'string',
     },
     { flag: '--site <site>', description: 'Datadog site (e.g. us5.datadoghq.com)', type: 'string' },
@@ -587,7 +594,7 @@ export const integrationConnectCommand: Command = {
     const api = new PolylaneAPI(config);
     const typeFromFlag = getArgString(args, 'type') !== undefined;
     // --type always wins: the category filter only narrows the picker.
-    const typeOptions = typeFromFlag ? TYPE_OPTIONS : typeOptionsForCategory(getArgString(args, 'category'));
+    const typeOptions = resolveTypeOptions(getArgString(args, 'category'), typeFromFlag);
 
     // Type selection restarts whenever the user backs out of the first step of
     // the chosen flow, so nothing is committed until a flow completes.

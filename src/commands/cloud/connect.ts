@@ -93,7 +93,7 @@ async function confirmBrowserConnect(
   config: Config,
   check: (() => Promise<CloudAccount[] | null>) | null,
   label: string,
-  opts: { timeoutMs?: number; intervalMs?: number } = {}
+  opts: { startHint?: string; timeoutMs?: number; intervalMs?: number } = {}
 ): Promise<void> {
   if (!check) {
     if (!config.quiet && config.output !== 'json') {
@@ -232,6 +232,7 @@ async function connectProvider(
       'Connect Kubernetes'
     );
     await confirmBrowserConnect(config, check, 'the agent to register (run the Helm install now)', {
+      startHint: 'Run the Helm install from your console, then come back to this terminal.',
       timeoutMs: 15 * 60_000,
       intervalMs: 5_000,
     });
