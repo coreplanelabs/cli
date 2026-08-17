@@ -1,5 +1,3 @@
-import { readFileSync, existsSync } from 'node:fs';
-
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { PolylaneAPI } from '../../generated/client';
@@ -28,7 +26,6 @@ import {
   cancel,
   note,
   promptSelectOrBack,
-  promptTextOrBack,
   promptConfirmOrBack,
 } from '../../utils/prompt';
 
@@ -54,7 +51,7 @@ const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> 
   { value: 'planetscale', label: 'PlanetScale', hint: 'authorize in the browser, or a service token' },
   { value: 'supabase', label: 'Supabase', hint: 'authorize in the browser' },
   { value: 'modal', label: 'Modal', hint: 'token ID + secret' },
-  { value: 'kubernetes', label: 'Kubernetes', hint: 'kubeconfig file' },
+  { value: 'kubernetes', label: 'Kubernetes', hint: 'in-cluster agent, installed with Helm (console)' },
 ];
 
 // Same region list the console offers; the flag accepts any region so accounts
@@ -215,6 +212,31 @@ async function connectProvider(
     printConnectSuccess(config, result);
     return;
   }
+  if (provider === 'kubernetes') {
+    // The kubeconfig upload no longer exists in the API: Kubernetes connects
+    // through the in-cluster Polylane agent, which registers itself and opens
+    // an outbound tunnel, so there is nothing to paste here. Hand off to the
+    // console's Helm install and wait for the cluster to appear.
+    const docsUrl = 'https://docs.polylane.com/integrations/kubernetes';
+    if (config.output === 'json') {
+      formatOutput(config, { url: docsUrl });
+      return;
+    }
+    const check = canWaitForBrowser(config) ? await accountArrivalCheck(api, workspaceId, 'kubernetes') : null;
+    note(
+      [
+        'Kubernetes connects through the in-cluster Polylane agent: install it with Helm and it registers itself and opens an outbound tunnel. No kubeconfig or token to paste.',
+        'Get the Helm command from your console: Settings > Clouds > Connect > Kubernetes.',
+        `Docs: ${docsUrl}`,
+      ].join('\n'),
+      'Connect Kubernetes'
+    );
+    await confirmBrowserConnect(config, check, 'the agent to register (run the Helm install now)', {
+      timeoutMs: 15 * 60_000,
+      intervalMs: 5_000,
+    });
+    return;
+  }
 
   let body: ConnectBody;
   if (provider === 'aws') {
@@ -336,7 +358,8 @@ async function connectProvider(
     ]);
     if (!ok) return BACK;
     body = { workspaceId, provider: 'render', apiKey };
-  } else if (provider === 'modal') {
+  } else {
+    // modal
     let tokenId = '';
     let tokenSecret = '';
     const ok = await runSteps([
@@ -374,30 +397,6 @@ async function connectProvider(
     ]);
     if (!ok) return BACK;
     body = { workspaceId, provider: 'modal', tokenId, tokenSecret };
-  } else {
-    // kubernetes: send a kubeconfig. The agent-based install (Helm, no
-    // credentials to paste) lives in the console — point at the docs.
-    let kubeconfigPath = getArgString(args, 'kubeconfig');
-    if (kubeconfigPath === undefined) {
-      if (!isInteractive(config.nonInteractive)) {
-        throw new CLIError(`Missing required flag: --kubeconfig`, ExitCode.USAGE);
-      }
-      note(
-        'Polylane uploads this kubeconfig\'s current-context credentials, which are often cluster-admin.\nSafer: a dedicated ServiceAccount bound cluster-wide to the read-only ClusterRole "view", with a long-lived token ("kubectl create token" expires).\n"view" omits Secrets, nodes, persistentvolumes, storageclasses and RBAC objects; grant get/list on those for full inventory.\nPrefer no pasted credentials at all? Install the in-cluster agent (Helm) from the console, see the docs:\n  https://docs.polylane.com/integrations/kubernetes',
-        'Connect Kubernetes'
-      );
-      const answer = await promptTextOrBack(ctx, 'Path to kubeconfig', {
-        defaultValue: '~/.kube/config',
-        placeholder: '~/.kube/config',
-      });
-      if (answer === BACK) return BACK;
-      kubeconfigPath = answer;
-    }
-    const resolved = kubeconfigPath.replace(/^~(?=\/|$)/, process.env.HOME ?? '~');
-    if (!existsSync(resolved)) {
-      throw new CLIError(`kubeconfig not found: ${resolved}`, ExitCode.USAGE);
-    }
-    body = { workspaceId, provider: 'kubernetes', kubeconfig: readFileSync(resolved, 'utf-8') };
   }
 
   // AWS ends in the browser too (deploying the CloudFormation stack), so
@@ -447,8 +446,6 @@ export const cloudConnectCommand: Command = {
     { flag: '--organization <org>', description: 'PlanetScale organization', type: 'string' },
     // Render
     { flag: '--api-key <key>', description: 'Render API key', type: 'string' },
-    // Kubernetes
-    { flag: '--kubeconfig <path>', description: 'Kubernetes: path to a kubeconfig file', type: 'string' },
     { flag: '--no-browser', description: 'AWS / Vercel / PlanetScale / Supabase: print the URL instead of opening it', type: 'boolean' },
   ],
   examples: [
@@ -460,7 +457,7 @@ export const cloudConnectCommand: Command = {
     'polylane cloud connect --provider supabase',
     'polylane cloud connect --provider planetscale --token-id <id> --token <token> --organization <org>',
     'polylane cloud connect --provider modal --token-id ak-... --token-secret as-...',
-    'polylane cloud connect --provider kubernetes --kubeconfig ~/.kube/config',
+    'polylane cloud connect --provider kubernetes',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
