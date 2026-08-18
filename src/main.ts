@@ -33,6 +33,7 @@ const NO_AUTH_COMMANDS = new Set([
   'help',
   'scan',
   'setup',
+  'map',
   'update',
   'version',
   'api list',
