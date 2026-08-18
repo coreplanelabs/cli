@@ -34,6 +34,7 @@ const RESOURCE_ORDER: Record<string, ResourceGroup> = {
   workspace: { name: 'workspace', description: 'Workspaces', order: 70 },
   auth: { name: 'auth', description: 'Authentication (login, status, logout)', order: 80 },
   setup: { name: 'setup', description: 'Wire the CLI into coding agents (agent skill + MCP server)', order: 85 },
+  map: { name: 'map', description: 'Map this repository into your workspace using your coding agent', order: 86 },
   config: { name: 'config', description: 'CLI configuration', order: 90 },
   telemetry: { name: 'telemetry', description: 'Anonymous usage telemetry (status/enable/disable)', order: 95 },
   api: { name: 'api', description: 'Raw API access (advanced)', order: 100 },

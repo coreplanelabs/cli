@@ -55,6 +55,7 @@ describe('command resolution', () => {
       'help',
       'integration',
       'issue',
+      'map',
       'memory',
       'note',
       'repo',

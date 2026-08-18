@@ -4,6 +4,7 @@ import { configCommands } from './config';
 import { helpCommand } from './help';
 import { scanCommand } from './scan';
 import { setupCommand } from './setup';
+import { mapCommand } from './map';
 import { updateCommand } from './update';
 import { feedCommands } from './feed';
 import { issueCommands } from './issue';
@@ -52,6 +53,7 @@ export function registerAllCommands(): void {
     helpCommand,
     scanCommand,
     setupCommand,
+    mapCommand,
     updateCommand,
   ];
 
