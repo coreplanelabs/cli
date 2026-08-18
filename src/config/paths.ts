@@ -8,6 +8,7 @@ export const CREDENTIALS_FILE = join(CONFIG_DIR, 'credentials.json');
 export const UPDATE_STATE_FILE = join(CONFIG_DIR, 'update-state.json');
 export const TELEMETRY_STATE_FILE = join(CONFIG_DIR, 'telemetry.json');
 export const INSTALL_REF_FILE = join(CONFIG_DIR, 'ref');
+export const ONBOARDING_RUN_FILE = join(CONFIG_DIR, 'onboarding-run');
 
 export function ensureConfigDir(): void {
   ensureDir(CONFIG_DIR, 0o700);

@@ -6,7 +6,9 @@ import { promptPassword, promptSelect, promptText, intro, outro, note } from '..
 import { isInteractive } from '../../utils/env';
 import { oauthLogin, selectWorkspace, type WhoamiResult } from './login';
 import { writeCredentials } from '../../auth/credentials';
+import { resolveOnboardingRunId, consumeOnboardingRunFile } from '../../auth/onboarding-run';
 import { parseSessionExpiresAt } from '../../auth/signup-helpers';
+import { readInstallRef } from '../../telemetry/environment';
 import type { OAuthCredential } from '../../auth/types';
 import { writeConfigFile } from '../../config/loader';
 import { request, requestJson } from '../../client/http';
@@ -225,16 +227,27 @@ async function emailSignup(config: Config, args: Record<string, unknown>): Promi
   // it returns a fresh session token. Agents can re-invoke `auth signup` with
   // the same credentials to renew, or (better) create an API key after first
   // signup and switch to it.
+  // Attribution ride-alongs: the install referral slug (~/.polylane/ref) and
+  // the pre-auth onboarding run identifier. The server drops invalid values
+  // and never rejects on them.
+  const ref = readInstallRef();
+  const run = resolveOnboardingRunId();
   const res = await request(config, {
     method: 'POST',
     url: '/v1/auth/signup',
-    body: { email, password },
+    body: { email, password, ...(ref ? { ref } : {}), ...(run ? { run } : {}) },
     noAuth: true,
   });
   const json = (await res.json()) as SignupEnvelope;
   if (!res.ok || !json.success) {
     throw new CLIError(json.error?.detail ?? json.error?.message ?? 'Signup did not complete', ExitCode.GENERAL);
   }
+  // The run id (if any) rode this signup request and the server has bound it —
+  // on both the created and existing-account paths. Consume the one-shot file so
+  // it can't re-stamp future signups on this machine. Never under --dry-run: the
+  // request was stubbed (no bind happened), so deleting the file would spend the
+  // one-shot run id without ever carrying it to the server.
+  if (!config.dryRun) consumeOnboardingRunFile();
   const { user, token } = json.result;
   if (!user) {
     // dry-run stub or unexpected server response

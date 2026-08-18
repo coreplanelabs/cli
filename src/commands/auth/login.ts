@@ -4,6 +4,7 @@ import type { GlobalFlags } from '../../types/flags';
 import { promptPassword, promptSelect, intro, outro } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
 import { oauthBrowserFlow, oauthDeviceCodeFlow, type BrowserFlowOptions } from '../../auth/oauth';
+import { consumeOnboardingRunFile } from '../../auth/onboarding-run';
 import { writeCredentials } from '../../auth/credentials';
 import type { OAuthCredential } from '../../auth/types';
 import { writeConfigFile } from '../../config/loader';
@@ -148,6 +149,12 @@ export async function oauthLogin(
     ...(account ? { account } : {}),
   };
   writeCredentials(cred);
+  // Both OAuth flows above forwarded any resolved run id to the server on the
+  // console URLs, so the CLI has done its part. Consume the one-shot file now —
+  // whether or not the console bound it server-side yet — so it can't re-stamp a
+  // future login on this machine. Never under --dry-run: nothing was sent, so the
+  // one-shot run id must survive for the real login.
+  if (!config.dryRun) consumeOnboardingRunFile();
 
   const configWithAuth: Config = { ...config };
   try {

@@ -39,8 +39,8 @@
     "pretypecheck": "npm run codegen",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ codegen/",
-    "test": "node --test --import tsx test/*.test.ts",
-    "test:watch": "node --test --watch --import tsx test/*.test.ts"
+    "test": "node --test --experimental-test-module-mocks --import tsx test/*.test.ts",
+    "test:watch": "node --test --watch --experimental-test-module-mocks --import tsx test/*.test.ts"
   },
   "dependencies": {
     "@clack/prompts": "^0.7.0",
