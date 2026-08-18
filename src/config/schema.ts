@@ -6,6 +6,8 @@ export interface Config {
   apiKey?: string;
   domain: string;
   workspaceId?: string;
+  /** Primary coding agent id (an AGENTS registry id, e.g. "claude", "cursor"). */
+  agent?: string;
   output: OutputFormat;
   timeout: number;
   verbose: boolean;
@@ -20,6 +22,7 @@ export interface RawConfig {
   api_key?: string;
   domain?: string;
   workspace_id?: string;
+  agent?: string;
   output?: OutputFormat;
   timeout?: number;
   telemetry?: boolean;

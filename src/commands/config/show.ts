@@ -17,6 +17,7 @@ export const configShowCommand: Command = {
     const result = {
       domain: config.domain,
       workspaceId: config.workspaceId ?? null,
+      agent: config.agent ?? null,
       output: config.output,
       timeout: config.timeout,
       apiKey: config.apiKey ? maskToken(config.apiKey) : null,
