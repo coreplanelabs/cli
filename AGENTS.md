@@ -2,6 +2,11 @@
 
 Guidance for AI coding assistants working **on** this repo. For guidance on how to *use* the CLI as an agent, see [skill/SKILL.md](skill/SKILL.md).
 
+## Reviewing pull requests
+
+Review sessions MUST follow the required procedure in [`REVIEW.md`](REVIEW.md). It
+also carries the LGTM verdict contract the auto-approve workflow depends on.
+
 ## Project overview
 
 - **Name:** `@coreplane/polylane` on npm — binary still invoked as `polylane`
