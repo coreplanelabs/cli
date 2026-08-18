@@ -30,7 +30,9 @@ function readOnboardingRunFile(): string | null {
 export function resolveOnboardingRunId(): string | null {
   // build.ts excludes POLYLANE_ONBOARDING_RUN from its esbuild `define` sweep
   // (see DEFINE_EXCLUDE there), so this env read is never frozen into the bundle
-  // and always resolves at runtime. The indexed access is a secondary safeguard.
+  // and always resolves at runtime. That exclusion is the only guarantee — the
+  // bracket access is not a fallback, since esbuild bakes indexed reads
+  // identically to dotted ones when the key is in the define map.
   return sanitize(process.env['POLYLANE_ONBOARDING_RUN']) ?? sanitize(readOnboardingRunFile());
 }
 

@@ -244,8 +244,10 @@ async function emailSignup(config: Config, args: Record<string, unknown>): Promi
   }
   // The run id (if any) rode this signup request and the server has bound it —
   // on both the created and existing-account paths. Consume the one-shot file so
-  // it can't re-stamp future signups on this machine.
-  consumeOnboardingRunFile();
+  // it can't re-stamp future signups on this machine. Never under --dry-run: the
+  // request was stubbed (no bind happened), so deleting the file would spend the
+  // one-shot run id without ever carrying it to the server.
+  if (!config.dryRun) consumeOnboardingRunFile();
   const { user, token } = json.result;
   if (!user) {
     // dry-run stub or unexpected server response

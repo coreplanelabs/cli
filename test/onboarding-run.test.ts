@@ -130,14 +130,14 @@ describe('buildBrowserFlowUrls', () => {
 
 describe('auth signup attribution forwarding', () => {
   const originalFetch = globalThis.fetch;
-  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
   const originalStderrWrite = process.stderr.write.bind(process.stderr);
   let signupBody: Record<string, unknown> | null = null;
 
   before(() => {
-    const swallow = ((_chunk: unknown): boolean => true) as typeof process.stdout.write;
-    process.stdout.write = swallow;
-    process.stderr.write = swallow;
+    // Swallow only stderr (the CLI writes its progress there). Leave stdout
+    // alone so node:test's own reporter stream stays intact and the run count
+    // is reported correctly.
+    process.stderr.write = ((_chunk: unknown): boolean => true) as typeof process.stderr.write;
   });
 
   beforeEach(() => {
@@ -169,12 +169,11 @@ describe('auth signup attribution forwarding', () => {
 
   after(() => {
     globalThis.fetch = originalFetch;
-    process.stdout.write = originalStdoutWrite;
     process.stderr.write = originalStderrWrite;
   });
 
-  async function runSignup(): Promise<void> {
-    await authSignupCommand.execute(mockConfig({ telemetry: false }), {} as GlobalFlags, {
+  async function runSignup(config = mockConfig({ telemetry: false })): Promise<void> {
+    await authSignupCommand.execute(config, {} as GlobalFlags, {
       email: 'dev@acme.com',
       password: 'Sup3r$ecret!',
     });
@@ -209,6 +208,15 @@ describe('auth signup attribution forwarding', () => {
     assert.equal(existsSync(RUN_FILE), false);
     assert.equal(resolveOnboardingRunId(), null);
   });
+
+  it('keeps the onboarding-run file under --dry-run (no request, no bind)', async () => {
+    writeFileSync(RUN_FILE, FILE_RUN);
+    await runSignup(mockConfig({ telemetry: false, dryRun: true }));
+    // The request was stubbed, so the one-shot run id must survive for the real signup.
+    assert.equal(signupBody, null);
+    assert.equal(existsSync(RUN_FILE), true);
+    assert.equal(resolveOnboardingRunId(), FILE_RUN);
+  });
 });
 
 describe('oauthDeviceCodeFlow verification link', () => {
@@ -226,6 +234,7 @@ describe('oauthDeviceCodeFlow verification link', () => {
   beforeEach(() => {
     stderr = '';
     delete process.env.POLYLANE_ONBOARDING_RUN;
+    rmSync(RUN_FILE, { force: true });
   });
 
   after(() => {
@@ -279,13 +288,11 @@ describe('oauthDeviceCodeFlow verification link', () => {
 
 describe('oauthLogin one-shot run cleanup', () => {
   const originalFetch = globalThis.fetch;
-  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
   const originalStderrWrite = process.stderr.write.bind(process.stderr);
 
   before(() => {
-    const swallow = ((_chunk: unknown): boolean => true) as typeof process.stdout.write;
-    process.stdout.write = swallow;
-    process.stderr.write = swallow;
+    // Swallow only stderr; leave stdout (node:test's reporter stream) intact.
+    process.stderr.write = ((_chunk: unknown): boolean => true) as typeof process.stderr.write;
   });
 
   beforeEach(() => {
@@ -329,7 +336,6 @@ describe('oauthLogin one-shot run cleanup', () => {
 
   after(() => {
     globalThis.fetch = originalFetch;
-    process.stdout.write = originalStdoutWrite;
     process.stderr.write = originalStderrWrite;
   });
 
@@ -339,5 +345,12 @@ describe('oauthLogin one-shot run cleanup', () => {
     await oauthLogin(mockConfig(), false);
     assert.equal(existsSync(RUN_FILE), false);
     assert.equal(resolveOnboardingRunId(), null);
+  });
+
+  it('keeps the run file when the login runs under --dry-run', async () => {
+    writeFileSync(RUN_FILE, FILE_RUN);
+    await oauthLogin(mockConfig({ dryRun: true }), false);
+    assert.equal(existsSync(RUN_FILE), true);
+    assert.equal(resolveOnboardingRunId(), FILE_RUN);
   });
 });

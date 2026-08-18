@@ -151,7 +151,8 @@ export async function oauthLogin(
   writeCredentials(cred);
   // Both OAuth flows above forwarded any resolved run id to the server, which
   // binds it on completion. Consume the one-shot file now that the bind stuck.
-  consumeOnboardingRunFile();
+  // Never under --dry-run: no bind happened, so the one-shot run id must survive.
+  if (!config.dryRun) consumeOnboardingRunFile();
 
   const configWithAuth: Config = { ...config };
   try {
