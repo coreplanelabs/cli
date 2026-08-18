@@ -1,6 +1,6 @@
 import type { Config } from '../config/schema';
 import type { OAuthCredential, OAuthTokenResponse } from './types';
-import { DEFAULT_CLIENT_ID, DEFAULT_CLIENT_SECRET } from './oauth';
+import { oauthClientId, oauthClientSecret } from './oauth';
 import { writeCredentials } from './credentials';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
@@ -24,8 +24,8 @@ export async function refreshToken(
     body: JSON.stringify({
       grant_type: 'refresh_token',
       refresh_token: cred.refreshToken,
-      client_id: DEFAULT_CLIENT_ID,
-      client_secret: DEFAULT_CLIENT_SECRET,
+      client_id: oauthClientId(),
+      client_secret: oauthClientSecret(),
     }),
   });
 

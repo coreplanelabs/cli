@@ -15,8 +15,24 @@ const BROWSER_TIMEOUT_MS = 120_000;
 // Creating an account (provider round-trip + consent) takes longer than a sign-in.
 const SIGNUP_BROWSER_TIMEOUT_MS = 300_000;
 
-export const DEFAULT_CLIENT_ID = process.env.POLYLANE_OAUTH_CLIENT_ID || 'polylane-cli';
-export const DEFAULT_CLIENT_SECRET = process.env.POLYLANE_OAUTH_CLIENT_SECRET || '';
+// The dotted process.env reads below are frozen into the bundle by build.ts's
+// esbuild define sweep — they carry the per-release first-party client (CI
+// injects the prod id/secret). The reads through the `env` alias are invisible
+// to that sweep (esbuild only rewrites syntactic `process.env.X` accesses, the
+// same reason loadConfig's env overrides work), so POLYLANE_OAUTH_CLIENT_ID /
+// _SECRET set at runtime still override the baked values — required to sign in
+// against non-prod environments without a rebuild.
+const BAKED_CLIENT_ID = process.env.POLYLANE_OAUTH_CLIENT_ID || 'polylane-cli';
+const BAKED_CLIENT_SECRET = process.env.POLYLANE_OAUTH_CLIENT_SECRET || '';
+const env = process.env;
+
+export function oauthClientId(): string {
+  return env.POLYLANE_OAUTH_CLIENT_ID || BAKED_CLIENT_ID;
+}
+
+export function oauthClientSecret(): string {
+  return env.POLYLANE_OAUTH_CLIENT_SECRET || BAKED_CLIENT_SECRET;
+}
 
 // Full set of permission scopes requested by the CLI.
 export const DEFAULT_SCOPES = [
@@ -366,8 +382,8 @@ export function buildBrowserFlowUrls(
 ): BrowserFlowUrls {
   const runId = resolveOnboardingRunId();
 
-  const authUrl = new URL(`${consoleBaseUrl(config)}/oauth/${encodeURIComponent(DEFAULT_CLIENT_ID)}`);
-  authUrl.searchParams.set('client_id', DEFAULT_CLIENT_ID);
+  const authUrl = new URL(`${consoleBaseUrl(config)}/oauth/${encodeURIComponent(oauthClientId())}`);
+  authUrl.searchParams.set('client_id', oauthClientId());
   authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
   authUrl.searchParams.set('scope', DEFAULT_SCOPES);
   authUrl.searchParams.set('state', state);
@@ -421,8 +437,8 @@ export async function oauthBrowserFlow(
       grant_type: 'authorization_code',
       code,
       redirect_uri: REDIRECT_URI,
-      client_id: DEFAULT_CLIENT_ID,
-      client_secret: DEFAULT_CLIENT_SECRET,
+      client_id: oauthClientId(),
+      client_secret: oauthClientSecret(),
       code_verifier: verifier,
     }),
   });
@@ -447,7 +463,7 @@ export async function oauthDeviceCodeFlow(config: Config): Promise<OAuthTokenRes
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      client_id: DEFAULT_CLIENT_ID,
+      client_id: oauthClientId(),
       scope: DEFAULT_SCOPES,
     }),
   });
@@ -491,8 +507,8 @@ export async function oauthDeviceCodeFlow(config: Config): Promise<OAuthTokenRes
       body: JSON.stringify({
         grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
         device_code: deviceData.device_code,
-        client_id: DEFAULT_CLIENT_ID,
-        client_secret: DEFAULT_CLIENT_SECRET,
+        client_id: oauthClientId(),
+        client_secret: oauthClientSecret(),
       }),
     });
 
@@ -527,8 +543,8 @@ export async function revokeToken(config: Config, token: string): Promise<void> 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       token,
-      client_id: DEFAULT_CLIENT_ID,
-      client_secret: DEFAULT_CLIENT_SECRET,
+      client_id: oauthClientId(),
+      client_secret: oauthClientSecret(),
     }),
   }).catch(() => {
     // Best effort
