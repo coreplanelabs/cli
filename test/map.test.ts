@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { onPath, resolveRunnable } from '../src/commands/map';
+import { onPath, resolveRunnable, runMapping } from '../src/commands/map';
 import { AGENTS, MAPPING_PROMPT, agentById, type AgentSetup } from '../src/agents/registry';
 
 function fakeAgent(id: string, hasRecipe: boolean, bin = `${id}-bin`): AgentSetup {
@@ -101,6 +101,27 @@ describe('headlessRun recipes', () => {
   it('every recipe binary differs from a bare agent id where the CLI is named differently', () => {
     // Cursor's binary is cursor-agent, not "cursor" — guard against a regression.
     assert.equal(agentById('cursor')?.headlessRun?.bin, 'cursor-agent');
+  });
+});
+
+describe('runMapping', () => {
+  it('reports a signal-killed agent as a failure, not a success', async () => {
+    const res = await runMapping('sh', ['-c', 'kill -KILL $$'], undefined, () => {});
+    // A signal death delivers code === null; it must not be mapped to 0.
+    assert.equal(res.code, null);
+    assert.ok(res.signal, 'expected a signal to be reported');
+  });
+
+  it('reports a non-zero exit as the exit code', async () => {
+    const res = await runMapping('sh', ['-c', 'exit 3'], undefined, () => {});
+    assert.equal(res.code, 3);
+    assert.equal(res.signal, null);
+  });
+
+  it('captures output and reports a clean exit', async () => {
+    const res = await runMapping('sh', ['-c', 'echo hello; exit 0'], undefined, () => {});
+    assert.equal(res.code, 0);
+    assert.ok(res.output.includes('hello'));
   });
 });
 
