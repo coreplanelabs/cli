@@ -4,6 +4,7 @@ import type { GlobalFlags } from '../../types/flags';
 import { promptPassword, promptSelect, intro, outro } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
 import { oauthBrowserFlow, oauthDeviceCodeFlow, type BrowserFlowOptions } from '../../auth/oauth';
+import { consumeOnboardingRunFile } from '../../auth/onboarding-run';
 import { writeCredentials } from '../../auth/credentials';
 import type { OAuthCredential } from '../../auth/types';
 import { writeConfigFile } from '../../config/loader';
@@ -148,6 +149,9 @@ export async function oauthLogin(
     ...(account ? { account } : {}),
   };
   writeCredentials(cred);
+  // Both OAuth flows above forwarded any resolved run id to the server, which
+  // binds it on completion. Consume the one-shot file now that the bind stuck.
+  consumeOnboardingRunFile();
 
   const configWithAuth: Config = { ...config };
   try {

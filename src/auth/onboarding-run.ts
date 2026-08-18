@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { ONBOARDING_RUN_FILE } from '../config/paths';
 
 // Pre-auth onboarding run identifier minted by the website installer, mirroring
@@ -28,9 +28,24 @@ function readOnboardingRunFile(): string | null {
 }
 
 export function resolveOnboardingRunId(): string | null {
-  // Indexed access on purpose: the build bakes dotted `process.env.POLYLANE_*`
-  // reads into the bundle via esbuild define; this must stay a runtime read.
+  // build.ts excludes POLYLANE_ONBOARDING_RUN from its esbuild `define` sweep
+  // (see DEFINE_EXCLUDE there), so this env read is never frozen into the bundle
+  // and always resolves at runtime. The indexed access is a secondary safeguard.
   return sanitize(process.env['POLYLANE_ONBOARDING_RUN']) ?? sanitize(readOnboardingRunFile());
+}
+
+// The onboarding run funnel join is one-shot: once an auth flow has carried the
+// run id to the server (which binds it to the account), the ~/.polylane/onboarding-run
+// file is spent and must not stamp every future signup/login on this machine —
+// including re-auths and other accounts on a shared machine. Delete it after a
+// carrying flow completes. Missing file is fine; never let cleanup fail an auth
+// flow. The env var is left untouched — it is explicit per-invocation.
+export function consumeOnboardingRunFile(): void {
+  try {
+    rmSync(ONBOARDING_RUN_FILE, { force: true });
+  } catch {
+    // Best effort — a stale run file is harmless next to a completed auth.
+  }
 }
 
 export function withOnboardingRun(uri: string, runId: string | null): string {

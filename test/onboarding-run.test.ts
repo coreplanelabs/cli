@@ -1,6 +1,6 @@
 import { describe, it, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -24,6 +24,7 @@ const FILE_RUN = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const { resolveOnboardingRunId, withOnboardingRun } = await import('../src/auth/onboarding-run');
 const { buildBrowserFlowUrls, oauthDeviceCodeFlow } = await import('../src/auth/oauth');
 const { authSignupCommand } = await import('../src/commands/auth/signup');
+const { oauthLogin } = await import('../src/commands/auth/login');
 const { mockConfig } = await import('./helpers/config');
 
 import type { GlobalFlags } from '../src/types/flags';
@@ -198,6 +199,16 @@ describe('auth signup attribution forwarding', () => {
     await runSignup();
     assert.equal('run' in (signupBody ?? {}), false);
   });
+
+  it('consumes the onboarding-run file once signup carries it to the bind', async () => {
+    writeFileSync(RUN_FILE, FILE_RUN);
+    assert.equal(resolveOnboardingRunId(), FILE_RUN);
+    await runSignup();
+    // The run rode the signup request, and the file is spent afterwards.
+    assert.equal(signupBody?.run, FILE_RUN);
+    assert.equal(existsSync(RUN_FILE), false);
+    assert.equal(resolveOnboardingRunId(), null);
+  });
 });
 
 describe('oauthDeviceCodeFlow verification link', () => {
@@ -263,5 +274,70 @@ describe('oauthDeviceCodeFlow verification link', () => {
     await oauthDeviceCodeFlow(mockConfig());
     assert.ok(stderr.includes('https://console.example.test/activate\n'));
     assert.ok(!stderr.includes('run='));
+  });
+});
+
+describe('oauthLogin one-shot run cleanup', () => {
+  const originalFetch = globalThis.fetch;
+  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
+  before(() => {
+    const swallow = ((_chunk: unknown): boolean => true) as typeof process.stdout.write;
+    process.stdout.write = swallow;
+    process.stderr.write = swallow;
+  });
+
+  beforeEach(() => {
+    delete process.env.POLYLANE_ONBOARDING_RUN;
+    rmSync(RUN_FILE, { force: true });
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes('/.well-known/openid-configuration')) {
+        return Response.json({ token_endpoint: 'https://api.example.test/v1/oauth/token' });
+      }
+      if (url.includes('/v1/oauth/device/code')) {
+        return Response.json({
+          device_code: 'dev_code',
+          user_code: 'BDFG2345',
+          verification_uri: 'https://console.example.test/activate',
+          expires_in: 60,
+          interval: 0,
+        });
+      }
+      if (url.includes('/v1/oauth/token')) {
+        return Response.json({
+          access_token: 'at',
+          refresh_token: 'rt',
+          token_type: 'Bearer',
+          expires_in: 3600,
+          scope: '',
+        });
+      }
+      if (url.includes('/v1/oauth/userinfo')) {
+        return Response.json({ email: 'dev@acme.com', sub: 'user_1' });
+      }
+      if (url.includes('/v1/auth/whoami')) {
+        return Response.json({ success: true, error: null, result: { id: 'user_1', email: 'dev@acme.com' } });
+      }
+      if (url.includes('/v1/workspaces')) {
+        return Response.json({ success: true, error: null, result: { items: [], count: 0 } });
+      }
+      throw new Error(`Unexpected request in test: ${url}`);
+    }) as typeof fetch;
+  });
+
+  after(() => {
+    globalThis.fetch = originalFetch;
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
+  });
+
+  it('removes the run file after a device-code login completes', async () => {
+    writeFileSync(RUN_FILE, FILE_RUN);
+    assert.equal(resolveOnboardingRunId(), FILE_RUN);
+    await oauthLogin(mockConfig(), false);
+    assert.equal(existsSync(RUN_FILE), false);
+    assert.equal(resolveOnboardingRunId(), null);
   });
 });

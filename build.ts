@@ -23,14 +23,22 @@ async function main(): Promise<void> {
   const define: Record<string, string> = {
     'process.env.POLYLANE_CLI_VERSION': JSON.stringify(version),
   };
-  // Bake every POLYLANE_* env var visible at build time into the bundle, so the
-  // produced binary works without needing those vars set at runtime.
+  // POLYLANE_ONBOARDING_RUN is a per-install runtime value (the website installer
+  // sets it, or ~/.polylane/onboarding-run holds it) resolved fresh on every
+  // invocation — it must NEVER be baked. esbuild `define` freezes a matching key
+  // regardless of dotted or bracket access, so a build machine that happened to
+  // have it set (e.g. .env.local) would otherwise stamp one run id into the
+  // bundle for every user. Exclude it from the sweep so no define ever matches.
+  const DEFINE_EXCLUDE = new Set(['POLYLANE_ONBOARDING_RUN']);
+  // Bake every other POLYLANE_* env var visible at build time into the bundle, so
+  // the produced binary works without needing those vars set at runtime.
   // - Locally: comes from .env.local (gitignored — your dev domain / dev OAuth)
   // - In CI release: comes from GitHub repo secrets exposed in the workflow
   // - Clean checkout with no env: bundle uses the prod fallbacks in source
   const baked: string[] = [];
   for (const [k, v] of Object.entries(process.env)) {
     if (!k.startsWith('POLYLANE_') || v === undefined) continue;
+    if (DEFINE_EXCLUDE.has(k)) continue;
     define[`process.env.${k}`] = JSON.stringify(v);
     baked.push(k);
   }

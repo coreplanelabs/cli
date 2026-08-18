@@ -6,7 +6,7 @@ import { promptPassword, promptSelect, promptText, intro, outro, note } from '..
 import { isInteractive } from '../../utils/env';
 import { oauthLogin, selectWorkspace, type WhoamiResult } from './login';
 import { writeCredentials } from '../../auth/credentials';
-import { resolveOnboardingRunId } from '../../auth/onboarding-run';
+import { resolveOnboardingRunId, consumeOnboardingRunFile } from '../../auth/onboarding-run';
 import { parseSessionExpiresAt } from '../../auth/signup-helpers';
 import { readInstallRef } from '../../telemetry/environment';
 import type { OAuthCredential } from '../../auth/types';
@@ -242,6 +242,10 @@ async function emailSignup(config: Config, args: Record<string, unknown>): Promi
   if (!res.ok || !json.success) {
     throw new CLIError(json.error?.detail ?? json.error?.message ?? 'Signup did not complete', ExitCode.GENERAL);
   }
+  // The run id (if any) rode this signup request and the server has bound it —
+  // on both the created and existing-account paths. Consume the one-shot file so
+  // it can't re-stamp future signups on this machine.
+  consumeOnboardingRunFile();
   const { user, token } = json.result;
   if (!user) {
     // dry-run stub or unexpected server response
