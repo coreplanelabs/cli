@@ -13,6 +13,7 @@ describe('loadConfig', () => {
     delete process.env.POLYLANE_TIMEOUT;
     delete process.env.POLYLANE_OUTPUT;
     delete process.env.POLYLANE_VERBOSE;
+    delete process.env.POLYLANE_AGENT;
   });
 
   afterEach(() => {
@@ -45,5 +46,17 @@ describe('loadConfig', () => {
   it('respects verbose flag', () => {
     const config = loadConfig({ verbose: true } as GlobalFlags);
     assert.equal(config.verbose, true);
+  });
+
+  it('reads the primary agent from env', () => {
+    process.env.POLYLANE_AGENT = 'cursor';
+    const config = loadConfig({} as GlobalFlags);
+    assert.equal(config.agent, 'cursor');
+  });
+
+  it('drops an unknown agent id instead of throwing', () => {
+    process.env.POLYLANE_AGENT = 'not-an-agent';
+    const config = loadConfig({} as GlobalFlags);
+    assert.equal(config.agent, undefined);
   });
 });

@@ -8,11 +8,12 @@ import {
   validateWorkspaceId,
 } from '../../config/schema';
 import { writeConfigFile } from '../../config/loader';
+import { validateAgentId } from '../../agents/registry';
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { requireArg } from '../helpers';
 
-const VALID_KEYS = new Set(['domain', 'workspace_id', 'api_key', 'output', 'timeout', 'telemetry']);
+const VALID_KEYS = new Set(['domain', 'workspace_id', 'api_key', 'agent', 'output', 'timeout', 'telemetry']);
 
 export const configSetCommand: Command = {
   name: 'config set',
@@ -51,6 +52,10 @@ export const configSetCommand: Command = {
       case 'api_key':
         validateApiKey(value);
         partial.api_key = value;
+        break;
+      case 'agent':
+        validateAgentId(value);
+        partial.agent = value;
         break;
       case 'output': {
         validateOutput(value);
