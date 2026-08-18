@@ -1,4 +1,4 @@
-import { describe, it, before, beforeEach, after } from 'node:test';
+import { describe, it, before, beforeEach, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -23,6 +23,27 @@ const FILE_RUN = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
 const { resolveOnboardingRunId, withOnboardingRun } = await import('../src/auth/onboarding-run');
 const { buildBrowserFlowUrls, oauthDeviceCodeFlow } = await import('../src/auth/oauth');
+
+// The exercised commands (`auth signup`, `oauthLogin`) print human-facing chrome
+// through clack (intro/outro/note, in src/utils/prompt.ts) and formatOutput. Under
+// node:test's process isolation the child streams its V8-serialized reporter frames
+// over stdout, so a raw CLI write there can land mid-frame and crash the parent's
+// deserializer ("Unable to deserialize cloned data") — surfacing as a spurious
+// `not ok` for the whole file. Intercepting process.stdout.write itself is the wrong
+// cure (it eats the reporter's own frames and miscounts the run); instead stub only
+// the CLI's own output functions to no-ops, via module mocking, before importing the
+// commands that bind them. Their output is not what these tests assert on — the
+// run/ref forwarding and the one-shot file cleanup are.
+const realPrompt = await import('../src/utils/prompt');
+const realFormatter = await import('../src/output/formatter');
+const noop = (): void => {};
+mock.module('../src/utils/prompt', {
+  namedExports: { ...realPrompt, intro: noop, outro: noop, note: noop, cancel: noop },
+});
+mock.module('../src/output/formatter', {
+  namedExports: { ...realFormatter, formatOutput: noop },
+});
+
 const { authSignupCommand } = await import('../src/commands/auth/signup');
 const { oauthLogin } = await import('../src/commands/auth/login');
 const { mockConfig } = await import('./helpers/config');
@@ -134,9 +155,10 @@ describe('auth signup attribution forwarding', () => {
   let signupBody: Record<string, unknown> | null = null;
 
   before(() => {
-    // Swallow only stderr (the CLI writes its progress there). Leave stdout
-    // alone so node:test's own reporter stream stays intact and the run count
-    // is reported correctly.
+    // Swallow only stderr (the CLI writes its spinner/progress there). Stdout is
+    // never intercepted here — it carries node:test's own reporter frames — and the
+    // CLI's stdout chrome (intro/outro/note/formatOutput) is neutralised by the
+    // module mocks registered at the top of this file.
     process.stderr.write = ((_chunk: unknown): boolean => true) as typeof process.stderr.write;
   });
 
@@ -291,7 +313,8 @@ describe('oauthLogin one-shot run cleanup', () => {
   const originalStderrWrite = process.stderr.write.bind(process.stderr);
 
   before(() => {
-    // Swallow only stderr; leave stdout (node:test's reporter stream) intact.
+    // Swallow only stderr; stdout (node:test's reporter stream) is never touched,
+    // and the CLI's stdout chrome is neutralised by the top-level module mocks.
     process.stderr.write = ((_chunk: unknown): boolean => true) as typeof process.stderr.write;
   });
 
