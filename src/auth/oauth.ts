@@ -2,6 +2,8 @@ import { createServer } from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
 import type { Config } from '../config/schema';
 import { openBrowser } from '../utils/browser';
+import { readInstallRef } from '../telemetry/environment';
+import { ONBOARDING_RUN_QUERY_PARAM, resolveOnboardingRunId, withOnboardingRun } from './onboarding-run';
 import type { OAuthTokenResponse, OIDCConfig } from './types';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
@@ -350,14 +352,19 @@ export interface BrowserFlowOptions {
   provider?: 'google' | 'github';
 }
 
-export async function oauthBrowserFlow(
+export interface BrowserFlowUrls {
+  authUrl: URL;
+  openUrl: URL;
+  timeoutMs: number;
+}
+
+export function buildBrowserFlowUrls(
   config: Config,
+  state: string,
+  challenge: string,
   options: BrowserFlowOptions = {}
-): Promise<OAuthTokenResponse> {
-  const oidc = await fetchOIDCConfig(config.domain);
-  const verifier = generateCodeVerifier();
-  const challenge = generateCodeChallenge(verifier);
-  const state = generateState();
+): BrowserFlowUrls {
+  const runId = resolveOnboardingRunId();
 
   const authUrl = new URL(`${consoleBaseUrl(config)}/oauth/${encodeURIComponent(DEFAULT_CLIENT_ID)}`);
   authUrl.searchParams.set('client_id', DEFAULT_CLIENT_ID);
@@ -367,6 +374,9 @@ export async function oauthBrowserFlow(
   authUrl.searchParams.set('code_challenge', challenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
   authUrl.searchParams.set('response_type', 'code');
+  // The onboarding run identifier rides the console URLs so the sign-in the
+  // browser completes there can bind the pre-auth funnel to the account.
+  if (runId) authUrl.searchParams.set(ONBOARDING_RUN_QUERY_PARAM, runId);
 
   let openUrl = authUrl;
   let timeoutMs = BROWSER_TIMEOUT_MS;
@@ -374,8 +384,27 @@ export async function oauthBrowserFlow(
     openUrl = new URL(`${consoleBaseUrl(config)}/signup`);
     openUrl.searchParams.set('redirect', `${authUrl.pathname}${authUrl.search}`);
     if (options.provider) openUrl.searchParams.set('provider', options.provider);
+    // The console captures ?ref= into its first-touch cookie and forwards it to
+    // the signup routes, so the install referral survives the browser hop.
+    const ref = readInstallRef();
+    if (ref) openUrl.searchParams.set('ref', ref);
+    if (runId) openUrl.searchParams.set(ONBOARDING_RUN_QUERY_PARAM, runId);
     timeoutMs = SIGNUP_BROWSER_TIMEOUT_MS;
   }
+
+  return { authUrl, openUrl, timeoutMs };
+}
+
+export async function oauthBrowserFlow(
+  config: Config,
+  options: BrowserFlowOptions = {}
+): Promise<OAuthTokenResponse> {
+  const oidc = await fetchOIDCConfig(config.domain);
+  const verifier = generateCodeVerifier();
+  const challenge = generateCodeChallenge(verifier);
+  const state = generateState();
+
+  const { openUrl, timeoutMs } = buildBrowserFlowUrls(config, state, challenge, options);
 
   const verb = options.signupEntry ? 'create your account' : 'sign in';
   process.stderr.write(`Opening your browser to ${verb}…\n`);
@@ -440,8 +469,13 @@ export async function oauthDeviceCodeFlow(config: Config): Promise<OAuthTokenRes
     interval: number;
   };
 
+  // The consent page reads ?run= off the verification link and carries it into
+  // the approval, binding the pre-auth onboarding funnel to the account.
+  const runId = resolveOnboardingRunId();
+  const verificationUri = withOnboardingRun(deviceData.verification_uri, runId);
+
   process.stderr.write(`\nTo sign in, visit:\n`);
-  process.stderr.write(`  ${deviceData.verification_uri}\n\n`);
+  process.stderr.write(`  ${verificationUri}\n\n`);
   process.stderr.write(`And enter the code: ${deviceData.user_code}\n\n`);
   process.stderr.write(`Waiting for authorization…\n`);
 
