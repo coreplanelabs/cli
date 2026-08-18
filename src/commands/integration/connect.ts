@@ -28,7 +28,6 @@ import {
   note,
   promptSelectOrBack,
   promptPasswordOrBack,
-  promptConfirmOrBack,
 } from '../../utils/prompt';
 
 type ConnectBody = Parameters<PolylaneAPI['integrationsConnect']>[0];
@@ -127,6 +126,10 @@ const CODE_AGENTS = {
     linkLabel: 'Create API key',
   },
 } as const;
+
+function isCodeAgentType(value: Integration['type']): value is keyof typeof CODE_AGENTS {
+  return value in CODE_AGENTS;
+}
 
 // Baseline the integrations of one type so the poller can spot the one the
 // browser flow creates — or updates, when it's a re-install.
@@ -477,9 +480,6 @@ async function connectWithCredentials(
   } else {
     const agent = CODE_AGENTS[type];
     let apiKey = '';
-    // Matches the console default: route autofixes through the agent unless
-    // the user opts out.
-    let useAsDefaultExecutor = getArgBoolean(args, 'noDefaultExecutor') !== true;
     const ok = await runSteps([
       secretStep(
         config,
@@ -496,26 +496,16 @@ async function connectWithCredentials(
           apiKey = v;
         }
       ),
-      async () => {
-        if (getArgBoolean(args, 'noDefaultExecutor') === true || !isInteractive(config.nonInteractive)) {
-          return SKIPPED;
-        }
-        const answer = await promptConfirmOrBack(
-          { nonInteractive: config.nonInteractive },
-          `Use ${agent.name} for all autofixes? (instead of the Polylane executor; you can change this later)`,
-          true
-        );
-        if (answer === BACK) return BACK;
-        useAsDefaultExecutor = answer;
-        return;
-      },
     ]);
     if (!ok) return BACK;
-    body = { type, workspaceId, apiKey, useAsDefaultExecutor };
+    body = { type, workspaceId, apiKey };
   }
 
   const integration = await api.integrationsConnect(body);
   printConnectSuccess(config, integration, TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
+  if (isCodeAgentType(integration.type) && !config.quiet && config.output !== 'json') {
+    process.stderr.write(`Connecting ${CODE_AGENTS[integration.type].name} makes it the default autofix executor.\n`);
+  }
   return;
 }
 
@@ -566,7 +556,6 @@ export const integrationConnectCommand: Command = {
     { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token)', type: 'string' },
     { flag: '--uptime-api-token <token>', description: 'Uptime API token (Better Stack only)', type: 'string' },
     { flag: '--telemetry-api-token <token>', description: 'Telemetry API token (Better Stack only)', type: 'string' },
-    { flag: '--no-default-executor', description: 'Devin / Cursor / Factory: do not route autofixes through it', type: 'boolean' },
     { flag: '--url <url>', description: 'MCP server URL', type: 'string' },
     { flag: '--name <name>', description: 'MCP server display name', type: 'string' },
     { flag: '--transport <t>', description: 'MCP transport: http | sse (default: http)', type: 'string' },
