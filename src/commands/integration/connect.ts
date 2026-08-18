@@ -127,6 +127,10 @@ const CODE_AGENTS = {
   },
 } as const;
 
+function isCodeAgentType(value: Integration['type']): value is keyof typeof CODE_AGENTS {
+  return value in CODE_AGENTS;
+}
+
 // Baseline the integrations of one type so the poller can spot the one the
 // browser flow creates — or updates, when it's a re-install.
 async function integrationArrivalCheck(
@@ -499,8 +503,8 @@ async function connectWithCredentials(
 
   const integration = await api.integrationsConnect(body);
   printConnectSuccess(config, integration, TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
-  if ((type === 'devin' || type === 'cursor' || type === 'factory') && !config.quiet && config.output !== 'json') {
-    process.stderr.write(`Autofixes now run through ${CODE_AGENTS[type].name}.\n`);
+  if (isCodeAgentType(integration.type) && !config.quiet && config.output !== 'json') {
+    process.stderr.write(`Connecting ${CODE_AGENTS[integration.type].name} makes it the default autofix executor.\n`);
   }
   return;
 }
