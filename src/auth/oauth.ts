@@ -363,8 +363,8 @@ export interface BrowserFlowOptions {
   // (the console keeps it alive across the provider round-trip), so a brand-new
   // user creates the account and lands on the consent screen in one browser trip.
   signupEntry?: boolean;
-  // Which provider the user picked in the CLI. The signup page ignores it today;
-  // sent so the console can auto-start that provider without another click.
+  // Which provider the user picked in the CLI. The console signup page
+  // auto-starts that provider's OAuth without another click.
   provider?: 'google' | 'github';
 }
 
