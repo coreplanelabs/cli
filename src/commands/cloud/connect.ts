@@ -21,13 +21,10 @@ import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { openBrowser } from '../../utils/browser';
 import { isInteractive } from '../../utils/env';
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   BACK,
   cancel,
   note,
-  promptMultiselect,
   promptSelectOrBack,
   promptConfirmOrBack,
 } from '../../utils/prompt';
@@ -47,7 +44,7 @@ type Provider =
 
 const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> = [
   { value: 'aws', label: 'AWS', hint: 'deploys a read-only CloudFormation stack (browser)' },
-  { value: 'cloudflare', label: 'Cloudflare', hint: 'API token' },
+  { value: 'cloudflare', label: 'Cloudflare', hint: 'read-only API token' },
   { value: 'vercel', label: 'Vercel', hint: 'install the Vercel integration (browser)' },
   { value: 'fly', label: 'Fly.io', hint: 'API token' },
   { value: 'render', label: 'Render', hint: 'API key' },
@@ -56,36 +53,6 @@ const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> 
   { value: 'modal', label: 'Modal', hint: 'token ID + secret' },
   { value: 'kubernetes', label: 'Kubernetes', hint: 'in-cluster agent, installed with Helm (console)' },
 ];
-
-// Lightweight repo markers for --multi pre-selection: cwd plus one directory
-// level, filenames only — no file contents are read.
-const PROVIDER_MARKERS: Partial<Record<Provider, string[]>> = {
-  cloudflare: ['wrangler.toml', 'wrangler.json', 'wrangler.jsonc'],
-  vercel: ['vercel.json', '.vercel'],
-  aws: ['cdk.json', 'serverless.yml', 'serverless.yaml', 'samconfig.toml', '.aws-sam'],
-  fly: ['fly.toml'],
-  render: ['render.yaml'],
-  supabase: ['supabase/config.toml'],
-  kubernetes: ['Chart.yaml', 'kustomization.yaml'],
-};
-
-function detectProviders(root: string): Provider[] {
-  const dirs = [root];
-  try {
-    for (const entry of readdirSync(root, { withFileTypes: true }).slice(0, 200)) {
-      if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
-        dirs.push(join(root, entry.name));
-      }
-    }
-  } catch {
-    return [];
-  }
-  const detected: Provider[] = [];
-  for (const [provider, markers] of Object.entries(PROVIDER_MARKERS) as Array<[Provider, string[]]>) {
-    if (dirs.some((d) => markers.some((m) => existsSync(join(d, m))))) detected.push(provider);
-  }
-  return detected;
-}
 
 // Same region list the console offers; the flag accepts any region so accounts
 // in regions not listed here are not locked out.
@@ -107,8 +74,8 @@ const AWS_REGIONS = [
 ];
 
 // A completed handoff is only counted as connected when the account actually
-// showed up — a timed-out wait must not look like a success to `--multi`
-// tallies or exit codes.
+// showed up — a timed-out wait must not look like a success to the caller's
+// exit code.
 export type ConnectOutcome = 'connected' | 'timeout';
 
 export interface AccountBaseline {
@@ -362,8 +329,10 @@ async function connectProvider(
       ...(subscribeToAlarms ? { subscribeToAlarms } : {}),
     };
   } else if (provider === 'cloudflare') {
+    // Always read-only: the docs link pre-fills exactly the permissions
+    // Polylane needs, every one of them a read scope, so there is nothing to
+    // ask about write access (the console sends readOnly: true too).
     let token = '';
-    let readOnly = getArgBoolean(args, 'readOnly') === true;
     const ok = await runSteps([
       secretStep(
         config,
@@ -373,30 +342,17 @@ async function connectProvider(
         {
           message: 'Cloudflare API token',
           instructions:
-            'Create an account-owned API token using one of the two pre-filled token-creation links on the docs page: full access lets Polylane fix issues as well as observe; read-only limits it to observing. You must be a Super Administrator on the account; keep the pre-filled permissions. New account tokens start with cfat_ and are shown only once.',
+            'The link opens Cloudflare\'s account API token screen with a pre-filled, read-only token — create it as-is and paste it here. You must be a Super Administrator on the account.',
           link: 'https://docs.polylane.com/integrations/cloudflare',
-          linkLabel: 'How to create the token',
+          linkLabel: 'Create the token',
         },
         (v) => {
           token = v;
         }
       ),
-      async () => {
-        if (
-          getArgBoolean(args, 'readOnly') === true ||
-          getArgString(args, 'token') !== undefined ||
-          !isInteractive(config.nonInteractive)
-        ) {
-          return SKIPPED;
-        }
-        const answer = await promptConfirmOrBack(ctx, 'Does the token have write permissions?', true);
-        if (answer === BACK) return BACK;
-        readOnly = !answer;
-        return;
-      },
     ]);
     if (!ok) return BACK;
-    body = { workspaceId, provider: 'cloudflare', token, ...(readOnly ? { readOnly } : {}) };
+    body = { workspaceId, provider: 'cloudflare', token, readOnly: true };
   } else if (provider === 'fly') {
     let token = '';
     const ok = await runSteps([
@@ -521,7 +477,6 @@ export const cloudConnectCommand: Command = {
     { flag: '--subscribe-alarms', description: 'AWS: subscribe to existing CloudWatch alarms', type: 'boolean' },
     // Cloudflare / Fly / PlanetScale
     { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, or PlanetScale service token', type: 'string' },
-    { flag: '--read-only', description: 'Cloudflare: the token only has read permissions', type: 'boolean' },
     // PlanetScale / Modal
     { flag: '--token-id <id>', description: 'PlanetScale service token ID, or Modal token ID', type: 'string' },
     { flag: '--token-secret <secret>', description: 'Modal token secret', type: 'string' },
@@ -530,11 +485,9 @@ export const cloudConnectCommand: Command = {
     { flag: '--api-key <key>', description: 'Render API key', type: 'string' },
     { flag: '--no-browser', description: 'AWS / Vercel / PlanetScale / Supabase: print the URL instead of opening it', type: 'boolean' },
     { flag: '--reconnect', description: 'AWS / Vercel / PlanetScale / Supabase / Kubernetes: run the connect flow even when the provider is already connected', type: 'boolean' },
-    { flag: '--multi', description: 'Pick several providers at once (pre-checked from repo markers in the current directory), then connect them one at a time', type: 'boolean' },
   ],
   examples: [
     'polylane cloud connect',
-    'polylane cloud connect --multi',
     'polylane cloud connect --provider vercel',
     'polylane cloud connect --provider vercel --reconnect',
     'polylane cloud connect --provider cloudflare --token <token>',
@@ -550,37 +503,6 @@ export const cloudConnectCommand: Command = {
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
     const api = new PolylaneAPI(config);
     const providerFromFlag = getArgString(args, 'provider') !== undefined;
-
-    if (getArgBoolean(args, 'multi') === true && !providerFromFlag) {
-      if (!isInteractive(config.nonInteractive)) {
-        throw new CLIError(
-          '--multi needs a TTY',
-          ExitCode.USAGE,
-          'Run interactively, or pass --provider to connect one provider at a time'
-        );
-      }
-      const detected = detectProviders(process.cwd());
-      const selected = await promptMultiselect(
-        { nonInteractive: config.nonInteractive },
-        'Which clouds do you use? (space toggles, enter continues)',
-        PROVIDER_OPTIONS.map((o) => (detected.includes(o.value) ? { ...o, hint: `detected · ${o.hint}` } : o)),
-        detected
-      );
-      let connected = 0;
-      for (const provider of selected) {
-        // BACK from a flow's first step skips that provider and moves on to
-        // the next selected one, rather than reopening a picker. A timed-out
-        // browser wait also moves on — it just doesn't count as connected.
-        if ((await connectProvider(config, api, args, workspaceId, provider, noBrowser)) === 'connected') {
-          connected += 1;
-        }
-      }
-      if (connected === 0) {
-        cancel('Nothing connected.');
-        process.exitCode = ExitCode.GENERAL;
-      }
-      return;
-    }
 
     // Provider selection restarts whenever the user backs out of the first
     // step of the chosen flow, so nothing is committed until a flow completes.

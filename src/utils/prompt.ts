@@ -98,24 +98,6 @@ export async function promptSelectOrBack<T extends string>(
   return result as T;
 }
 
-export async function promptMultiselect<T extends string>(
-  ctx: PromptContext,
-  message: string,
-  options: Array<{ value: T; label: string; hint?: string }>,
-  initialValues: T[] = []
-): Promise<T[]> {
-  ensureInteractive(ctx, message);
-  type MultiOption = { value: string; label: string; hint?: string };
-  const result = await p.multiselect<MultiOption[], string>({
-    message,
-    options,
-    initialValues,
-    required: false,
-  });
-  if (p.isCancel(result)) return [];
-  return result as T[];
-}
-
 export async function promptConfirm(
   ctx: PromptContext,
   message: string,
