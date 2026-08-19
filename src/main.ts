@@ -14,9 +14,8 @@ import {
   buildStatusLine,
   unknownCommandMessage,
 } from './registry';
-import type { Config } from './config/schema';
 import type { Credential } from './auth/types';
-import { buildEvent, dispatch, hasShownFirstRunNotice, markFirstRunNoticeShown } from './telemetry';
+import { buildEvent, dispatch, maybeShowTelemetryNotice } from './telemetry';
 import { getCliVersion } from './version';
 
 const NO_AUTH_COMMANDS = new Set([
@@ -208,18 +207,6 @@ function classifyError(err: unknown): { exitCode: number; category: string; rawM
   }
   const rawMessage = err instanceof Error ? err.message : String(err);
   return { exitCode: ExitCode.GENERAL, category: 'GENERAL', rawMessage };
-}
-
-function maybeShowTelemetryNotice(config: Config, isTelemetryCommand: boolean): void {
-  if (!config.telemetry) return;
-  if (config.quiet || config.output === 'json') return;
-  if (isTelemetryCommand) return;
-  if (hasShownFirstRunNotice()) return;
-  process.stderr.write(
-    'Anonymous usage telemetry is enabled. Run `polylane telemetry status` to see what\n' +
-      'gets sent, or `polylane telemetry disable` to opt out.\n\n'
-  );
-  markFirstRunNoticeShown();
 }
 
 function removeFirstNNonFlags(
