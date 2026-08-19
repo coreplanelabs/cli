@@ -256,13 +256,13 @@ describe('scanProgressLabel', () => {
   it('describes both target kinds and completion', () => {
     assert.equal(
       scanProgressLabel({ cloud: 3, integration: 2 }, 0, 5),
-      'Scanning 3 cloud accounts and 2 integrations…'
+      'Finding issues in 3 cloud accounts and 2 integrations…'
     );
     assert.equal(
       scanProgressLabel({ cloud: 3, integration: 2 }, 1, 5),
-      'Scanning 3 cloud accounts and 2 integrations… (1/5 complete)'
+      'Finding issues in 3 cloud accounts and 2 integrations… (1/5 complete)'
     );
-    assert.equal(scanProgressLabel({ cloud: 1, integration: 0 }, 0, 1), 'Scanning 1 cloud account…');
+    assert.equal(scanProgressLabel({ cloud: 1, integration: 0 }, 0, 1), 'Finding issues in 1 cloud account…');
   });
 });
 

@@ -169,7 +169,7 @@ export function scanProgressLabel(
     parts.push(`${counts.integration} integration${counts.integration === 1 ? '' : 's'}`);
   }
   const suffix = done > 0 ? ` (${done}/${total} complete)` : '';
-  return `Scanning ${parts.join(' and ')}…${suffix}`;
+  return `Finding issues in ${parts.join(' and ')}…${suffix}`;
 }
 
 export function scansIndexUrl(reportHtmlUrl: string): string {
@@ -261,7 +261,7 @@ async function resolveWorkspaceId(config: Config, api: PolylaneAPI): Promise<str
   if (list.items.length > 1 && isInteractive(config.nonInteractive)) {
     return promptSelect<string>(
       { nonInteractive: config.nonInteractive },
-      'Workspace to scan',
+      'Workspace to check',
       list.items.map((ws) => ({ value: ws.id, label: ws.name, hint: ws.id }))
     );
   }
@@ -355,7 +355,7 @@ async function runRiskNavigator(
 
 export const scanCommand: Command = {
   name: 'scan',
-  description: 'Scan connected cloud accounts and integrations for key risks',
+  description: 'Find key risks in your connected cloud accounts and integrations',
   operationId: 'scan_reports.generate',
   examples: ['polylane scan', 'polylane scan --workspace ws_xxx', 'polylane scan --output json'],
   async execute(config: Config, flags: GlobalFlags, _args: Record<string, unknown>): Promise<void> {
@@ -369,7 +369,7 @@ export const scanCommand: Command = {
     };
 
     showStatusBar(cfg);
-    const spinner = new Spinner('Finding scan targets…');
+    const spinner = new Spinner("Checking what's connected…");
     if (useSpinner) spinner.start();
 
     let targets: ScanTarget[];
@@ -409,7 +409,7 @@ export const scanCommand: Command = {
         outputJson({ workspaceId, targets: 0, reports: [], risks: [], consoleUrl: null });
         return;
       }
-      say('Nothing to scan yet: no cloud accounts or integrations are connected.');
+      say('Nothing to check yet: no cloud accounts or integrations are connected.');
       say('Connect one with `polylane cloud connect` or `polylane integration connect`.');
       return;
     }
@@ -439,12 +439,12 @@ export const scanCommand: Command = {
     const consoleUrl = resolveConsoleUrl(results) ?? (await scansFallbackUrl(cfg, api, workspaceId));
 
     for (const f of failed) {
-      say(color(`The ${f.target.label} scan didn't finish${f.error ? ` (${f.error})` : ''}.`, '33', useColor));
+      say(color(`The ${f.target.label} check didn't finish${f.error ? ` (${f.error})` : ''}.`, '33', useColor));
     }
     if (timedOut.length > 0) {
       say(
         color(
-          `${timedOut.length} scan${timedOut.length === 1 ? ' is' : 's are'} still running; view progress in the console.`,
+          `Still looking for issues in ${timedOut.length} place${timedOut.length === 1 ? '' : 's'}; view progress in the console.`,
           '2',
           useColor
         )
