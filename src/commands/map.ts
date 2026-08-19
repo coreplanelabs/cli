@@ -6,10 +6,31 @@ import type { Command } from '../command';
 import type { Config } from '../config/schema';
 import type { GlobalFlags } from '../types/flags';
 import { AGENTS, AGENT_IDS, MAPPING_PROMPT, agentById, type AgentSetup, type HeadlessRun } from '../agents/registry';
+import { consoleBaseUrl } from '../auth/oauth';
+import { tryResolveCredential } from '../auth/resolver';
+import { PolylaneAPI } from '../generated/client';
 import { isInteractive } from '../utils/env';
 import { promptSelect } from '../utils/prompt';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
+
+/**
+ * Best-effort deep link to the workspace's topology page. Falls back to the
+ * console root when a workspace or credential can't be resolved (map is a
+ * no-auth command, so this must never throw or prompt).
+ */
+async function workspaceTopologyUrl(config: Config): Promise<string> {
+  const base = consoleBaseUrl(config);
+  try {
+    if (!config.workspaceId) return base;
+    const credential = await tryResolveCredential(config);
+    if (!credential) return base;
+    const workspace = await new PolylaneAPI(config).workspacesGet(config.workspaceId);
+    return workspace?.slug ? `${base}/${workspace.slug}/topology` : base;
+  } catch {
+    return base;
+  }
+}
 
 /** Whether `bin` resolves to an executable on PATH. */
 export function onPath(bin: string): boolean {
@@ -47,17 +68,74 @@ export function resolveRunnable(
   return { viaSibling: false };
 }
 
-function runChild(bin: string, argv: string[], env?: Record<string, string>): Promise<number> {
+function formatElapsed(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+/**
+ * Run the agent headlessly, capturing its output instead of streaming it. A
+ * coding agent's raw output is markdown and mostly tool calls, so dumping it
+ * into the terminal is a wall of noise; the rendered result lives in the
+ * workspace. We show a heartbeat while it runs and surface the captured log
+ * only if it fails. Returns the exit code and everything the agent printed.
+ */
+export function runMapping(
+  bin: string,
+  argv: string[],
+  env: Record<string, string> | undefined,
+  onStart: () => void
+): Promise<{ code: number | null; signal: NodeJS.Signals | null; output: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, argv, {
-      stdio: 'inherit',
+      stdio: ['ignore', 'pipe', 'pipe'],
       cwd: process.cwd(),
       env: { ...process.env, ...(env ?? {}) },
     });
-    child.on('error', (err) =>
-      reject(new CLIError(`Failed to launch ${bin}: ${(err as Error).message}`, ExitCode.GENERAL))
-    );
-    child.on('close', (code) => resolve(code ?? 0));
+
+    // Keep at most the tail of the output so a long run can't grow unbounded;
+    // only the end matters when we surface it after a failure. Buffer, not
+    // string: decode once at the end so a multi-byte character split across
+    // chunk boundaries (or the tail cut) is sized and rendered correctly.
+    const MAX_CAPTURE = 64 * 1024;
+    let captured = Buffer.alloc(0);
+    const capture = (chunk: Buffer): void => {
+      captured = Buffer.concat([captured, chunk]);
+      if (captured.length > MAX_CAPTURE) captured = captured.subarray(captured.length - MAX_CAPTURE);
+    };
+    child.stdout?.on('data', capture);
+    child.stderr?.on('data', capture);
+
+    onStart();
+    const started = Date.now();
+    const tty = Boolean(process.stderr.isTTY);
+    // On a TTY the heartbeat overwrites one line every 5s; without a TTY (CI,
+    // piped, log capture) each tick is a fresh line, so tick far less often to
+    // avoid flooding logs on a long run.
+    const tickMs = tty ? 5000 : 30000;
+    const heartbeat = setInterval(() => {
+      const elapsed = formatElapsed(Date.now() - started);
+      if (tty) process.stderr.write(`\r\x1b[2mMapping… ${elapsed} elapsed\x1b[0m\x1b[K`);
+      else process.stderr.write(`Mapping… ${elapsed} elapsed\n`);
+    }, tickMs);
+
+    const finish = (): void => {
+      clearInterval(heartbeat);
+      if (tty) process.stderr.write('\r\x1b[K');
+    };
+
+    child.on('error', (err) => {
+      finish();
+      reject(new CLIError(`Failed to launch ${bin}: ${(err as Error).message}`, ExitCode.GENERAL));
+    });
+    // close delivers (code, signal): a signal-killed agent has code === null,
+    // which must be treated as a failure, not mapped to 0.
+    child.on('close', (code, signal) => {
+      finish();
+      resolve({ code, signal, output: captured.toString() });
+    });
   });
 }
 
@@ -129,14 +207,29 @@ export const mapCommand: Command = {
       return;
     }
 
-    process.stderr.write(`Mapping this repository with ${agent.name}...\n`);
-    const code = await runChild(run.bin, argv, run.env);
+    const { code, signal, output } = await runMapping(run.bin, argv, run.env, () => {
+      process.stderr.write(
+        `Mapping this repository with ${agent.name}. Your agent reads the repo, runs checks, and\n` +
+          `assembles the map locally; this usually takes a few minutes.\n`
+      );
+    });
+
     if (code !== 0) {
+      // Surface the tail of the captured output so a failure isn't silent.
+      const tail = output.trim().split('\n').slice(-20).join('\n');
+      if (tail) process.stderr.write(`\n${tail}\n`);
+      const reason = signal ? `was terminated by ${signal}` : `exited with code ${code}`;
       throw new CLIError(
-        `${agent.name} exited with code ${code} before finishing the map`,
+        `${agent.name} ${reason} before finishing the map`,
         ExitCode.GENERAL,
         `Run it yourself: open ${agent.name} and ask "${MAPPING_PROMPT}"`
       );
     }
+
+    const workspaceUrl = await workspaceTopologyUrl(config);
+    process.stderr.write(
+      `\n✓ Mapped this repository. View your topology, issues, and first-run thread:\n` +
+        `  ${workspaceUrl}\n`
+    );
   },
 };
