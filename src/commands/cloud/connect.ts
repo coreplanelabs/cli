@@ -480,9 +480,10 @@ export const cloudConnectCommand: Command = {
     { flag: '--subscribe-alarms', description: 'AWS: subscribe to existing CloudWatch alarms', type: 'boolean' },
     // Cloudflare / Fly / PlanetScale
     { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, or PlanetScale service token', type: 'string' },
-    // Retired: Cloudflare now always connects read-only, which is what anyone
-    // passing this flag was asking for. Accepted and ignored for one release so
-    // existing scripts do not start exiting 2 on an unknown flag.
+    // Retired in 0.2.16: Cloudflare now always connects read-only, which is
+    // what anyone passing this flag was asking for. Accepted and ignored for
+    // one release so existing scripts do not start exiting 2 on an unknown
+    // flag — delete this entry in 0.3.0.
     { flag: '--read-only', description: 'Deprecated: Cloudflare connects read-only either way; accepted and ignored', type: 'boolean' },
     // PlanetScale / Modal
     { flag: '--token-id <id>', description: 'PlanetScale service token ID, or Modal token ID', type: 'string' },
