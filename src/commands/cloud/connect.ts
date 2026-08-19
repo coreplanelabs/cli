@@ -329,9 +329,12 @@ async function connectProvider(
       ...(subscribeToAlarms ? { subscribeToAlarms } : {}),
     };
   } else if (provider === 'cloudflare') {
-    // Always read-only: the docs link pre-fills exactly the permissions
-    // Polylane needs, every one of them a read scope, so there is nothing to
-    // ask about write access (the console sends readOnly: true too).
+    // Always read-only. The docs page offers two pre-filled tokens (read+write
+    // first, read-only second), so the copy has to name the read-only one by
+    // its button label: a token minted from the other link and pasted here
+    // would be stored under a read-only label it does not have, and every
+    // write for the account would then be refused with no way to re-enable it.
+    // Read-only is also what both console connect surfaces send.
     let token = '';
     const ok = await runSteps([
       secretStep(
@@ -342,9 +345,9 @@ async function connectProvider(
         {
           message: 'Cloudflare API token',
           instructions:
-            'The link opens Cloudflare\'s account API token screen with a pre-filled, read-only token — create it as-is and paste it here. You must be a Super Administrator on the account.',
+            'On the docs page, use the "Create read-only token" link: it opens Cloudflare\'s account API token screen with a pre-filled, read-only token. Create it as-is and paste it here. You must be a Super Administrator on the account.',
           link: 'https://docs.polylane.com/integrations/cloudflare',
-          linkLabel: 'Create the token',
+          linkLabel: 'Create the token (use the read-only link)',
         },
         (v) => {
           token = v;
@@ -477,6 +480,10 @@ export const cloudConnectCommand: Command = {
     { flag: '--subscribe-alarms', description: 'AWS: subscribe to existing CloudWatch alarms', type: 'boolean' },
     // Cloudflare / Fly / PlanetScale
     { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, or PlanetScale service token', type: 'string' },
+    // Retired: Cloudflare now always connects read-only, which is what anyone
+    // passing this flag was asking for. Accepted and ignored for one release so
+    // existing scripts do not start exiting 2 on an unknown flag.
+    { flag: '--read-only', description: 'Deprecated: Cloudflare connects read-only either way; accepted and ignored', type: 'boolean' },
     // PlanetScale / Modal
     { flag: '--token-id <id>', description: 'PlanetScale service token ID, or Modal token ID', type: 'string' },
     { flag: '--token-secret <secret>', description: 'Modal token secret', type: 'string' },
