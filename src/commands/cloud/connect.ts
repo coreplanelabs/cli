@@ -373,7 +373,7 @@ async function connectProvider(
         {
           message: 'Cloudflare API token',
           instructions:
-            'Create an account-owned API token: Manage Account > Account API Tokens (you must be a Super Administrator on the account). The docs page has links that pre-fill the exact permissions Polylane needs; leave the pre-filled set as it is, or use the read-only variant. New account tokens start with cfat_ and are shown only once.',
+            'Create an account-owned API token using one of the two pre-filled token-creation links on the docs page: full access lets Polylane fix issues as well as observe; read-only limits it to observing. You must be a Super Administrator on the account; keep the pre-filled permissions. New account tokens start with cfat_ and are shown only once.',
           link: 'https://docs.polylane.com/integrations/cloudflare',
           linkLabel: 'How to create the token',
         },
