@@ -199,7 +199,9 @@ async function finishEmailSignIn(config: Config, email: string, session: Verifie
   outro('Signed in.');
 }
 
-async function emailSignup(config: Config, args: Record<string, unknown>): Promise<void> {
+// Also the CLI's email sign-in path: signup is idempotent for an existing
+// user with a matching password, so `auth login`'s Email option routes here.
+export async function emailSignup(config: Config, args: Record<string, unknown>): Promise<void> {
   const email = await promptIfMissing(config, args, 'email', 'Email', '--email');
 
   // `--code` completes a signup that already received its verification email.

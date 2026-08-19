@@ -29,7 +29,9 @@ async function main(): Promise<void> {
   // regardless of dotted or bracket access, so a build machine that happened to
   // have it set (e.g. .env.local) would otherwise stamp one run id into the
   // bundle for every user. Exclude it from the sweep so no define ever matches.
-  const DEFINE_EXCLUDE = new Set(['POLYLANE_ONBOARDING_RUN']);
+  // POLYLANE_TELEMETRY_NOTICE_ACK is likewise a per-run runtime value (the
+  // installer sets it after printing the telemetry disclosure itself).
+  const DEFINE_EXCLUDE = new Set(['POLYLANE_ONBOARDING_RUN', 'POLYLANE_TELEMETRY_NOTICE_ACK']);
   // Bake every other POLYLANE_* env var visible at build time into the bundle, so
   // the produced binary works without needing those vars set at runtime.
   // - Locally: comes from .env.local (gitignored — your dev domain / dev OAuth)

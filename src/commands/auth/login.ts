@@ -1,9 +1,10 @@
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import type { GlobalFlags } from '../../types/flags';
-import { promptPassword, promptSelect, intro, outro } from '../../utils/prompt';
+import { promptPassword, promptSelect, outro } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
 import { oauthBrowserFlow, oauthDeviceCodeFlow, type BrowserFlowOptions } from '../../auth/oauth';
+import { emailSignup } from './signup';
 import { consumeOnboardingRunFile } from '../../auth/onboarding-run';
 import { writeCredentials } from '../../auth/credentials';
 import type { OAuthCredential } from '../../auth/types';
@@ -189,8 +190,6 @@ export const authLoginCommand: Command = {
     'polylane auth login --no-browser',
   ],
   async execute(config: Config, flags: GlobalFlags, args: Record<string, unknown>): Promise<void> {
-    intro('Polylane login');
-
     const apiKey = typeof args.apiKey === 'string' ? args.apiKey : config.apiKey;
     const noBrowser = args.noBrowser === true || flags.nonInteractive === true;
 
@@ -207,15 +206,23 @@ export const authLoginCommand: Command = {
       );
     }
 
-    const method = await promptSelect<'browser' | 'device' | 'api-key'>(
+    // The one and only method question — the flow signs you up when the
+    // account doesn't exist yet, so the label says so.
+    const method = await promptSelect<'browser' | 'email' | 'device' | 'api-key'>(
       { nonInteractive: config.nonInteractive },
-      'Sign in with',
+      'Sign in (or sign up) with',
       [
-        { value: 'browser', label: 'OAuth (browser)', hint: 'Recommended' },
-        { value: 'device', label: 'OAuth (device code)', hint: 'For SSH/headless' },
+        { value: 'browser', label: 'GitHub or Google (browser)', hint: 'Recommended' },
+        { value: 'email', label: 'Email' },
+        { value: 'device', label: 'Device code', hint: 'no browser on this machine' },
         { value: 'api-key', label: 'API key', hint: 'For scripts / CI' },
       ]
     );
+
+    if (method === 'email') {
+      await emailSignup(config, args);
+      return;
+    }
 
     if (method === 'api-key') {
       const key = await promptPassword({ nonInteractive: config.nonInteractive }, 'API key');
