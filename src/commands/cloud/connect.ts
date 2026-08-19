@@ -106,20 +106,43 @@ const AWS_REGIONS = [
   { value: 'sa-east-1', label: 'sa-east-1 (São Paulo)' },
 ];
 
-// Baseline the accounts of one provider so the poller can spot the ones the
+// A completed handoff is only counted as connected when the account actually
+// showed up — a timed-out wait must not look like a success to `--multi`
+// tallies or exit codes.
+export type ConnectOutcome = 'connected' | 'timeout';
+
+export interface AccountBaseline {
+  existing: CloudAccount[];
+  check: () => Promise<CloudAccount[] | null>;
+}
+
+// Baseline the accounts of one provider: what already exists (for the
+// already-connected short-circuit) plus a poller that spots the ones the
 // browser flow creates — or updates, when it's a reconnect.
-async function accountArrivalCheck(
+export async function accountBaseline(
   api: PolylaneAPI,
   workspaceId: string,
   provider: Provider
-): Promise<() => Promise<CloudAccount[] | null>> {
+): Promise<AccountBaseline> {
   const before = await api.cloudAccountsList(workspaceId, { provider, perPage: 100 });
   const seen = new Map(before.items.map((a) => [a.id, a.updated ?? '']));
-  return async () => {
+  const check = async (): Promise<CloudAccount[] | null> => {
     const current = await api.cloudAccountsList(workspaceId, { provider, perPage: 100 });
     const fresh = current.items.filter((a) => !seen.has(a.id) || seen.get(a.id) !== (a.updated ?? ''));
     return fresh.length > 0 ? fresh : null;
   };
+  return { existing: before.items, check };
+}
+
+function printAlreadyConnected(config: Config, name: string, accounts: CloudAccount[]): void {
+  if (config.output === 'json') {
+    formatOutput(config, { accounts });
+    return;
+  }
+  process.stderr.write(`✓ ${name} is already connected.\n`);
+  if (!config.quiet) {
+    process.stderr.write('Re-run with --reconnect to go through the connect flow again.\n');
+  }
 }
 
 async function confirmBrowserConnect(
@@ -127,12 +150,12 @@ async function confirmBrowserConnect(
   check: (() => Promise<CloudAccount[] | null>) | null,
   label: string,
   opts: { startHint?: string; timeoutMs?: number; intervalMs?: number } = {}
-): Promise<void> {
+): Promise<ConnectOutcome> {
   if (!check) {
     if (!config.quiet && config.output !== 'json') {
       process.stderr.write('\nAfter finishing in the browser, check with `polylane cloud list`.\n');
     }
-    return;
+    return 'connected';
   }
   const found = await waitForBrowserCompletion(config, check, {
     waitingFor: label,
@@ -144,9 +167,10 @@ async function confirmBrowserConnect(
       const detail = [account.account, account.region].filter(Boolean).join(', ');
       process.stderr.write(`✓ Connected: ${account.alias || account.account}${detail ? ` (${detail})` : ''}\n`);
     }
-  } else {
-    process.stderr.write('Not seeing the connection yet. Check with `polylane cloud list`.\n');
+    return 'connected';
   }
+  process.stderr.write('Timed out waiting — the connection has not shown up yet. Check with `polylane cloud list`.\n');
+  return 'timeout';
 }
 
 type ConnectResult = Awaited<ReturnType<PolylaneAPI['cloudAccountsConnect']>>;
@@ -189,17 +213,26 @@ async function openOrPrintInstallUrl(config: Config, url: string, label: string,
 // Vercel, PlanetScale and Supabase complete in the browser: the flow enters
 // via the console's /cli/connect page (which ends the journey on its "go back
 // to your terminal" page) while the CLI waits for the account to appear.
+// When the provider is already connected, succeed without opening a browser —
+// only an explicit --reconnect takes the wait-for-update path.
 async function browserConnect(
   config: Config,
   api: PolylaneAPI,
   workspaceId: string,
   provider: 'vercel' | 'planetscale' | 'supabase',
+  name: string,
   label: string,
-  noBrowser: boolean
-): Promise<void> {
-  const check = canWaitForBrowser(config) ? await accountArrivalCheck(api, workspaceId, provider) : null;
+  noBrowser: boolean,
+  reconnect: boolean
+): Promise<ConnectOutcome> {
+  const baseline = config.dryRun ? null : await accountBaseline(api, workspaceId, provider);
+  if (baseline && !reconnect && baseline.existing.length > 0) {
+    printAlreadyConnected(config, name, baseline.existing);
+    return 'connected';
+  }
+  const check = canWaitForBrowser(config) && baseline ? baseline.check : null;
   await openOrPrintInstallUrl(config, cliConnectUrl(config, provider, workspaceId), label, noBrowser);
-  await confirmBrowserConnect(config, check, `${label} to connect`);
+  return confirmBrowserConnect(config, check, `${label} to connect`);
 }
 
 // Each wizard step can go back to the previous one; backing out of the first
@@ -211,18 +244,17 @@ async function connectProvider(
   workspaceId: string,
   provider: Provider,
   noBrowser: boolean
-): Promise<typeof BACK | void> {
+): Promise<typeof BACK | ConnectOutcome> {
   const ctx = { nonInteractive: config.nonInteractive };
+  const reconnect = getArgBoolean(args, 'reconnect') === true;
 
   // --- Browser flows: setup completes in the browser, then the CLI waits
   // for the account to appear so the session ends with a result ---
   if (provider === 'vercel') {
-    await browserConnect(config, api, workspaceId, 'vercel', 'the Vercel integration', noBrowser);
-    return;
+    return browserConnect(config, api, workspaceId, 'vercel', 'Vercel', 'the Vercel integration', noBrowser, reconnect);
   }
   if (provider === 'supabase') {
-    await browserConnect(config, api, workspaceId, 'supabase', 'your Supabase organization', noBrowser);
-    return;
+    return browserConnect(config, api, workspaceId, 'supabase', 'Supabase', 'your Supabase organization', noBrowser, reconnect);
   }
   if (provider === 'planetscale') {
     // Service-token flags take the direct path; otherwise authorize in the
@@ -231,8 +263,7 @@ async function connectProvider(
     const token = getArgString(args, 'token');
     const organization = getArgString(args, 'organization');
     if (tokenId === undefined && token === undefined && organization === undefined) {
-      await browserConnect(config, api, workspaceId, 'planetscale', 'your PlanetScale organization', noBrowser);
-      return;
+      return browserConnect(config, api, workspaceId, 'planetscale', 'PlanetScale', 'your PlanetScale organization', noBrowser, reconnect);
     }
     if (!tokenId || !token || !organization) {
       throw new CLIError(
@@ -243,7 +274,7 @@ async function connectProvider(
     }
     const result = await api.cloudAccountsConnect({ workspaceId, provider: 'planetscale', tokenId, token, organization });
     printConnectSuccess(config, result);
-    return;
+    return 'connected';
   }
   if (provider === 'kubernetes') {
     // The kubeconfig upload no longer exists in the API: Kubernetes connects
@@ -251,11 +282,16 @@ async function connectProvider(
     // an outbound tunnel, so there is nothing to paste here. Hand off to the
     // console's Helm install and wait for the cluster to appear.
     const docsUrl = 'https://docs.polylane.com/integrations/kubernetes';
+    const baseline = config.dryRun ? null : await accountBaseline(api, workspaceId, 'kubernetes');
+    if (baseline && !reconnect && baseline.existing.length > 0) {
+      printAlreadyConnected(config, 'Kubernetes', baseline.existing);
+      return 'connected';
+    }
     if (config.output === 'json') {
       formatOutput(config, { url: docsUrl });
-      return;
+      return 'connected';
     }
-    const check = canWaitForBrowser(config) ? await accountArrivalCheck(api, workspaceId, 'kubernetes') : null;
+    const check = canWaitForBrowser(config) && baseline ? baseline.check : null;
     note(
       [
         'Kubernetes connects through the in-cluster Polylane agent: install it with Helm and it registers itself and opens an outbound tunnel. No kubeconfig or token to paste.',
@@ -264,16 +300,29 @@ async function connectProvider(
       ].join('\n'),
       'Connect Kubernetes'
     );
-    await confirmBrowserConnect(config, check, 'the agent to register (run the Helm install now)', {
+    return confirmBrowserConnect(config, check, 'the agent to register (run the Helm install now)', {
       startHint: 'Run the Helm install from your console, then come back to this terminal.',
       timeoutMs: 15 * 60_000,
       intervalMs: 5_000,
     });
-    return;
   }
 
   let body: ConnectBody;
+  let awsBaseline: AccountBaseline | null = null;
   if (provider === 'aws') {
+    // Short-circuit before the wizard when AWS is already connected — unless
+    // an explicit --account targets an account that is not connected yet.
+    awsBaseline = config.dryRun ? null : await accountBaseline(api, workspaceId, 'aws');
+    const accountFlag = getArgString(args, 'account');
+    if (
+      awsBaseline &&
+      !reconnect &&
+      awsBaseline.existing.length > 0 &&
+      (accountFlag === undefined || awsBaseline.existing.some((a) => a.account === accountFlag))
+    ) {
+      printAlreadyConnected(config, 'AWS', awsBaseline.existing);
+      return 'connected';
+    }
     let account = '';
     let region = '';
     let subscribeToAlarms = getArgBoolean(args, 'subscribeAlarms') === true;
@@ -433,10 +482,10 @@ async function connectProvider(
     body = { workspaceId, provider: 'modal', tokenId, tokenSecret };
   }
 
-  // AWS ends in the browser too (deploying the CloudFormation stack), so
-  // snapshot before connecting to be able to wait for the account after.
-  const awsCheck =
-    provider === 'aws' && canWaitForBrowser(config) ? await accountArrivalCheck(api, workspaceId, 'aws') : null;
+  // AWS ends in the browser too (deploying the CloudFormation stack); the
+  // baseline snapshot from before the wizard lets the CLI wait for the
+  // account after.
+  const awsCheck = canWaitForBrowser(config) && awsBaseline ? awsBaseline.check : null;
 
   const result = await api.cloudAccountsConnect(body);
 
@@ -444,16 +493,15 @@ async function connectProvider(
   // Open it in the browser unless suppressed.
   if (result.provider === 'aws') {
     await openOrPrintInstallUrl(config, result.url, 'the AWS CloudFormation stack', noBrowser);
-    await confirmBrowserConnect(config, awsCheck, 'the CloudFormation stack to deploy (usually a few minutes)', {
+    return confirmBrowserConnect(config, awsCheck, 'the CloudFormation stack to deploy (usually a few minutes)', {
       timeoutMs: 15 * 60_000,
       intervalMs: 5_000,
     });
-    return;
   }
 
   // All other providers return { accounts, failures } synchronously.
   printConnectSuccess(config, result);
-  return;
+  return 'connected';
 }
 
 export const cloudConnectCommand: Command = {
@@ -481,12 +529,14 @@ export const cloudConnectCommand: Command = {
     // Render
     { flag: '--api-key <key>', description: 'Render API key', type: 'string' },
     { flag: '--no-browser', description: 'AWS / Vercel / PlanetScale / Supabase: print the URL instead of opening it', type: 'boolean' },
+    { flag: '--reconnect', description: 'AWS / Vercel / PlanetScale / Supabase / Kubernetes: run the connect flow even when the provider is already connected', type: 'boolean' },
     { flag: '--multi', description: 'Pick several providers at once (pre-checked from repo markers in the current directory), then connect them one at a time', type: 'boolean' },
   ],
   examples: [
     'polylane cloud connect',
     'polylane cloud connect --multi',
     'polylane cloud connect --provider vercel',
+    'polylane cloud connect --provider vercel --reconnect',
     'polylane cloud connect --provider cloudflare --token <token>',
     'polylane cloud connect --provider aws --account 123456789012 --region us-east-1 --subscribe-alarms',
     'polylane cloud connect --provider render --api-key <key>',
@@ -519,8 +569,11 @@ export const cloudConnectCommand: Command = {
       let connected = 0;
       for (const provider of selected) {
         // BACK from a flow's first step skips that provider and moves on to
-        // the next selected one, rather than reopening a picker.
-        if ((await connectProvider(config, api, args, workspaceId, provider, noBrowser)) !== BACK) connected += 1;
+        // the next selected one, rather than reopening a picker. A timed-out
+        // browser wait also moves on — it just doesn't count as connected.
+        if ((await connectProvider(config, api, args, workspaceId, provider, noBrowser)) === 'connected') {
+          connected += 1;
+        }
       }
       if (connected === 0) {
         cancel('Nothing connected.');
@@ -550,7 +603,11 @@ export const cloudConnectCommand: Command = {
               'Cancel'
             );
       if (provider === BACK) break;
-      if ((await connectProvider(config, api, args, workspaceId, provider, noBrowser)) !== BACK) return;
+      const outcome = await connectProvider(config, api, args, workspaceId, provider, noBrowser);
+      if (outcome !== BACK) {
+        if (outcome === 'timeout') process.exitCode = ExitCode.GENERAL;
+        return;
+      }
       if (providerFromFlag) break;
     }
     cancel('Nothing connected.');

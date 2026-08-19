@@ -131,31 +131,55 @@ function isCodeAgentType(value: Integration['type']): value is keyof typeof CODE
   return value in CODE_AGENTS;
 }
 
-// Baseline the integrations of one type so the poller can spot the one the
+// A completed handoff is only counted as connected when the integration
+// actually showed up — a timed-out wait must not look like a success to
+// callers or exit codes.
+export type ConnectOutcome = 'connected' | 'timeout';
+
+export interface IntegrationBaseline {
+  existing: Integration[];
+  check: () => Promise<Integration | null>;
+}
+
+// Baseline the integrations of one type: what already exists (for the
+// already-connected short-circuit) plus a poller that spots the one the
 // browser flow creates — or updates, when it's a re-install.
-async function integrationArrivalCheck(
+export async function integrationBaseline(
   api: PolylaneAPI,
   workspaceId: string,
   type: string
-): Promise<() => Promise<Integration | null>> {
+): Promise<IntegrationBaseline> {
   const before = await api.integrationsList(workspaceId, { type, perPage: 100 });
   const seen = new Map(before.items.map((i) => [i.id, i.updated ?? '']));
-  return async () => {
+  const check = async (): Promise<Integration | null> => {
     const current = await api.integrationsList(workspaceId, { type, perPage: 100 });
     return current.items.find((i) => !seen.has(i.id) || seen.get(i.id) !== (i.updated ?? '')) ?? null;
   };
+  return { existing: before.items, check };
+}
+
+function printAlreadyConnected(config: Config, name: string, integration: Integration): void {
+  if (config.output === 'json') {
+    formatOutput(config, integration);
+    return;
+  }
+  const detail = integration.name && integration.name !== name ? `: ${integration.name}` : '';
+  process.stderr.write(`✓ ${name} is already connected${detail}\n`);
+  if (!config.quiet) {
+    process.stderr.write('Re-run with --reconnect to go through the connect flow again.\n');
+  }
 }
 
 async function confirmBrowserConnect(
   config: Config,
   check: (() => Promise<Integration | null>) | null,
   label: string
-): Promise<void> {
+): Promise<ConnectOutcome> {
   if (!check) {
     if (!config.quiet && config.output !== 'json') {
       process.stderr.write('\nAfter finishing in the browser, check with `polylane integration list`.\n');
     }
-    return;
+    return 'connected';
   }
   const found = await waitForBrowserCompletion(config, check, {
     waitingFor: `${label} to connect`,
@@ -163,9 +187,10 @@ async function confirmBrowserConnect(
   });
   if (found) {
     process.stderr.write(`✓ ${label} connected: ${found.name}\n`);
-  } else {
-    process.stderr.write('Not seeing the connection yet. Check with `polylane integration list`.\n');
+    return 'connected';
   }
+  process.stderr.write('Timed out waiting — the connection has not shown up yet. Check with `polylane integration list`.\n');
+  return 'timeout';
 }
 
 function printConnectSuccess(config: Config, integration: Integration, label: string): void {
@@ -205,7 +230,7 @@ async function connectMcp(
   args: Record<string, unknown>,
   workspaceId: string,
   noBrowser: boolean
-): Promise<typeof BACK | void> {
+): Promise<typeof BACK | ConnectOutcome> {
   const ctx = { nonInteractive: config.nonInteractive };
   let url = '';
   let name = '';
@@ -262,7 +287,7 @@ async function connectMcp(
 
   if (authMethod === 'oauth') {
     const scope = getArgString(args, 'scope');
-    const check = canWaitForBrowser(config) ? await integrationArrivalCheck(api, workspaceId, 'mcp') : null;
+    const check = canWaitForBrowser(config) ? (await integrationBaseline(api, workspaceId, 'mcp')).check : null;
     const result = await api.integrationsMcpOauthStart({
       workspaceId,
       url,
@@ -275,8 +300,7 @@ async function connectMcp(
     if (!config.quiet && config.output !== 'json') {
       process.stderr.write(`\nPending integration: ${result.pendingId}\n`);
     }
-    await confirmBrowserConnect(config, check, name);
-    return;
+    return confirmBrowserConnect(config, check, name);
   }
 
   const integration = await api.integrationsMcpConnect({
@@ -289,7 +313,7 @@ async function connectMcp(
     ...(extraHeaders ? { extraHeaders } : {}),
   });
   printConnectSuccess(config, integration, name);
-  return;
+  return 'connected';
 }
 
 // --- Credential-based connects: each wizard step can go back to the previous
@@ -300,7 +324,7 @@ async function connectWithCredentials(
   args: Record<string, unknown>,
   workspaceId: string,
   type: Exclude<ConnectableType, 'github' | 'slack' | 'sentry' | 'mcp'>
-): Promise<typeof BACK | void> {
+): Promise<typeof BACK | ConnectOutcome> {
   let body: ConnectBody;
   if (type === 'datadog') {
     let site = '';
@@ -506,7 +530,7 @@ async function connectWithCredentials(
   if (isCodeAgentType(integration.type) && !config.quiet && config.output !== 'json') {
     process.stderr.write(`Connecting ${CODE_AGENTS[integration.type].name} makes it the default autofix executor.\n`);
   }
-  return;
+  return 'connected';
 }
 
 async function connectType(
@@ -516,17 +540,24 @@ async function connectType(
   workspaceId: string,
   type: ConnectableType,
   noBrowser: boolean
-): Promise<typeof BACK | void> {
+): Promise<typeof BACK | ConnectOutcome> {
   // --- Install-URL flows: the browser enters via the console's /cli/connect
   // page (which ends the journey on its "go back to your terminal" page),
-  // while the CLI waits for the integration to appear ---
+  // while the CLI waits for the integration to appear. When the type is
+  // already connected, succeed without opening a browser — only an explicit
+  // --reconnect takes the wait-for-update path ---
   if (type === 'github' || type === 'slack' || type === 'sentry') {
     const labels = { github: 'the GitHub App', slack: 'the Slack app', sentry: 'the Sentry integration' } as const;
     const names = { github: 'GitHub', slack: 'Slack', sentry: 'Sentry' } as const;
-    const check = canWaitForBrowser(config) ? await integrationArrivalCheck(api, workspaceId, type) : null;
+    const reconnect = getArgBoolean(args, 'reconnect') === true;
+    const baseline = config.dryRun ? null : await integrationBaseline(api, workspaceId, type);
+    if (baseline && !reconnect && baseline.existing.length > 0) {
+      printAlreadyConnected(config, names[type], baseline.existing[0]!);
+      return 'connected';
+    }
+    const check = canWaitForBrowser(config) && baseline ? baseline.check : null;
     await openOrPrintInstallUrl(config, cliConnectUrl(config, type, workspaceId), labels[type], noBrowser);
-    await confirmBrowserConnect(config, check, names[type]);
-    return;
+    return confirmBrowserConnect(config, check, names[type]);
   }
   if (type === 'mcp') {
     return connectMcp(config, api, args, workspaceId, noBrowser);
@@ -564,10 +595,12 @@ export const integrationConnectCommand: Command = {
     { flag: '--oauth', description: 'MCP: use OAuth flow (opens browser to authorize)', type: 'boolean' },
     { flag: '--scope <scope>', description: 'MCP OAuth scope', type: 'string' },
     { flag: '--no-browser', description: 'GitHub / Slack / Sentry / MCP OAuth: print the URL instead of opening it', type: 'boolean' },
+    { flag: '--reconnect', description: 'GitHub / Slack / Sentry: run the connect flow even when the integration is already connected', type: 'boolean' },
   ],
   examples: [
     'polylane integration connect',
     'polylane integration connect --type github',
+    'polylane integration connect --type github --reconnect',
     'polylane integration connect --category observability',
     'polylane integration connect --type datadog --site us5.datadoghq.com --api-key ... --app-key ...',
     'polylane integration connect --type honeycomb --region us --api-key ...',
@@ -606,7 +639,11 @@ export const integrationConnectCommand: Command = {
               'Cancel'
             );
       if (type === BACK) break;
-      if ((await connectType(config, api, args, workspaceId, type, noBrowser)) !== BACK) return;
+      const outcome = await connectType(config, api, args, workspaceId, type, noBrowser);
+      if (outcome !== BACK) {
+        if (outcome === 'timeout') process.exitCode = ExitCode.GENERAL;
+        return;
+      }
       if (typeFromFlag) break;
     }
     cancel('Nothing connected.');
