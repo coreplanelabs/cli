@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { honeycombManagementKeyFields } from '../src/commands/integration/connect';
+import { CLIError } from '../src/errors/base';
 
 describe('honeycombManagementKeyFields', () => {
   it('returns both fields when both are set', () => {
@@ -10,15 +11,24 @@ describe('honeycombManagementKeyFields', () => {
     });
   });
 
-  it('returns nothing when both are empty', () => {
-    assert.deepEqual(honeycombManagementKeyFields('', ''), {});
+  it('throws when both are empty', () => {
+    assert.throws(
+      () => honeycombManagementKeyFields('', ''),
+      (err: unknown) => err instanceof CLIError && err.message.includes('--management-api-key-id')
+    );
   });
 
-  it('returns nothing when only the ID is set', () => {
-    assert.deepEqual(honeycombManagementKeyFields('hcxik_id', ''), {});
+  it('throws when only the ID is set', () => {
+    assert.throws(
+      () => honeycombManagementKeyFields('hcxik_id', ''),
+      (err: unknown) => err instanceof CLIError && err.message.includes('--management-api-key-secret')
+    );
   });
 
-  it('returns nothing when only the secret is set', () => {
-    assert.deepEqual(honeycombManagementKeyFields('', 'secret'), {});
+  it('throws when only the secret is set', () => {
+    assert.throws(
+      () => honeycombManagementKeyFields('', 'secret'),
+      (err: unknown) => err instanceof CLIError && err.message.includes('--management-api-key-id')
+    );
   });
 });
