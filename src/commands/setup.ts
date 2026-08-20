@@ -21,6 +21,8 @@ export {
   SKILL_DIRECTORY_NAME,
   writeSkillFile,
   upsertJsonEntry,
+  upsertJsoncEntry,
+  opencodeConfigFile,
   upsertTomlSection,
   upsertGooseExtension,
   vscodeUserDirectory,
@@ -154,6 +156,7 @@ export const setupCommand: Command = {
         const state = config.dryRun && changed ? `would be ${base}` : base;
         const detail = outcome.detail ? ` (${outcome.detail})` : '';
         say(`${agent.id}: ${outcome.label} ${state}: ${outcome.path}${detail}`);
+        if (outcome.snippet) say(`${agent.id}: add to ${outcome.path}:\n${outcome.snippet}`);
         if (outcome.needsManualStep) {
           say(`${agent.id}: register it manually: https://docs.polylane.com/coding-agents/platform-mcp`);
         }

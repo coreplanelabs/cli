@@ -22,6 +22,7 @@ export interface WriteOutcome {
   action: WriteAction;
   detail?: string;
   needsManualStep?: boolean;
+  snippet?: string;
 }
 
 export function writeSkillFile(path: string, dryRun = false): WriteOutcome {
@@ -88,6 +89,217 @@ export function upsertJsonEntry(
     writeFileSync(path, JSON.stringify(root, null, 2) + '\n', 'utf-8');
   }
   return { label, path, action: existed ? 'updated' : 'created' };
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function skipString(s: string, i: number): number {
+  i++;
+  while (i < s.length) {
+    if (s[i] === '\\') i += 2;
+    else if (s[i] === '"') return i + 1;
+    else i++;
+  }
+  return i;
+}
+
+function skipWs(s: string, i: number): number {
+  while (i < s.length && /\s/.test(s[i]!)) i++;
+  return i;
+}
+
+// Blank out comments and trailing commas with spaces, so the result is
+// strict JSON with every remaining character at its original offset.
+function stripJsonc(text: string): string {
+  const chars = text.split('');
+  for (let i = 0; i < chars.length; ) {
+    if (chars[i] === '"') {
+      i = skipString(text, i);
+    } else if (chars[i] === '/' && chars[i + 1] === '/') {
+      while (i < chars.length && chars[i] !== '\n') chars[i++] = ' ';
+    } else if (chars[i] === '/' && chars[i + 1] === '*') {
+      chars[i] = chars[i + 1] = ' ';
+      i += 2;
+      while (i < chars.length && !(chars[i] === '*' && chars[i + 1] === '/')) {
+        if (chars[i] !== '\n') chars[i] = ' ';
+        i++;
+      }
+      if (i < chars.length) {
+        chars[i] = chars[i + 1] = ' ';
+        i += 2;
+      }
+    } else {
+      i++;
+    }
+  }
+  const blanked = chars.join('');
+  for (let i = 0; i < chars.length; ) {
+    if (chars[i] === '"') {
+      i = skipString(blanked, i);
+    } else if (chars[i] === ',') {
+      const j = skipWs(blanked, i + 1);
+      if (blanked[j] === '}' || blanked[j] === ']') chars[i] = ' ';
+      i++;
+    } else {
+      i++;
+    }
+  }
+  return chars.join('');
+}
+
+function skipValue(s: string, i: number): number {
+  if (s[i] === '"') return skipString(s, i);
+  if (s[i] === '{' || s[i] === '[') {
+    let depth = 0;
+    while (i < s.length) {
+      if (s[i] === '"') {
+        i = skipString(s, i);
+        continue;
+      }
+      if (s[i] === '{' || s[i] === '[') depth++;
+      else if (s[i] === '}' || s[i] === ']') {
+        depth--;
+        if (depth === 0) return i + 1;
+      }
+      i++;
+    }
+    return i;
+  }
+  while (i < s.length && !/[\s,}\]]/.test(s[i]!)) i++;
+  return i;
+}
+
+// Index of the `{` opening the object reached by `keys` ([] = root), or -1.
+function objectOpenIndex(s: string, keys: string[]): number {
+  let i = skipWs(s, 0);
+  if (s[i] !== '{') return -1;
+  for (const key of keys) {
+    let j = skipWs(s, i + 1);
+    let valueAt = -1;
+    while (j < s.length && s[j] !== '}') {
+      if (s[j] !== '"') return -1;
+      const keyEnd = skipString(s, j);
+      let name: unknown;
+      try {
+        name = JSON.parse(s.slice(j, keyEnd));
+      } catch {
+        return -1;
+      }
+      j = skipWs(s, keyEnd);
+      if (s[j] !== ':') return -1;
+      j = skipWs(s, j + 1);
+      if (name === key) {
+        valueAt = j;
+        break;
+      }
+      j = skipWs(s, skipValue(s, j));
+      if (s[j] === ',') j = skipWs(s, j + 1);
+    }
+    if (valueAt < 0 || s[valueAt] !== '{') return -1;
+    i = valueAt;
+  }
+  return i;
+}
+
+function nestEntry(keys: string[], value: unknown): unknown {
+  return [...keys].reverse().reduce<unknown>((acc, key) => ({ [key]: acc }), value);
+}
+
+export function manualSnippet(keyPath: string[], value: unknown): string {
+  return JSON.stringify(nestEntry(keyPath, value), null, 2).split('\n').slice(1, -1).join('\n');
+}
+
+// JSONC-aware upsert for configs that may carry comments and trailing commas
+// (opencode parses everything as JSONC). Existing files are edited by textual
+// insertion so comments and formatting survive; when the file can't be edited
+// safely, the outcome carries a snippet to add by hand instead of clobbering.
+export function upsertJsoncEntry(
+  path: string,
+  keyPath: string[],
+  value: unknown,
+  dryRun = false
+): WriteOutcome {
+  const label = 'MCP server';
+  if (!existsSync(path)) {
+    if (!dryRun) {
+      ensureDir(dirname(path));
+      writeFileSync(path, JSON.stringify(nestEntry(keyPath, value), null, 2) + '\n', 'utf-8');
+    }
+    return { label, path, action: 'created' };
+  }
+
+  const manual = (detail: string): WriteOutcome => ({
+    label,
+    path,
+    action: 'skipped',
+    detail,
+    needsManualStep: true,
+    snippet: manualSnippet(keyPath, value),
+  });
+
+  const text = readFileSync(path, 'utf-8');
+  const stripped = stripJsonc(text);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripped);
+  } catch {
+    return manual('existing file is not valid JSON');
+  }
+  if (!isJsonObject(parsed)) {
+    return manual('existing file is not a JSON object');
+  }
+
+  let node: Record<string, unknown> = parsed;
+  let depth = 0;
+  for (const key of keyPath.slice(0, -1)) {
+    const child = node[key];
+    if (child === undefined) break;
+    if (!isJsonObject(child)) return manual(`"${key}" is not a JSON object`);
+    node = child;
+    depth++;
+  }
+  if (depth === keyPath.length - 1 && node[keyPath[depth]!] !== undefined) {
+    return { label, path, action: 'unchanged' };
+  }
+
+  const openIdx = objectOpenIndex(stripped, keyPath.slice(0, depth));
+  if (openIdx < 0) return manual('add the entry manually');
+
+  const unit = /\n([ \t]+)\S/.exec(text)?.[1] ?? '  ';
+  const memberIndent = unit.repeat(depth + 1);
+  const rendered = JSON.stringify(nestEntry(keyPath.slice(depth + 1), value), null, unit)
+    .split('\n')
+    .map((line, index) => (index === 0 ? line : memberIndent + line))
+    .join('\n');
+  const entry = `${JSON.stringify(keyPath[depth])}: ${rendered}`;
+  const empty = stripped[skipWs(stripped, openIdx + 1)] === '}';
+  const insertion = empty
+    ? `\n${memberIndent}${entry}\n${unit.repeat(depth)}`
+    : `\n${memberIndent}${entry},`;
+  const next = text.slice(0, openIdx + 1) + insertion + text.slice(openIdx + 1);
+
+  let probe: unknown;
+  try {
+    probe = JSON.parse(stripJsonc(next));
+  } catch {
+    probe = undefined;
+  }
+  for (const key of keyPath) {
+    probe = isJsonObject(probe) ? probe[key] : undefined;
+  }
+  if (probe === undefined) return manual('add the entry manually');
+
+  if (!dryRun) writeFileSync(path, next, 'utf-8');
+  return { label, path, action: 'updated' };
+}
+
+// opencode reads and merges both opencode.json and opencode.jsonc; edit the
+// file that exists instead of creating a sibling next to it.
+export function opencodeConfigFile(dir: string): string {
+  const jsonc = join(dir, 'opencode.jsonc');
+  return existsSync(jsonc) ? jsonc : join(dir, 'opencode.json');
 }
 
 export function upsertTomlSection(
@@ -242,8 +454,8 @@ export const AGENTS: AgentSetup[] = [
     detect: (home) => existsSync(join(home, '.config', 'opencode')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.config', 'opencode')), dryRun),
-      upsertJsonEntry(
-        join(home, '.config', 'opencode', 'opencode.json'),
+      upsertJsoncEntry(
+        opencodeConfigFile(join(home, '.config', 'opencode')),
         ['mcp', MCP_SERVER_NAME],
         { type: 'remote', url: MCP_SERVER_URL },
         dryRun
@@ -251,8 +463,8 @@ export const AGENTS: AgentSetup[] = [
     ],
     project: (projectDir, dryRun) => [
       writeSkillFile(skillFile(join(projectDir, '.opencode')), dryRun),
-      upsertJsonEntry(
-        join(projectDir, 'opencode.json'),
+      upsertJsoncEntry(
+        opencodeConfigFile(projectDir),
         ['mcp', MCP_SERVER_NAME],
         { type: 'remote', url: MCP_SERVER_URL },
         dryRun
