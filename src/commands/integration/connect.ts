@@ -98,6 +98,23 @@ export function resolveTypeOptions(category: string | undefined, typeFromFlag: b
   return typeFromFlag ? TYPE_OPTIONS : filtered;
 }
 
+// When the user's primary local agent (config.agent, persisted by `polylane
+// setup`) also exists as a cloud code agent, surface it first in its category
+// and pre-highlight it in the picker. Exact id match only — the local
+// registry and the integration types share ids where they overlap (cursor).
+export function prioritizeCodeAgent(
+  options: typeof TYPE_OPTIONS,
+  localAgent: string | undefined
+): { options: typeof TYPE_OPTIONS; initialValue: ConnectableType | undefined } {
+  const idx = options.findIndex((o) => o.category === 'code-agent' && o.value === localAgent);
+  if (idx < 0) return { options, initialValue: undefined };
+  const first = options.findIndex((o) => o.category === 'code-agent');
+  const reordered = [...options];
+  const [own] = reordered.splice(idx, 1);
+  reordered.splice(first, 0, { ...own!, hint: 'API key · your coding agent' });
+  return { options: reordered, initialValue: own!.value };
+}
+
 // Same site list the console offers; the flag accepts any value so orgs on
 // sites not listed here (e.g. newer regions) are not locked out.
 const DATADOG_SITES = [
@@ -637,7 +654,10 @@ export const integrationConnectCommand: Command = {
     const typeFromFlag = getArgString(args, 'type') !== undefined;
     const category = getArgString(args, 'category');
     // --type always wins: the category filter only narrows the picker.
-    const typeOptions = resolveTypeOptions(category, typeFromFlag);
+    const { options: typeOptions, initialValue } = prioritizeCodeAgent(
+      resolveTypeOptions(category, typeFromFlag),
+      config.agent
+    );
 
     if (shouldOfferCodeAgent(category, typeFromFlag, isInteractive(config.nonInteractive))) {
       note(
@@ -676,7 +696,8 @@ export const integrationConnectCommand: Command = {
               { nonInteractive: config.nonInteractive },
               'Which integration do you want to connect?',
               typeOptions,
-              'Cancel'
+              'Cancel',
+              initialValue
             );
       if (type === BACK) break;
       const outcome = await connectType(config, api, args, workspaceId, type, noBrowser);
