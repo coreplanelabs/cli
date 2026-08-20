@@ -39,7 +39,10 @@ function parseEnvNumber(v: string | undefined): number | undefined {
 
 function parseEnvBoolean(v: string | undefined): boolean | undefined {
   if (v === undefined) return undefined;
-  if (v === '' || v === '0' || v === 'false' || v === 'no') return false;
+  // 'off' and case-insensitivity match what the README has always documented
+  // for POLYLANE_TELEMETRY (and now POLYLANE_HINTS).
+  const norm = v.toLowerCase();
+  if (norm === '' || norm === '0' || norm === 'false' || norm === 'no' || norm === 'off') return false;
   return true;
 }
 

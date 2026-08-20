@@ -108,10 +108,8 @@ function workspaceStep(landing?: Landing): string[] {
   }
 }
 
-export function nextSteps(expiresAt: string, landing?: Landing): string {
+export function nextSteps(landing?: Landing): string {
   return [
-    `Signed in. Session valid until ${expiresAt}.`,
-    ``,
     `Onboarding (in order):`,
     ``,
     ...workspaceStep(landing),
@@ -214,7 +212,7 @@ async function finishEmailSignIn(config: Config, email: string, session: Verifie
   writeSessionCredential(session.token, session.expiresAt, email);
   await persistDefaultWorkspace(config);
   emitResult(config, { token: session.token, landing: session.landing });
-  if (config.hints) note(nextSteps(session.expiresAt, session.landing), 'Next steps');
+  if (config.hints) note(nextSteps(session.landing), 'Next steps');
   outro(`Signed in as ${email}.`);
 }
 
@@ -300,7 +298,7 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
     writeSessionCredential(token, expiresAt, user.email ?? user.id);
     await persistDefaultWorkspace(config);
     emitResult(config, json.result);
-    if (config.hints) note(nextSteps(expiresAt), 'Next steps');
+    if (config.hints) note(nextSteps(), 'Next steps');
     outro(`Signed in as ${user.email ?? user.id}.`);
     return;
   }
