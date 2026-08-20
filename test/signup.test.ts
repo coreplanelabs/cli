@@ -266,16 +266,11 @@ describe('auth signup existing-account re-auth', () => {
     assert.equal(config.workspace_id, WORKSPACE_ID);
   });
 
-  it('prints next steps standalone but suppresses them under the installer', async () => {
+  it('prints next steps by default but not with hints disabled', async () => {
     await run({ output: 'text' });
     assert.ok(output.includes('Onboarding (in order)'));
 
-    process.env.POLYLANE_ONBOARDING_RUN = 'run_test';
-    try {
-      await run({ output: 'text' });
-    } finally {
-      delete process.env.POLYLANE_ONBOARDING_RUN;
-    }
+    await run({ output: 'text', hints: false });
     assert.ok(!output.includes('Onboarding (in order)'));
     assert.ok(output.includes('Signed in as dev@acme.com.'));
   });

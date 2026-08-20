@@ -101,6 +101,17 @@ export function loadConfig(flags: GlobalFlags): Config {
     return true;
   })();
 
+  // Hints are next-step guidance for humans. An orchestrator that owns the
+  // journey (e.g. the install script) sets POLYLANE_HINTS=0 so commands stay
+  // composable inside its flow. Same boolean model as telemetry: env → config
+  // file → default on. No CLI flag until a per-invocation need shows up.
+  const hints = ((): boolean => {
+    const fromEnv = parseEnvBoolean(env.POLYLANE_HINTS);
+    if (fromEnv !== undefined) return fromEnv;
+    if (file.hints !== undefined) return file.hints;
+    return true;
+  })();
+
   return {
     apiKey,
     domain,
@@ -114,5 +125,6 @@ export function loadConfig(flags: GlobalFlags): Config {
     dryRun,
     nonInteractive,
     telemetry,
+    hints,
   };
 }

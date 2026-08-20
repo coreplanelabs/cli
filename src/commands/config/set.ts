@@ -13,7 +13,19 @@ import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { requireArg } from '../helpers';
 
-const VALID_KEYS = new Set(['domain', 'workspace_id', 'api_key', 'agent', 'output', 'timeout', 'telemetry']);
+const VALID_KEYS = new Set(['domain', 'workspace_id', 'api_key', 'agent', 'output', 'timeout', 'telemetry', 'hints']);
+
+function parseBooleanValue(key: string, value: string): boolean {
+  const truthy = ['1', 'true', 'yes', 'on', 'enabled'];
+  const falsy = ['0', 'false', 'no', 'off', 'disabled'];
+  if (truthy.includes(value)) return true;
+  if (falsy.includes(value)) return false;
+  throw new CLIError(
+    `Invalid ${key} value: "${value}"`,
+    ExitCode.USAGE,
+    'Use true/false, yes/no, on/off, 1/0, or enabled/disabled'
+  );
+}
 
 export const configSetCommand: Command = {
   name: 'config set',
@@ -69,17 +81,11 @@ export const configSetCommand: Command = {
         break;
       }
       case 'telemetry': {
-        const truthy = ['1', 'true', 'yes', 'on', 'enabled'];
-        const falsy = ['0', 'false', 'no', 'off', 'disabled'];
-        if (truthy.includes(value)) partial.telemetry = true;
-        else if (falsy.includes(value)) partial.telemetry = false;
-        else {
-          throw new CLIError(
-            `Invalid telemetry value: "${value}"`,
-            ExitCode.USAGE,
-            'Use true/false, yes/no, on/off, 1/0, or enabled/disabled'
-          );
-        }
+        partial.telemetry = parseBooleanValue(key, value);
+        break;
+      }
+      case 'hints': {
+        partial.hints = parseBooleanValue(key, value);
         break;
       }
     }

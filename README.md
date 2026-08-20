@@ -168,6 +168,7 @@ polylane ... --non-interactive --quiet --output json
 | `POLYLANE_OUTPUT` | `text` or `json` (overrides TTY auto-detect) |
 | `POLYLANE_TIMEOUT` | Request timeout (seconds) |
 | `POLYLANE_VERBOSE` | Enable verbose HTTP logging |
+| `POLYLANE_HINTS` | `0` / `false` / `off` suppresses next-step hints (guidance only — never data, status, errors, or prompts) |
 | `POLYLANE_TELEMETRY` | `0` / `false` / `off` disables anonymous usage telemetry |
 | `POLYLANE_TELEMETRY_ENDPOINT` | Override the telemetry endpoint (defaults to `<api>/v1/telemetry/cli`) |
 | `DO_NOT_TRACK` | Universal `1` disables telemetry ([standard](https://consoledonottrack.com/)) |
@@ -185,7 +186,8 @@ polylane ... --non-interactive --quiet --output json
   "workspace_id": "ws_xxxxx...",
   "api_key": "sk_xxxxx...",
   "output": "text",
-  "timeout": 300
+  "timeout": 300,
+  "hints": true
 }
 ```
 
