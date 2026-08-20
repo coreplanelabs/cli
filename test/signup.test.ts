@@ -12,9 +12,21 @@ process.env.HOME = tempHome;
 // node:test (no TTY): isInteractive is re-derived from the config flag alone,
 // prompts that would block are stubbed, and note() writes its message plain —
 // the clack box wraps long lines, which would break substring assertions.
-const realPrompt = await import('../src/utils/prompt');
-const realEnv = await import('../src/utils/env');
+// The real exports are pulled through `?real` query URLs: a plain import would
+// warm the canonical module-cache entry, and Node 20's mock.module cannot
+// override an already-loaded module (22+ re-links it; on 20 the mock stays
+// silently inert and the real prompts run). Order matters for the same reason:
+// the env mock must register before prompt.ts?real loads, because prompt.ts
+// imports the canonical './env' as a child.
+const realEnv = (await import('../src/utils/env.ts?real' as string)) as typeof import('../src/utils/env');
+mock.module('../src/utils/env', {
+  namedExports: {
+    ...realEnv,
+    isInteractive: (nonInteractive: boolean): boolean => !nonInteractive,
+  },
+});
 
+const realPrompt = (await import('../src/utils/prompt.ts?real' as string)) as typeof import('../src/utils/prompt');
 const promptEnterCalls: string[] = [];
 mock.module('../src/utils/prompt', {
   namedExports: {
@@ -26,12 +38,6 @@ mock.module('../src/utils/prompt', {
     promptEnter: async (_ctx: unknown, message: string): Promise<void> => {
       promptEnterCalls.push(message);
     },
-  },
-});
-mock.module('../src/utils/env', {
-  namedExports: {
-    ...realEnv,
-    isInteractive: (nonInteractive: boolean): boolean => !nonInteractive,
   },
 });
 
