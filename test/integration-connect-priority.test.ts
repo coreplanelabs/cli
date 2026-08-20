@@ -4,7 +4,10 @@ import { prioritizeCodeAgent, typeOptionsForCategory } from '../src/commands/int
 
 describe('prioritizeCodeAgent', () => {
   it('moves the local agent to the front of the code-agent group', () => {
-    const { options, initialValue } = prioritizeCodeAgent(typeOptionsForCategory(undefined), 'cursor');
+    const all = typeOptionsForCategory(undefined);
+    const before = all.map((o) => ({ ...o }));
+    const { options, initialValue } = prioritizeCodeAgent(all, 'cursor');
+    assert.deepEqual(all, before);
     const values = options.map((o) => o.value);
     assert.equal(initialValue, 'cursor');
     assert.equal(values.indexOf('cursor'), values.indexOf('devin') - 1);

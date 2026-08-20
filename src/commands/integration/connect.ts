@@ -111,7 +111,7 @@ export function prioritizeCodeAgent(
   const first = options.findIndex((o) => o.category === 'code-agent');
   const reordered = [...options];
   const [own] = reordered.splice(idx, 1);
-  reordered.splice(first, 0, { ...own!, hint: 'API key · your coding agent' });
+  reordered.splice(first, 0, { ...own!, hint: own!.hint.replace(/coding agent$/, 'your coding agent') });
   return { options: reordered, initialValue: own!.value };
 }
 
