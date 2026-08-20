@@ -147,6 +147,43 @@ describe('buildBrowserFlowUrls', () => {
     assert.equal(openUrl.searchParams.get('provider'), 'github');
     assert.ok(openUrl.searchParams.get('redirect')!.includes(`run=${ENV_RUN}`));
   });
+
+  it('routes a provider-tagged sign-in through the signup entry with the longer budget', () => {
+    const plain = buildBrowserFlowUrls(mockConfig(), 'state123', 'challenge123');
+    const tagged = buildBrowserFlowUrls(mockConfig(), 'state123', 'challenge123', {
+      provider: 'google',
+    });
+    assert.equal(tagged.openUrl.pathname, '/signup');
+    assert.equal(tagged.openUrl.searchParams.get('provider'), 'google');
+    assert.equal(tagged.openUrl.searchParams.get('ref'), 'gh.readme');
+    assert.equal(
+      tagged.openUrl.searchParams.get('redirect'),
+      `${tagged.authUrl.pathname}${tagged.authUrl.search}`
+    );
+    assert.ok(tagged.timeoutMs > plain.timeoutMs);
+  });
+
+  it('keeps the signup entry shape when no provider is named', () => {
+    const plain = buildBrowserFlowUrls(mockConfig(), 'state123', 'challenge123');
+    const signup = buildBrowserFlowUrls(mockConfig(), 'state123', 'challenge123', {
+      signupEntry: true,
+    });
+    assert.equal(signup.openUrl.pathname, '/signup');
+    assert.equal(signup.openUrl.searchParams.get('provider'), null);
+    assert.equal(
+      signup.openUrl.searchParams.get('redirect'),
+      `${signup.authUrl.pathname}${signup.authUrl.search}`
+    );
+    assert.equal(signup.timeoutMs, buildBrowserFlowUrls(mockConfig(), 's', 'c', { provider: 'github' }).timeoutMs);
+    assert.ok(signup.timeoutMs > plain.timeoutMs);
+  });
+
+  it('opens the consent url directly when neither signup entry nor provider is set', () => {
+    const { authUrl, openUrl, timeoutMs } = buildBrowserFlowUrls(mockConfig(), 'state123', 'challenge123');
+    assert.equal(openUrl, authUrl);
+    assert.ok(openUrl.pathname.startsWith('/oauth/'));
+    assert.ok(timeoutMs > 0);
+  });
 });
 
 describe('auth signup attribution forwarding', () => {

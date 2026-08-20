@@ -12,7 +12,8 @@ const CALLBACK_PORT = 18991;
 const CALLBACK_PATH = '/callback';
 const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`;
 const BROWSER_TIMEOUT_MS = 120_000;
-// Creating an account (provider round-trip + consent) takes longer than a sign-in.
+// Any /signup entry (account creation or a provider-tagged sign-in) adds a
+// provider round-trip before the consent hop, so it gets a longer budget.
 const SIGNUP_BROWSER_TIMEOUT_MS = 300_000;
 
 // The dotted process.env reads below are frozen into the bundle by build.ts's
@@ -363,8 +364,13 @@ export interface BrowserFlowOptions {
   // (the console keeps it alive across the provider round-trip), so a brand-new
   // user creates the account and lands on the consent screen in one browser trip.
   signupEntry?: boolean;
-  // Which provider the user picked in the CLI. The console signup page
-  // auto-starts that provider's OAuth without another click.
+  // Which provider the user picked in the CLI. Setting this routes the browser
+  // through the console signup page — with or without signupEntry — because
+  // that page auto-starts the provider's OAuth without another click and its
+  // login composables are shared with sign-in, so existing accounts just sign
+  // in. Opening the consent URL directly instead would bounce an
+  // unauthenticated browser to the generic sign-in page (its auth middleware),
+  // stranding the user a click away from the provider they already chose.
   provider?: 'google' | 'github';
 }
 
@@ -396,7 +402,7 @@ export function buildBrowserFlowUrls(
 
   let openUrl = authUrl;
   let timeoutMs = BROWSER_TIMEOUT_MS;
-  if (options.signupEntry) {
+  if (options.signupEntry || options.provider) {
     openUrl = new URL(`${consoleBaseUrl(config)}/signup`);
     openUrl.searchParams.set('redirect', `${authUrl.pathname}${authUrl.search}`);
     if (options.provider) openUrl.searchParams.set('provider', options.provider);
@@ -405,6 +411,8 @@ export function buildBrowserFlowUrls(
     const ref = readInstallRef();
     if (ref) openUrl.searchParams.set('ref', ref);
     if (runId) openUrl.searchParams.set(ONBOARDING_RUN_QUERY_PARAM, runId);
+    // The provider round-trip takes longer than a plain consent hop whether or
+    // not the account is new, so every /signup entry gets the longer budget.
     timeoutMs = SIGNUP_BROWSER_TIMEOUT_MS;
   }
 
