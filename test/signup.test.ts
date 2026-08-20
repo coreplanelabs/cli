@@ -266,16 +266,11 @@ describe('auth signup existing-account re-auth', () => {
     assert.equal(config.workspace_id, WORKSPACE_ID);
   });
 
-  it('prints next steps standalone but suppresses them under the installer', async () => {
+  it('prints next steps by default but not with hints disabled', async () => {
     await run({ output: 'text' });
     assert.ok(output.includes('Onboarding (in order)'));
 
-    process.env.POLYLANE_ONBOARDING_RUN = 'run_test';
-    try {
-      await run({ output: 'text' });
-    } finally {
-      delete process.env.POLYLANE_ONBOARDING_RUN;
-    }
+    await run({ output: 'text', hints: false });
     assert.ok(!output.includes('Onboarding (in order)'));
     assert.ok(output.includes('Signed in as dev@acme.com.'));
   });
@@ -386,44 +381,42 @@ describe('auth signup --code (email verification)', () => {
 });
 
 describe('nextSteps', () => {
-  const expiresAt = '2026-08-10T00:00:00.000Z';
-
   it('names a created workspace and does not suggest creating one', () => {
-    const text = nextSteps(expiresAt, { kind: 'created', workspaceSlug: 'acme' });
+    const text = nextSteps({ kind: 'created', workspaceSlug: 'acme' });
     assert.ok(text.includes('Your first workspace ("acme") was created'));
     assert.ok(!text.includes('polylane workspace create'));
   });
 
   it('names a joined workspace and does not suggest creating one', () => {
-    const text = nextSteps(expiresAt, { kind: 'joined', workspaceSlug: 'inviter' });
+    const text = nextSteps({ kind: 'joined', workspaceSlug: 'inviter' });
     assert.ok(text.includes('You joined the "inviter" workspace'));
     assert.ok(!text.includes('polylane workspace create'));
   });
 
   it('points existing members at picking a default workspace', () => {
-    const text = nextSteps(expiresAt, { kind: 'existing' });
+    const text = nextSteps({ kind: 'existing' });
     assert.ok(text.includes('Set your default workspace'));
     assert.ok(!text.includes('polylane workspace create'));
   });
 
   it('suggests creating a workspace when the landing kind is none', () => {
-    const text = nextSteps(expiresAt, { kind: 'none' });
+    const text = nextSteps({ kind: 'none' });
     assert.ok(text.includes('polylane workspace create'));
   });
 
   it('suggests creating a workspace when no landing is present', () => {
-    const text = nextSteps(expiresAt);
+    const text = nextSteps();
     assert.ok(text.includes('polylane workspace create'));
   });
 
   it('does not crash when a created landing has no workspaceSlug', () => {
-    const text = nextSteps(expiresAt, { kind: 'created' });
+    const text = nextSteps({ kind: 'created' });
     assert.ok(text.includes('Your first workspace was created'));
     assert.ok(!text.includes('polylane workspace create'));
   });
 
   it('suggests creating a workspace for an invite at capacity', () => {
-    const text = nextSteps(expiresAt, {
+    const text = nextSteps({
       kind: 'invite_at_capacity',
       workspace: { id: 'ws_1', name: 'Inviter' },
     });

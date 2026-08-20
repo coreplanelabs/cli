@@ -14,6 +14,7 @@ describe('loadConfig', () => {
     delete process.env.POLYLANE_OUTPUT;
     delete process.env.POLYLANE_VERBOSE;
     delete process.env.POLYLANE_AGENT;
+    delete process.env.POLYLANE_HINTS;
   });
 
   afterEach(() => {
@@ -58,5 +59,22 @@ describe('loadConfig', () => {
     process.env.POLYLANE_AGENT = 'not-an-agent';
     const config = loadConfig({} as GlobalFlags);
     assert.equal(config.agent, undefined);
+  });
+
+  it('hints default on', () => {
+    const config = loadConfig({} as GlobalFlags);
+    assert.equal(config.hints, true);
+  });
+
+  it('POLYLANE_HINTS=0 disables hints', () => {
+    process.env.POLYLANE_HINTS = '0';
+    const config = loadConfig({} as GlobalFlags);
+    assert.equal(config.hints, false);
+  });
+
+  it('POLYLANE_HINTS=1 enables hints', () => {
+    process.env.POLYLANE_HINTS = '1';
+    const config = loadConfig({} as GlobalFlags);
+    assert.equal(config.hints, true);
   });
 });

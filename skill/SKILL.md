@@ -300,6 +300,7 @@ polylane issue list --quiet 2>/dev/null
 | `POLYLANE_OUTPUT` | `text` or `json` (overrides TTY auto-detect) |
 | `POLYLANE_TIMEOUT` | Request timeout (seconds) |
 | `POLYLANE_VERBOSE` | Verbose HTTP logs |
+| `POLYLANE_HINTS` | `0` / `false` / `off` suppresses next-step hints (guidance only) |
 | `POLYLANE_TELEMETRY` | `0` / `false` / `off` disables anonymous telemetry |
 | `DO_NOT_TRACK` | `1` — universal opt-out |
 | `NO_COLOR` | Disable ANSI colours |

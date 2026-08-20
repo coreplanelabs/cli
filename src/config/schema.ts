@@ -16,6 +16,10 @@ export interface Config {
   dryRun: boolean;
   nonInteractive: boolean;
   telemetry: boolean;
+  /** Next-step guidance for humans (git's advice.* category). Suppressible
+   * by orchestrators that own the journey; never gates data, status lines,
+   * errors, prompts, or consent notices. */
+  hints: boolean;
 }
 
 export interface RawConfig {
@@ -26,6 +30,7 @@ export interface RawConfig {
   output?: OutputFormat;
   timeout?: number;
   telemetry?: boolean;
+  hints?: boolean;
 }
 
 // process.env.POLYLANE_API_DOMAIN is replaced at build time via esbuild define

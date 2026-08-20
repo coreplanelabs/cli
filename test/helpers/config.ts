@@ -10,6 +10,7 @@ export function mockConfig(overrides: Partial<Config> = {}): Config {
     noColor: true,
     dryRun: false,
     nonInteractive: true,
+    hints: true,
     ...overrides,
   };
 }
