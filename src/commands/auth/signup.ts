@@ -2,7 +2,7 @@ import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { formatOutput } from '../../output/formatter';
 import { getArgString, promptIfMissing } from '../helpers';
-import { promptPassword, promptSelect, promptText, intro, outro, note } from '../../utils/prompt';
+import { promptEnter, promptPassword, promptSelect, promptText, intro, outro, note } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
 import { oauthLogin, selectWorkspace, type WhoamiResult } from './login';
 import { writeCredentials } from '../../auth/credentials';
@@ -61,6 +61,15 @@ const OAUTH_PROVIDER_LABELS: Record<'google' | 'github', string> = {
   google: 'Google',
   github: 'GitHub',
 };
+
+// Verbs stay separate on purpose: users agree to the Terms by contract but
+// only acknowledge the Privacy Policy — never "agree to our Terms and
+// Privacy Policy".
+const TERMS_NOTICE = [
+  'By continuing, you agree to the Terms of Service and acknowledge the Privacy Policy:',
+  '  https://polylane.com/terms/',
+  '  https://polylane.com/privacy/',
+].join('\n');
 
 function writeSessionCredential(token: string, expiresAt: string, account: string): void {
   const cred: OAuthCredential = {
@@ -143,8 +152,14 @@ async function oauthSignup(config: Config, provider: 'google' | 'github'): Promi
     [
       `Your browser will open the Polylane signup page.`,
       `Pick "${label}" there, then approve the CLI's access when asked.`,
+      ``,
+      TERMS_NOTICE,
     ].join('\n'),
     `Sign up with ${label}`
+  );
+  await promptEnter(
+    { nonInteractive: config.nonInteractive },
+    'Press Enter to create your account, or Ctrl-C to cancel.'
   );
   await oauthLogin(config, true, { signupEntry: true, provider });
 }
@@ -219,9 +234,24 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
     return;
   }
 
+  const passwordArg = getArgString(args, 'password');
   const password =
-    getArgString(args, 'password') ??
-    (await promptPassword({ nonInteractive: config.nonInteractive }, 'Password'));
+    passwordArg ?? (await promptPassword({ nonInteractive: config.nonInteractive }, 'Password'));
+
+  // The terms notice rides the one account-creating POST below; emailSignup and
+  // oauthSignup are mutually exclusive per run, so it shows at most once. The
+  // gate wording is neutral because this is also `auth login`'s Email route and
+  // signup is idempotent for an existing account. A --password invocation is
+  // scripted consent: print the notice, never block on Enter.
+  if (passwordArg === undefined && isInteractive(config.nonInteractive)) {
+    note(TERMS_NOTICE);
+    await promptEnter(
+      { nonInteractive: config.nonInteractive },
+      'Press Enter to continue, or Ctrl-C to cancel.'
+    );
+  } else {
+    process.stderr.write(`\n${TERMS_NOTICE}\n\n`);
+  }
 
   // Need response headers (Set-Cookie -> session expiry) so call request() directly
   // rather than via the generated client which only exposes the body.

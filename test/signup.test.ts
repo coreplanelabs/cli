@@ -1,4 +1,4 @@
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, before, after, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7,6 +7,39 @@ import type { GlobalFlags } from '../src/types/flags';
 
 const tempHome = mkdtempSync(join(tmpdir(), 'polylane-signup-test-'));
 process.env.HOME = tempHome;
+
+// The terms-notice tests drive interactive paths, which don't exist under
+// node:test (no TTY): isInteractive is re-derived from the config flag alone,
+// prompts that would block are stubbed, and note() writes its message plain —
+// the clack box wraps long lines, which would break substring assertions.
+// The real exports are pulled through `?real` query URLs: a plain import would
+// warm the canonical module-cache entry, and Node 20's mock.module cannot
+// override an already-loaded module (22+ re-links it; on 20 the mock stays
+// silently inert and the real prompts run). Order matters for the same reason:
+// the env mock must register before prompt.ts?real loads, because prompt.ts
+// imports the canonical './env' as a child.
+const realEnv = (await import('../src/utils/env.ts?real' as string)) as typeof import('../src/utils/env');
+mock.module('../src/utils/env', {
+  namedExports: {
+    ...realEnv,
+    isInteractive: (nonInteractive: boolean): boolean => !nonInteractive,
+  },
+});
+
+const realPrompt = (await import('../src/utils/prompt.ts?real' as string)) as typeof import('../src/utils/prompt');
+const promptEnterCalls: string[] = [];
+mock.module('../src/utils/prompt', {
+  namedExports: {
+    ...realPrompt,
+    note: (message: string, title?: string): void => {
+      process.stderr.write(`${title ? `${title}\n` : ''}${message}\n`);
+    },
+    promptPassword: async (): Promise<string> => 'prompted-password',
+    promptEnter: async (_ctx: unknown, message: string): Promise<void> => {
+      promptEnterCalls.push(message);
+    },
+  },
+});
 
 const { authSignupCommand, nextSteps } = await import('../src/commands/auth/signup');
 const { mockConfig } = await import('./helpers/config');
@@ -60,6 +93,117 @@ function verifyEmailResponse(landing: unknown): Response {
     { 'set-cookie': `auth_session=tok_test; Expires=${expires}; Path=/; HttpOnly` }
   );
 }
+
+const TERMS_LINE = 'you agree to the Terms of Service and acknowledge the Privacy Policy';
+
+function signupResponse(): Response {
+  const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
+  return jsonResponse(
+    {
+      success: true,
+      error: null,
+      result: {
+        user: { id: 'user_1', email: 'dev@acme.com', emailVerified: true },
+        token: 'tok_signup',
+      },
+    },
+    { 'set-cookie': `auth_session=tok_signup; Expires=${expires}; Path=/; HttpOnly` }
+  );
+}
+
+describe('auth signup terms notice', () => {
+  before(() => {
+    delete process.env.POLYLANE_API_KEY;
+    delete process.env.POLYLANE_WORKSPACE_ID;
+    delete process.env.POLYLANE_API_DOMAIN;
+    delete process.env.POLYLANE_ONBOARDING_RUN;
+  });
+
+  beforeEach(() => {
+    rmSync(CONFIG_FILE, { force: true });
+    rmSync(CREDENTIALS_FILE, { force: true });
+    promptEnterCalls.length = 0;
+  });
+
+  it('shows the notice once and gates on Enter on the interactive email path', async () => {
+    mockApi({ '/v1/auth/signup': signupResponse });
+
+    captureOutput();
+    try {
+      await authSignupCommand.execute(
+        mockConfig({ telemetry: false, nonInteractive: false }),
+        {} as GlobalFlags,
+        { email: 'dev@acme.com' }
+      );
+    } finally {
+      restoreOutput();
+    }
+
+    assert.equal(output.split(TERMS_LINE).length - 1, 1);
+    assert.ok(output.includes('https://polylane.com/terms/'));
+    assert.ok(output.includes('https://polylane.com/privacy/'));
+    assert.deepEqual(promptEnterCalls, ['Press Enter to continue, or Ctrl-C to cancel.']);
+  });
+
+  it('prints the notice without gating on a non-interactive scripted signup', async () => {
+    mockApi({ '/v1/auth/signup': signupResponse });
+
+    captureOutput();
+    try {
+      await authSignupCommand.execute(
+        mockConfig({ telemetry: false }),
+        {} as GlobalFlags,
+        { email: 'dev@acme.com', password: 'hunter2-hunter2' }
+      );
+    } finally {
+      restoreOutput();
+    }
+
+    assert.equal(output.split(TERMS_LINE).length - 1, 1);
+    assert.deepEqual(promptEnterCalls, []);
+  });
+
+  it('keeps the notice but skips the gate when --password is passed interactively', async () => {
+    mockApi({ '/v1/auth/signup': signupResponse });
+
+    captureOutput();
+    try {
+      await authSignupCommand.execute(
+        mockConfig({ telemetry: false, nonInteractive: false }),
+        {} as GlobalFlags,
+        { email: 'dev@acme.com', password: 'hunter2-hunter2' }
+      );
+    } finally {
+      restoreOutput();
+    }
+
+    assert.equal(output.split(TERMS_LINE).length - 1, 1);
+    assert.deepEqual(promptEnterCalls, []);
+  });
+
+  it('does not show the notice on the --code completion path', async () => {
+    mockApi({
+      '/v1/auth/verify_email': () => verifyEmailResponse({ kind: 'none' }),
+      '/v1/auth/whoami': () =>
+        jsonResponse({ success: true, error: null, result: { id: 'user_1', email: 'dev@acme.com' } }),
+      '/v1/workspaces': () =>
+        jsonResponse({ success: true, error: null, result: { items: [], count: 0 } }),
+    });
+
+    captureOutput();
+    try {
+      await authSignupCommand.execute(
+        mockConfig({ telemetry: false }),
+        {} as GlobalFlags,
+        { email: 'dev@acme.com', code: '123456' }
+      );
+    } finally {
+      restoreOutput();
+    }
+
+    assert.ok(!output.includes(TERMS_LINE));
+  });
+});
 
 describe('auth signup --code (email verification)', () => {
   before(() => {

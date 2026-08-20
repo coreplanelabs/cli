@@ -34,8 +34,12 @@ const { buildBrowserFlowUrls, oauthDeviceCodeFlow } = await import('../src/auth/
 // the CLI's own output functions to no-ops, via module mocking, before importing the
 // commands that bind them. Their output is not what these tests assert on — the
 // run/ref forwarding and the one-shot file cleanup are.
-const realPrompt = await import('../src/utils/prompt');
-const realFormatter = await import('../src/output/formatter');
+// The real exports come from ?real query URLs (separate cache entries): a plain
+// import would warm the canonical module-cache entry, and Node 20's mock.module
+// cannot override an already-loaded module (22+ re-links it; on 20 the mocks
+// were silently inert and the raw clack writes reached stdout after all).
+const realPrompt = (await import('../src/utils/prompt.ts?real' as string)) as typeof import('../src/utils/prompt');
+const realFormatter = (await import('../src/output/formatter.ts?real' as string)) as typeof import('../src/output/formatter');
 const noop = (): void => {};
 mock.module('../src/utils/prompt', {
   namedExports: { ...realPrompt, intro: noop, outro: noop, note: noop, cancel: noop },
