@@ -142,7 +142,7 @@ describe('auth signup terms notice', () => {
     assert.equal(output.split(TERMS_LINE).length - 1, 1);
     assert.ok(output.includes('https://polylane.com/terms/'));
     assert.ok(output.includes('https://polylane.com/privacy/'));
-    assert.deepEqual(promptEnterCalls, ['Press Enter to continue, or Ctrl-C to cancel.']);
+    assert.deepEqual(promptEnterCalls, ['Continue?']);
   });
 
   it('prints the notice without gating on a non-interactive scripted signup', async () => {
