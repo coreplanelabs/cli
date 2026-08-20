@@ -205,6 +205,82 @@ describe('auth signup terms notice', () => {
   });
 });
 
+// The existing-verified-account (re-auth) path: the signup POST returns a
+// verified user plus a session token immediately, no --code round-trip.
+describe('auth signup existing-account re-auth', () => {
+  const reauthRoutes = {
+    '/v1/auth/signup': signupResponse,
+    '/v1/auth/whoami': (): Response =>
+      jsonResponse({ success: true, error: null, result: { id: 'user_1', email: 'dev@acme.com' } }),
+    '/v1/workspaces': (): Response =>
+      jsonResponse({
+        success: true,
+        error: null,
+        result: { items: [{ id: WORKSPACE_ID, name: 'Acme', slug: 'acme' }], count: 1 },
+      }),
+  };
+
+  before(() => {
+    delete process.env.POLYLANE_API_KEY;
+    delete process.env.POLYLANE_WORKSPACE_ID;
+    delete process.env.POLYLANE_API_DOMAIN;
+  });
+
+  beforeEach(() => {
+    rmSync(CONFIG_FILE, { force: true });
+    rmSync(CREDENTIALS_FILE, { force: true });
+    delete process.env.POLYLANE_ONBOARDING_RUN;
+  });
+
+  async function run(overrides: Parameters<typeof mockConfig>[0] = {}): Promise<void> {
+    mockApi(reauthRoutes);
+    captureOutput();
+    try {
+      await authSignupCommand.execute(
+        mockConfig({ telemetry: false, ...overrides }),
+        {} as GlobalFlags,
+        { email: 'dev@acme.com', password: 'hunter2-hunter2' }
+      );
+    } finally {
+      restoreOutput();
+    }
+  }
+
+  it('text mode never prints the token, the raw user object, or "undefined"', async () => {
+    await run({ output: 'text' });
+    assert.ok(!output.includes('tok_signup'), 'session token leaked to text output');
+    assert.ok(!output.includes('emailVerified'), 'raw user object dumped to text output');
+    assert.ok(!output.includes('undefined'));
+    assert.ok(output.includes('Signed in as dev@acme.com.'));
+  });
+
+  it('JSON mode still emits the full envelope for scripts', async () => {
+    await run({ output: 'json' });
+    assert.ok(output.includes('tok_signup'));
+    assert.ok(output.includes('emailVerified'));
+  });
+
+  it('persists workspace_id to config.json on re-auth', async () => {
+    await run({ output: 'text' });
+    const config = JSON.parse(readFileSync(CONFIG_FILE, 'utf-8')) as { workspace_id?: string };
+    assert.equal(config.workspace_id, WORKSPACE_ID);
+  });
+
+  it('prints next steps standalone but suppresses them under the installer', async () => {
+    await run({ output: 'text' });
+    assert.ok(output.includes('Onboarding (in order)'));
+
+    process.env.POLYLANE_ONBOARDING_RUN = 'run_test';
+    try {
+      await run({ output: 'text' });
+    } finally {
+      delete process.env.POLYLANE_ONBOARDING_RUN;
+    }
+    assert.ok(!output.includes('Onboarding (in order)'));
+    assert.ok(output.includes('Signed in as dev@acme.com.'));
+  });
+});
+
 describe('auth signup --code (email verification)', () => {
   before(() => {
     delete process.env.POLYLANE_API_KEY;
