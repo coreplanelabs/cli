@@ -262,7 +262,7 @@ Run `polylane automation create --help` for every flag. Common trigger types: `a
 `{cloudflare,vercel,render,fly}.deployment`, `slack.message`, `polylane.*` (issue.triaged,
 cloud_account.synced, codebase.synced, …). Actions include `openIssue`,
 `rollback{Cloudflare,Vercel,Render,Fly}Deployment`, `submitPr`, `commentPr`, `mergePr`,
-`commentGithubIssue`, `createGithubIssue`, `autofix`, `handoffTo{Devin,Cursor,Factory}`. The
+`commentGithubIssue`, `createGithubIssue`, `autofix`, `handoffTo{Devin,Cursor,Factory,Conductor}`. The
 authoritative, always-current list of types and filters is in the docs and in
 `polylane api describe automations.post`.
 
