@@ -16,6 +16,7 @@ import {
   choiceStep,
   secretStep,
   SKIPPED,
+  type WizardStep,
 } from '../helpers';
 import type { Integration } from '../../generated/types';
 import { CLIError } from '../../errors/base';
@@ -355,21 +356,73 @@ async function connectMcp(
   return 'connected';
 }
 
+const MANAGEMENT_KEY_PAIR_HINT = 'Pass both --management-api-key-id and --management-api-key-secret.';
+
 // The API stores the Management API key only as a pair, and both halves are
-// required — a missing half is a usage error before any request is sent.
+// required — a missing (or whitespace-only) half is a usage error before any
+// request is sent. Both halves are trimmed here so the flag and prompt paths
+// behave identically on pasted values.
 export function honeycombManagementKeyFields(
   managementApiKeyId: string,
   managementApiKeySecret: string
 ): { managementApiKeyId: string; managementApiKeySecret: string } {
-  if (!managementApiKeyId || !managementApiKeySecret) {
-    const missing = !managementApiKeyId ? '--management-api-key-id' : '--management-api-key-secret';
-    throw new CLIError(
-      `Missing required flag: ${missing}`,
-      ExitCode.USAGE,
-      'Pass both --management-api-key-id and --management-api-key-secret.'
-    );
+  const id = managementApiKeyId.trim();
+  const secret = managementApiKeySecret.trim();
+  if (!id || !secret) {
+    const missing = !id ? '--management-api-key-id' : '--management-api-key-secret';
+    throw new CLIError(`Missing required flag: ${missing}`, ExitCode.USAGE, MANAGEMENT_KEY_PAIR_HINT);
   }
-  return { managementApiKeyId, managementApiKeySecret };
+  return { managementApiKeyId: id, managementApiKeySecret: secret };
+}
+
+// Both management-key steps share the same shape: a flag short-circuits, a
+// non-interactive run without the flag is a usage error, and only the prompt
+// differs.
+function managementKeyStep(
+  config: Config,
+  args: Record<string, unknown>,
+  key: 'managementApiKeyId' | 'managementApiKeySecret',
+  flag: string,
+  prompt: () => Promise<string | typeof BACK>,
+  set: (value: string) => void
+): WizardStep {
+  return async () => {
+    const fromFlag = getArgString(args, key);
+    if (fromFlag !== undefined) {
+      set(fromFlag);
+      return SKIPPED;
+    }
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(`Missing required flag: ${flag}`, ExitCode.USAGE, MANAGEMENT_KEY_PAIR_HINT);
+    }
+    const value = await prompt();
+    if (value === BACK) return BACK;
+    set(value);
+    return;
+  };
+}
+
+// An API build that predates the management-key fields strips them from the
+// connect body and stores the integration without them. The response echoes
+// the stored metadata (the key ID survives redaction), so a missing ID there
+// means the key was silently dropped — that must fail loudly, not read as a
+// successful connect. The generated metadata type gains managementApiKeyId
+// only when the matching API deploy lands, so the field is read through a
+// structural cast, same trust boundary as the request-body spread.
+export function assertHoneycombManagementKeyStored(
+  integration: Pick<Integration, 'id' | 'metadata' | '_html_url'>
+): void {
+  const metadata = integration.metadata as { managementApiKeyId?: unknown } | null | undefined;
+  if (metadata != null && typeof metadata.managementApiKeyId === 'string' && metadata.managementApiKeyId !== '') {
+    return;
+  }
+  throw new CLIError(
+    'The Polylane API does not support the Honeycomb Management API key yet — the key was not stored',
+    ExitCode.GENERAL,
+    'Honeycomb was connected without query access. Disconnect it, then retry once the API is updated:\n' +
+      `polylane integration disconnect ${integration.id} --yes` +
+      (integration._html_url ? `\nor reconnect from the console: ${integration._html_url}` : '')
+  );
 }
 
 // --- Credential-based connects: each wizard step can go back to the previous
@@ -430,7 +483,6 @@ async function connectWithCredentials(
     let apiKey = '';
     let managementApiKeyId = '';
     let managementApiKeySecret = '';
-    const managementSecretFlag = getArgString(args, 'managementApiKeySecret');
     const ok = await runSteps([
       choiceStep<'us' | 'eu'>(
         config,
@@ -463,55 +515,38 @@ async function connectWithCredentials(
           apiKey = v;
         }
       ),
-      async () => {
-        const fromFlag = getArgString(args, 'managementApiKeyId');
-        if (fromFlag !== undefined) {
-          managementApiKeyId = fromFlag;
-          return SKIPPED;
+      managementKeyStep(
+        config,
+        args,
+        'managementApiKeyId',
+        '--management-api-key-id',
+        () => {
+          note('Create one in your Honeycomb team settings under API Keys.', 'Management API key');
+          return promptTextOrBack({ nonInteractive: config.nonInteractive }, 'Management API key ID', {
+            validate: (v: string) => (v.trim() ? undefined : 'Required'),
+          });
+        },
+        (v) => {
+          managementApiKeyId = v;
         }
-        if (!isInteractive(config.nonInteractive)) {
-          throw new CLIError(
-            'Missing required flag: --management-api-key-id',
-            ExitCode.USAGE,
-            'Pass both --management-api-key-id and --management-api-key-secret.'
-          );
+      ),
+      managementKeyStep(
+        config,
+        args,
+        'managementApiKeySecret',
+        '--management-api-key-secret',
+        () => promptPasswordOrBack({ nonInteractive: config.nonInteractive }, 'Management API key secret'),
+        (v) => {
+          managementApiKeySecret = v;
         }
-        note('Create one in your Honeycomb team settings under API Keys.', 'Management API key');
-        const value = await promptTextOrBack(
-          { nonInteractive: config.nonInteractive },
-          'Management API key ID',
-          { validate: (v: string) => (v.trim() ? undefined : 'Required') }
-        );
-        if (value === BACK) return BACK;
-        managementApiKeyId = value.trim();
-        return;
-      },
-      async () => {
-        if (managementSecretFlag !== undefined) {
-          managementApiKeySecret = managementSecretFlag;
-          return SKIPPED;
-        }
-        if (!isInteractive(config.nonInteractive)) {
-          throw new CLIError(
-            'Missing required flag: --management-api-key-secret',
-            ExitCode.USAGE,
-            'Pass both --management-api-key-id and --management-api-key-secret.'
-          );
-        }
-        const value = await promptPasswordOrBack(
-          { nonInteractive: config.nonInteractive },
-          'Management API key secret'
-        );
-        if (value === BACK) return BACK;
-        managementApiKeySecret = value;
-        return;
-      },
+      ),
     ]);
     if (!ok) return BACK;
     // Spread instead of literal fields: the client is generated from the live
     // prod spec, which gains these two fields only when the matching API
     // deploy lands. The spread keeps typecheck green on both sides; the old
-    // API strips unknown keys, the new one validates them.
+    // API strips unknown keys (caught after connect by
+    // assertHoneycombManagementKeyStored), the new one validates them.
     body = {
       type: 'honeycomb',
       workspaceId,
@@ -638,6 +673,7 @@ async function connectWithCredentials(
   }
 
   const integration = await api.integrationsConnect(body);
+  if (type === 'honeycomb') assertHoneycombManagementKeyStored(integration);
   printConnectSuccess(config, integration, TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
   if (isCodeAgentType(integration.type) && !config.quiet && config.output !== 'json') {
     process.stderr.write(`Connecting ${CODE_AGENTS[integration.type].name} makes it the default autofix executor.\n`);
