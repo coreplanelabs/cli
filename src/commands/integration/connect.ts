@@ -136,6 +136,74 @@ function datadogConsoleUrl(site: string): string {
   return appPrefixed ? `https://app.${site}` : `https://${site}`;
 }
 
+// Axiom's console and management API are region-less (app.axiom.co /
+// api.axiom.co); only the org's edge deployment differs, shown in the console
+// under Settings > General > Edge deployment and returned by the management
+// API as identifiers like "cloud.eu-central-1.aws".
+// https://axiom.co/docs/reference/edge-deployments
+export type AxiomRegion = 'us-east-1' | 'eu-central-1';
+
+const AXIOM_REGIONS: Array<{ value: AxiomRegion; label: string }> = [
+  { value: 'us-east-1', label: 'US East 1' },
+  { value: 'eu-central-1', label: 'EU Central 1' },
+];
+
+const AXIOM_API_BASE = 'https://api.axiom.co';
+const AXIOM_PROBE_TIMEOUT_MS = 5000;
+const AXIOM_REGION_HINT = 'In Axiom: Settings > General > Edge deployment (https://app.axiom.co/settings/general)';
+
+export function axiomRegionFromEdgeDeployment(value: unknown): AxiomRegion | null {
+  if (typeof value !== 'string') return null;
+  if (value.includes('eu-central-1')) return 'eu-central-1';
+  if (value.includes('us-east-1')) return 'us-east-1';
+  return null;
+}
+
+function uniqueAxiomRegion(items: unknown, field: string): AxiomRegion | null {
+  if (!Array.isArray(items)) return null;
+  const regions = new Set<AxiomRegion>();
+  for (const item of items) {
+    const value = (item as Record<string, unknown> | null)?.[field];
+    const region = axiomRegionFromEdgeDeployment(value);
+    if (region !== null) regions.add(region);
+  }
+  return regions.size === 1 ? [...regions][0]! : null;
+}
+
+export type AxiomRegionDetection =
+  | { outcome: 'detected'; region: AxiomRegion }
+  | { outcome: 'unauthorized' }
+  | { outcome: 'unknown' };
+
+// Detect the org's edge deployment from the token: /v2/orgs carries
+// defaultEdgeDeployment but needs an org permission the recommended token may
+// lack; /v2/datasets works with the Datasets-read permission the connect
+// instructions require and carries edgeDeployment per dataset. Ambiguity
+// (multi-edge org, no datasets, network trouble) falls back to asking.
+export async function detectAxiomRegion(
+  apiToken: string,
+  fetchFn: typeof fetch = fetch
+): Promise<AxiomRegionDetection> {
+  const probe = async (path: string): Promise<{ status: number; body: unknown } | null> => {
+    try {
+      const res = await fetchFn(`${AXIOM_API_BASE}${path}`, {
+        headers: { authorization: `Bearer ${apiToken}` },
+        signal: AbortSignal.timeout(AXIOM_PROBE_TIMEOUT_MS),
+      });
+      return { status: res.status, body: res.ok ? ((await res.json()) as unknown) : null };
+    } catch {
+      return null;
+    }
+  };
+  const [orgs, datasets] = await Promise.all([probe('/v2/orgs'), probe('/v2/datasets')]);
+  const fromOrgs = orgs?.status === 200 ? uniqueAxiomRegion(orgs.body, 'defaultEdgeDeployment') : null;
+  if (fromOrgs !== null) return { outcome: 'detected', region: fromOrgs };
+  const fromDatasets = datasets?.status === 200 ? uniqueAxiomRegion(datasets.body, 'edgeDeployment') : null;
+  if (fromDatasets !== null) return { outcome: 'detected', region: fromDatasets };
+  if (orgs?.status === 401 || datasets?.status === 401) return { outcome: 'unauthorized' };
+  return { outcome: 'unknown' };
+}
+
 const CODE_AGENTS = {
   devin: {
     name: 'Devin',
@@ -555,24 +623,10 @@ async function connectWithCredentials(
       ...honeycombManagementKeyFields(managementApiKeyId, managementApiKeySecret),
     };
   } else if (type === 'axiom') {
-    let region: 'us-east-1' | 'eu-central-1' = 'us-east-1';
+    let region: AxiomRegion = 'us-east-1';
     let apiToken = '';
+    const quiet = config.quiet || config.output === 'json';
     const ok = await runSteps([
-      choiceStep<'us-east-1' | 'eu-central-1'>(
-        config,
-        args,
-        'region',
-        '--region',
-        'Axiom edge deployment region: see your organization settings (https://app.axiom.co/settings/org)',
-        [
-          { value: 'us-east-1', label: 'US East 1' },
-          { value: 'eu-central-1', label: 'EU Central 1' },
-        ],
-        (v) => {
-          region = v;
-        },
-        { strict: true }
-      ),
       secretStep(
         config,
         args,
@@ -589,6 +643,55 @@ async function connectWithCredentials(
           apiToken = v;
         }
       ),
+      // Region: flag wins, then auto-detection from the token, then (only when
+      // detection is ambiguous) an interactive prompt.
+      async () => {
+        const fromFlag = getArgString(args, 'region');
+        if (fromFlag !== undefined) {
+          if (!AXIOM_REGIONS.some((o) => o.value === fromFlag)) {
+            throw new CLIError(
+              `Invalid value for --region: "${fromFlag}"`,
+              ExitCode.USAGE,
+              `Use one of: ${AXIOM_REGIONS.map((o) => o.value).join(', ')}`
+            );
+          }
+          region = fromFlag as AxiomRegion;
+          return SKIPPED;
+        }
+        if (!quiet) process.stderr.write('Detecting your Axiom region…\n');
+        const detection = await detectAxiomRegion(apiToken);
+        if (detection.outcome === 'detected') {
+          region = detection.region;
+          if (!quiet) process.stderr.write(`✓ Axiom region: ${detection.region}\n`);
+          return SKIPPED;
+        }
+        if (detection.outcome === 'unauthorized') {
+          if (!isInteractive(config.nonInteractive) || getArgString(args, 'apiToken') !== undefined) {
+            throw new CLIError(
+              'Axiom rejected the API token',
+              ExitCode.AUTH,
+              'Create a token at https://app.axiom.co/settings/api-tokens and retry.'
+            );
+          }
+          note('Axiom rejected the token (401 from api.axiom.co). Paste it again — it starts with xaat-.', 'Axiom API token');
+          return BACK;
+        }
+        if (!isInteractive(config.nonInteractive)) {
+          throw new CLIError(
+            'Missing required flag: --region',
+            ExitCode.USAGE,
+            `Could not detect the region from the token. Pass --region us-east-1 or --region eu-central-1.\n${AXIOM_REGION_HINT}`
+          );
+        }
+        const picked = await promptSelectOrBack<AxiomRegion>(
+          { nonInteractive: config.nonInteractive },
+          `Axiom region — could not detect it from the token. ${AXIOM_REGION_HINT}`,
+          AXIOM_REGIONS
+        );
+        if (picked === BACK) return BACK;
+        region = picked;
+        return;
+      },
     ]);
     if (!ok) return BACK;
     body = { type: 'axiom', workspaceId, region, apiToken };
@@ -729,7 +832,7 @@ export const integrationConnectCommand: Command = {
       type: 'string',
     },
     { flag: '--site <site>', description: 'Datadog site (e.g. us5.datadoghq.com)', type: 'string' },
-    { flag: '--region <region>', description: 'Honeycomb (us|eu) or Axiom (us-east-1|eu-central-1)', type: 'string' },
+    { flag: '--region <region>', description: 'Honeycomb (us|eu) or Axiom (us-east-1|eu-central-1; detected from the token if omitted)', type: 'string' },
     { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / Devin / Cursor / Factory / Conductor)', type: 'string' },
     { flag: '--app-key <key>', description: 'App key (Datadog only)', type: 'string' },
     { flag: '--management-api-key-id <id>', description: 'Management API key ID (Honeycomb)', type: 'string' },
@@ -755,7 +858,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --category code-agent',
     'polylane integration connect --type datadog --site us5.datadoghq.com --api-key ... --app-key ...',
     'polylane integration connect --type honeycomb --region us --api-key ... --management-api-key-id ... --management-api-key-secret ...',
-    'polylane integration connect --type axiom --region us-east-1 --api-token ...',
+    'polylane integration connect --type axiom --api-token ...',
     'polylane integration connect --type betterstack --api-token ... --uptime-api-token ... --telemetry-api-token ...',
     'polylane integration connect --type cursor --api-key crsr_...',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP"',
