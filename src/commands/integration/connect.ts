@@ -26,6 +26,8 @@ import {
   BACK,
   cancel,
   note,
+  outro,
+  promptConfirmOrBack,
   promptSelectOrBack,
   promptPasswordOrBack,
 } from '../../utils/prompt';
@@ -75,6 +77,16 @@ export function typeOptionsForCategory(category: string | undefined): typeof TYP
     );
   }
   return TYPE_OPTIONS.filter((o) => o.category === category);
+}
+
+// The code-agent picker opens with an opt-in question because connecting one
+// changes where autofixes run; --type means the user already decided.
+export function shouldOfferCodeAgent(
+  category: string | undefined,
+  typeFromFlag: boolean,
+  interactive: boolean
+): boolean {
+  return category === 'code-agent' && !typeFromFlag && interactive;
 }
 
 // The category is validated even when --type wins, so a typo always errors
@@ -602,6 +614,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type github',
     'polylane integration connect --type github --reconnect',
     'polylane integration connect --category observability',
+    'polylane integration connect --category code-agent',
     'polylane integration connect --type datadog --site us5.datadoghq.com --api-key ... --app-key ...',
     'polylane integration connect --type honeycomb --region us --api-key ...',
     'polylane integration connect --type axiom --region us-east-1 --api-token ...',
@@ -611,12 +624,30 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP" --oauth',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
-    const workspaceId = await requireWorkspace(config);
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
-    const api = new PolylaneAPI(config);
     const typeFromFlag = getArgString(args, 'type') !== undefined;
+    const category = getArgString(args, 'category');
     // --type always wins: the category filter only narrows the picker.
-    const typeOptions = resolveTypeOptions(getArgString(args, 'category'), typeFromFlag);
+    const typeOptions = resolveTypeOptions(category, typeFromFlag);
+
+    if (shouldOfferCodeAgent(category, typeFromFlag, isInteractive(config.nonInteractive))) {
+      note(
+        'Optional. Polylane runs autofixes on its own executor; connect your coding agent to run them in your account instead.',
+        'Cloud coding agent'
+      );
+      const wants = await promptConfirmOrBack(
+        { nonInteractive: config.nonInteractive },
+        'Connect a cloud coding agent?',
+        true
+      );
+      if (wants !== true) {
+        outro('Skipped. Connect later with `polylane integration connect --category code-agent`.');
+        return;
+      }
+    }
+
+    const workspaceId = await requireWorkspace(config);
+    const api = new PolylaneAPI(config);
 
     // Type selection restarts whenever the user backs out of the first step of
     // the chosen flow, so nothing is committed until a flow completes.
