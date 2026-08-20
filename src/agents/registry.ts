@@ -2,6 +2,8 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
+import { applyEdits, modify, parse as parseJsonc, type ParseError } from 'jsonc-parser';
+
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
 import { ensureDir } from '../utils/fs';
@@ -22,7 +24,6 @@ export interface WriteOutcome {
   action: WriteAction;
   detail?: string;
   needsManualStep?: boolean;
-  snippet?: string;
 }
 
 export function writeSkillFile(path: string, dryRun = false): WriteOutcome {
@@ -95,126 +96,15 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function skipString(s: string, i: number): number {
-  i++;
-  while (i < s.length) {
-    if (s[i] === '\\') i += 2;
-    else if (s[i] === '"') return i + 1;
-    else i++;
-  }
-  return i;
-}
-
-function skipWs(s: string, i: number): number {
-  while (i < s.length && /\s/.test(s[i]!)) i++;
-  return i;
-}
-
-// Blank out comments and trailing commas with spaces, so the result is
-// strict JSON with every remaining character at its original offset.
-function stripJsonc(text: string): string {
-  const chars = text.split('');
-  for (let i = 0; i < chars.length; ) {
-    if (chars[i] === '"') {
-      i = skipString(text, i);
-    } else if (chars[i] === '/' && chars[i + 1] === '/') {
-      while (i < chars.length && chars[i] !== '\n') chars[i++] = ' ';
-    } else if (chars[i] === '/' && chars[i + 1] === '*') {
-      chars[i] = chars[i + 1] = ' ';
-      i += 2;
-      while (i < chars.length && !(chars[i] === '*' && chars[i + 1] === '/')) {
-        if (chars[i] !== '\n') chars[i] = ' ';
-        i++;
-      }
-      if (i < chars.length) {
-        chars[i] = chars[i + 1] = ' ';
-        i += 2;
-      }
-    } else {
-      i++;
-    }
-  }
-  const blanked = chars.join('');
-  for (let i = 0; i < chars.length; ) {
-    if (chars[i] === '"') {
-      i = skipString(blanked, i);
-    } else if (chars[i] === ',') {
-      const j = skipWs(blanked, i + 1);
-      if (blanked[j] === '}' || blanked[j] === ']') chars[i] = ' ';
-      i++;
-    } else {
-      i++;
-    }
-  }
-  return chars.join('');
-}
-
-function skipValue(s: string, i: number): number {
-  if (s[i] === '"') return skipString(s, i);
-  if (s[i] === '{' || s[i] === '[') {
-    let depth = 0;
-    while (i < s.length) {
-      if (s[i] === '"') {
-        i = skipString(s, i);
-        continue;
-      }
-      if (s[i] === '{' || s[i] === '[') depth++;
-      else if (s[i] === '}' || s[i] === ']') {
-        depth--;
-        if (depth === 0) return i + 1;
-      }
-      i++;
-    }
-    return i;
-  }
-  while (i < s.length && !/[\s,}\]]/.test(s[i]!)) i++;
-  return i;
-}
-
-// Index of the `{` opening the object reached by `keys` ([] = root), or -1.
-function objectOpenIndex(s: string, keys: string[]): number {
-  let i = skipWs(s, 0);
-  if (s[i] !== '{') return -1;
-  for (const key of keys) {
-    let j = skipWs(s, i + 1);
-    let valueAt = -1;
-    while (j < s.length && s[j] !== '}') {
-      if (s[j] !== '"') return -1;
-      const keyEnd = skipString(s, j);
-      let name: unknown;
-      try {
-        name = JSON.parse(s.slice(j, keyEnd));
-      } catch {
-        return -1;
-      }
-      j = skipWs(s, keyEnd);
-      if (s[j] !== ':') return -1;
-      j = skipWs(s, j + 1);
-      if (name === key) {
-        valueAt = j;
-        break;
-      }
-      j = skipWs(s, skipValue(s, j));
-      if (s[j] === ',') j = skipWs(s, j + 1);
-    }
-    if (valueAt < 0 || s[valueAt] !== '{') return -1;
-    i = valueAt;
-  }
-  return i;
-}
-
 function nestEntry(keys: string[], value: unknown): unknown {
   return [...keys].reverse().reduce<unknown>((acc, key) => ({ [key]: acc }), value);
 }
 
-export function manualSnippet(keyPath: string[], value: unknown): string {
-  return JSON.stringify(nestEntry(keyPath, value), null, 2).split('\n').slice(1, -1).join('\n');
-}
-
 // JSONC-aware upsert for configs that may carry comments and trailing commas
-// (opencode parses everything as JSONC). Existing files are edited by textual
-// insertion so comments and formatting survive; when the file can't be edited
-// safely, the outcome carries a snippet to add by hand instead of clobbering.
+// (opencode parses everything as JSONC). Existing files are edited in place
+// with jsonc-parser — the same library opencode uses on its own config — so
+// comments and the formatting of existing members survive. Only a file
+// opencode itself couldn't parse is refused.
 export function upsertJsoncEntry(
   path: string,
   keyPath: string[],
@@ -230,68 +120,40 @@ export function upsertJsoncEntry(
     return { label, path, action: 'created' };
   }
 
-  const manual = (detail: string): WriteOutcome => ({
+  const skip = (detail: string): WriteOutcome => ({
     label,
     path,
     action: 'skipped',
     detail,
     needsManualStep: true,
-    snippet: manualSnippet(keyPath, value),
   });
 
   const text = readFileSync(path, 'utf-8');
-  const stripped = stripJsonc(text);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stripped);
-  } catch {
-    return manual('existing file is not valid JSON');
-  }
-  if (!isJsonObject(parsed)) {
-    return manual('existing file is not a JSON object');
-  }
+  const errors: ParseError[] = [];
+  const parsed: unknown = parseJsonc(text, errors, { allowTrailingComma: true });
+  if (errors.length > 0) return skip('existing file is not valid JSONC');
+  if (!isJsonObject(parsed)) return skip('existing file is not a JSON object');
 
   let node: Record<string, unknown> = parsed;
-  let depth = 0;
+  let reachedLeaf = true;
   for (const key of keyPath.slice(0, -1)) {
     const child = node[key];
-    if (child === undefined) break;
-    if (!isJsonObject(child)) return manual(`"${key}" is not a JSON object`);
+    if (child === undefined) {
+      reachedLeaf = false;
+      break;
+    }
+    if (!isJsonObject(child)) return skip(`"${key}" is not a JSON object`);
     node = child;
-    depth++;
   }
-  if (depth === keyPath.length - 1 && node[keyPath[depth]!] !== undefined) {
+  if (reachedLeaf && node[keyPath[keyPath.length - 1]!] !== undefined) {
     return { label, path, action: 'unchanged' };
   }
 
-  const openIdx = objectOpenIndex(stripped, keyPath.slice(0, depth));
-  if (openIdx < 0) return manual('add the entry manually');
-
-  const unit = /\n([ \t]+)\S/.exec(text)?.[1] ?? '  ';
-  const memberIndent = unit.repeat(depth + 1);
-  const rendered = JSON.stringify(nestEntry(keyPath.slice(depth + 1), value), null, unit)
-    .split('\n')
-    .map((line, index) => (index === 0 ? line : memberIndent + line))
-    .join('\n');
-  const entry = `${JSON.stringify(keyPath[depth])}: ${rendered}`;
-  const empty = stripped[skipWs(stripped, openIdx + 1)] === '}';
-  const insertion = empty
-    ? `\n${memberIndent}${entry}\n${unit.repeat(depth)}`
-    : `\n${memberIndent}${entry},`;
-  const next = text.slice(0, openIdx + 1) + insertion + text.slice(openIdx + 1);
-
-  let probe: unknown;
-  try {
-    probe = JSON.parse(stripJsonc(next));
-  } catch {
-    probe = undefined;
-  }
-  for (const key of keyPath) {
-    probe = isJsonObject(probe) ? probe[key] : undefined;
-  }
-  if (probe === undefined) return manual('add the entry manually');
-
-  if (!dryRun) writeFileSync(path, next, 'utf-8');
+  const edits = modify(text, keyPath, value, {
+    formattingOptions: { insertSpaces: true, tabSize: 2 },
+    getInsertionIndex: () => 0,
+  });
+  if (!dryRun) writeFileSync(path, applyEdits(text, edits), 'utf-8');
   return { label, path, action: 'updated' };
 }
 

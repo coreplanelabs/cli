@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
 import {
   AGENTS,
   writeSkillFile,
@@ -147,6 +148,15 @@ describe('upsertJsoncEntry', () => {
     assert.deepEqual(parsed.mcp[MCP_SERVER_NAME], ENTRY);
   });
 
+  function parseOpencode(path: string): { mcp?: Record<string, unknown> } {
+    const errors: ParseError[] = [];
+    const parsed = parseJsonc(readFileSync(path, 'utf-8'), errors, { allowTrailingComma: true }) as {
+      mcp?: Record<string, unknown>;
+    };
+    assert.equal(errors.length, 0, 'edited file parses as JSONC');
+    return parsed;
+  }
+
   it('inserts into a commented file without touching the comments', () => {
     const path = join(tempDir, 'opencode.jsonc');
     writeFileSync(
@@ -161,6 +171,36 @@ describe('upsertJsoncEntry', () => {
     assert.ok(content.includes('// trailing'));
     assert.ok(content.includes('/* block */'));
     assert.ok(content.includes('"autoupdate": true,'));
+    assert.deepEqual(parseOpencode(path).mcp?.[MCP_SERVER_NAME], ENTRY);
+  });
+
+  it('edits a heavily commented config with trailing commas everywhere', () => {
+    const path = join(tempDir, 'opencode.jsonc');
+    writeFileSync(
+      path,
+      [
+        '// opencode config',
+        '{',
+        '  "$schema": "https://opencode.ai/config.json", // schema',
+        '  /* providers',
+        '     multi-line */',
+        '  "provider": {',
+        '    "anthropic": { "options": { "timeout": 600000, }, },',
+        '  }, // end providers',
+        '  "instructions": ["docs/*.md",],',
+        '}',
+        '// eof',
+        '',
+      ].join('\n'),
+      'utf-8'
+    );
+    const result = upsertJsoncEntry(path, ['mcp', MCP_SERVER_NAME], ENTRY);
+    assert.equal(result.action, 'updated');
+    const content = readFileSync(path, 'utf-8');
+    for (const kept of ['// opencode config', '/* providers', '// end providers', '"docs/*.md",', '// eof']) {
+      assert.ok(content.includes(kept), `kept: ${kept}`);
+    }
+    assert.deepEqual(parseOpencode(path).mcp?.[MCP_SERVER_NAME], ENTRY);
   });
 
   it('inserts into an existing mcp object, keeping sibling servers', () => {
@@ -199,13 +239,13 @@ describe('upsertJsoncEntry', () => {
     assert.equal(readFileSync(path, 'utf-8'), original);
   });
 
-  it('skips with a snippet when the file is not valid JSONC', () => {
+  it('skips only a genuinely malformed file, leaving it untouched', () => {
     const path = join(tempDir, 'opencode.jsonc');
     writeFileSync(path, '{ "theme": ', 'utf-8');
     const result = upsertJsoncEntry(path, ['mcp', MCP_SERVER_NAME], ENTRY);
     assert.equal(result.action, 'skipped');
     assert.equal(result.needsManualStep, true);
-    assert.ok(result.snippet?.includes(`"${MCP_SERVER_NAME}"`));
+    assert.equal(result.detail, 'existing file is not valid JSONC');
     assert.equal(readFileSync(path, 'utf-8'), '{ "theme": ');
   });
 
@@ -215,6 +255,22 @@ describe('upsertJsoncEntry', () => {
     const result = upsertJsoncEntry(path, ['mcp', MCP_SERVER_NAME], ENTRY);
     assert.equal(result.action, 'skipped');
     assert.equal(readFileSync(path, 'utf-8'), '// c\n{ "mcp": "oops" }');
+  });
+
+  it('treats single-quoted strings as malformed, like opencode does', () => {
+    const path = join(tempDir, 'opencode.jsonc');
+    writeFileSync(path, "{ 'theme': 'dark' }", 'utf-8');
+    const result = upsertJsoncEntry(path, ['mcp', MCP_SERVER_NAME], ENTRY);
+    assert.equal(result.action, 'skipped');
+    assert.equal(readFileSync(path, 'utf-8'), "{ 'theme': 'dark' }");
+  });
+
+  it('does not report unchanged for a top-level key that only matches the leaf name', () => {
+    const path = join(tempDir, 'opencode.jsonc');
+    writeFileSync(path, `{ "${MCP_SERVER_NAME}": true }`, 'utf-8');
+    const result = upsertJsoncEntry(path, ['mcp', MCP_SERVER_NAME], ENTRY);
+    assert.equal(result.action, 'updated');
+    assert.deepEqual(parseOpencode(path).mcp?.[MCP_SERVER_NAME], ENTRY);
   });
 
   it('handles an empty root object', () => {
