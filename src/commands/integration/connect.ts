@@ -43,6 +43,7 @@ type ConnectableType =
   | 'devin'
   | 'cursor'
   | 'factory'
+  | 'conductor'
   | 'mcp';
 
 // Mirrors each type's subcategory in the integrations catalog
@@ -62,6 +63,7 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'devin', label: 'Devin', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'factory', label: 'Factory', hint: 'API key · coding agent', category: 'code-agent' },
+  { value: 'conductor', label: 'Conductor', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'mcp', label: 'MCP server', hint: 'any MCP server by URL', category: 'protocol' },
 ];
 
@@ -123,6 +125,13 @@ const CODE_AGENTS = {
     instructions:
       'Create an API key in your Factory settings. Prefer a service account key (org-owned; creating one needs the Owner or Manager role). Factory keys have no scope options. The key starts with fk- and is shown only once.',
     link: 'https://app.factory.ai/settings/api-keys',
+    linkLabel: 'Create API key',
+  },
+  conductor: {
+    name: 'Conductor',
+    instructions:
+      'Create an API key in Conductor under Users > API keys. The key starts with sk_. Handed-off autofixes run as agents in Conductor Cloud workspaces on your account.',
+    link: 'https://app.conductor.build/users/api-keys',
     linkLabel: 'Create API key',
   },
 } as const;
@@ -567,7 +576,7 @@ async function connectType(
 
 export const integrationConnectCommand: Command = {
   name: 'integration connect',
-  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, Devin, Cursor, Factory, MCP)',
+  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, Devin, Cursor, Factory, Conductor, MCP)',
   operationId: 'integrations.connect',
   options: [
     {
@@ -582,7 +591,7 @@ export const integrationConnectCommand: Command = {
     },
     { flag: '--site <site>', description: 'Datadog site (e.g. us5.datadoghq.com)', type: 'string' },
     { flag: '--region <region>', description: 'Honeycomb (us|eu) or Axiom (us-east-1|eu-central-1)', type: 'string' },
-    { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / Devin / Cursor / Factory)', type: 'string' },
+    { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / Devin / Cursor / Factory / Conductor)', type: 'string' },
     { flag: '--app-key <key>', description: 'App key (Datadog only)', type: 'string' },
     { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token)', type: 'string' },
     { flag: '--uptime-api-token <token>', description: 'Uptime API token (Better Stack only)', type: 'string' },
