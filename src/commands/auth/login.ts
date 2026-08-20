@@ -208,11 +208,12 @@ export const authLoginCommand: Command = {
 
     // The one and only method question — the flow signs you up when the
     // account doesn't exist yet, so the label says so.
-    const method = await promptSelect<'browser' | 'email' | 'device' | 'api-key'>(
+    const method = await promptSelect<'google' | 'github' | 'email' | 'device' | 'api-key'>(
       { nonInteractive: config.nonInteractive },
       'Sign in (or sign up) with',
       [
-        { value: 'browser', label: 'GitHub or Google (browser)', hint: 'Recommended' },
+        { value: 'google', label: 'Google', hint: 'opens your browser' },
+        { value: 'github', label: 'GitHub', hint: 'opens your browser' },
         { value: 'email', label: 'Email' },
         { value: 'device', label: 'Device code', hint: 'no browser on this machine' },
         { value: 'api-key', label: 'API key', hint: 'For scripts / CI' },
@@ -235,7 +236,7 @@ export const authLoginCommand: Command = {
       return;
     }
 
-    await oauthLogin(config, true);
+    await oauthLogin(config, true, { provider: method });
 
     // Suppress unused-variable lint when we don't use args later
     void flags;
