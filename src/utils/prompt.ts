@@ -98,6 +98,14 @@ export async function promptSelectOrBack<T extends string>(
   return result as T;
 }
 
+export async function promptEnter(ctx: PromptContext, message: string): Promise<void> {
+  ensureInteractive(ctx, message);
+  const result = await p.text({ message });
+  if (p.isCancel(result)) {
+    throw new CLIError('Cancelled', ExitCode.GENERAL);
+  }
+}
+
 export async function promptConfirm(
   ctx: PromptContext,
   message: string,
