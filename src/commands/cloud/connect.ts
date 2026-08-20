@@ -37,6 +37,7 @@ type Provider =
   | 'vercel'
   | 'fly'
   | 'render'
+  | 'railway'
   | 'planetscale'
   | 'supabase'
   | 'modal'
@@ -48,6 +49,7 @@ const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> 
   { value: 'vercel', label: 'Vercel', hint: 'install the Vercel integration (browser)' },
   { value: 'fly', label: 'Fly.io', hint: 'API token' },
   { value: 'render', label: 'Render', hint: 'API key' },
+  { value: 'railway', label: 'Railway', hint: 'workspace or account token' },
   { value: 'planetscale', label: 'PlanetScale', hint: 'authorize in the browser, or a service token' },
   { value: 'supabase', label: 'Supabase', hint: 'authorize in the browser' },
   { value: 'modal', label: 'Modal', hint: 'token ID + secret' },
@@ -400,6 +402,32 @@ async function connectProvider(
     ]);
     if (!ok) return BACK;
     body = { workspaceId, provider: 'render', apiKey };
+  } else if (provider === 'railway') {
+    // The console connects Railway via OAuth, but that flow is console-only
+    // (hidden generate route + console callback), so the CLI takes the token
+    // path the same API accepts.
+    let token = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'token',
+        '--token',
+        {
+          message: 'Railway token',
+          instructions:
+            'In Railway, open Account Settings > Tokens and create a token. Select your workspace to scope the token to it, or leave it unscoped for an account token that covers every workspace you can access. Railway tokens have no permission options. Polylane connects every workspace the token can reach (narrow it with --railway-workspace).',
+          link: 'https://railway.com/account/tokens',
+          linkLabel: 'Create Railway token',
+        },
+        (v) => {
+          token = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    const railwayWorkspaceId = getArgString(args, 'railwayWorkspace');
+    body = { workspaceId, provider: 'railway', token, ...(railwayWorkspaceId ? { railwayWorkspaceId } : {}) };
   } else {
     // modal
     let tokenId = '';
@@ -465,7 +493,7 @@ async function connectProvider(
 
 export const cloudConnectCommand: Command = {
   name: 'cloud connect',
-  description: 'Connect a cloud account (AWS, Cloudflare, Vercel, Fly.io, Render, PlanetScale, Supabase, Modal, Kubernetes)',
+  description: 'Connect a cloud account (AWS, Cloudflare, Vercel, Fly.io, Render, Railway, PlanetScale, Supabase, Modal, Kubernetes)',
   operationId: 'cloud_accounts.connect',
   options: [
     {
@@ -478,8 +506,9 @@ export const cloudConnectCommand: Command = {
     { flag: '--region <region>', description: 'AWS region (e.g. us-east-1)', type: 'string' },
     { flag: '--create-alarms', description: 'AWS: create monitoring alarms', type: 'boolean' },
     { flag: '--subscribe-alarms', description: 'AWS: subscribe to existing CloudWatch alarms', type: 'boolean' },
-    // Cloudflare / Fly / PlanetScale
-    { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, or PlanetScale service token', type: 'string' },
+    // Cloudflare / Fly / Railway / PlanetScale
+    { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, Railway token, or PlanetScale service token', type: 'string' },
+    { flag: '--railway-workspace <id>', description: 'Railway: connect only this Railway workspace ID (default: every workspace the token can reach)', type: 'string' },
     // Retired in 0.2.16: Cloudflare now always connects read-only, which is
     // what anyone passing this flag was asking for. Accepted and ignored for
     // one release so existing scripts do not start exiting 2 on an unknown
@@ -501,6 +530,7 @@ export const cloudConnectCommand: Command = {
     'polylane cloud connect --provider cloudflare --token <token>',
     'polylane cloud connect --provider aws --account 123456789012 --region us-east-1 --subscribe-alarms',
     'polylane cloud connect --provider render --api-key <key>',
+    'polylane cloud connect --provider railway --token <token>',
     'polylane cloud connect --provider supabase',
     'polylane cloud connect --provider planetscale --token-id <id> --token <token> --organization <org>',
     'polylane cloud connect --provider modal --token-id ak-... --token-secret as-...',

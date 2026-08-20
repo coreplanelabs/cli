@@ -30,6 +30,7 @@ import {
   promptConfirmOrBack,
   promptSelectOrBack,
   promptPasswordOrBack,
+  promptTextOrBack,
 } from '../../utils/prompt';
 
 type ConnectBody = Parameters<PolylaneAPI['integrationsConnect']>[0];
@@ -42,6 +43,8 @@ type ConnectableType =
   | 'honeycomb'
   | 'axiom'
   | 'betterstack'
+  | 'openstatus'
+  | 'mixpanel'
   | 'devin'
   | 'cursor'
   | 'factory'
@@ -51,7 +54,7 @@ type ConnectableType =
 // Mirrors each type's subcategory in the integrations catalog
 // (`polylane integration catalog`), so callers like the install script can
 // narrow the picker to one family of integrations.
-export const CONNECT_CATEGORIES = ['git', 'communication', 'observability', 'code-agent', 'protocol'] as const;
+export const CONNECT_CATEGORIES = ['git', 'communication', 'observability', 'product-analytics', 'code-agent', 'protocol'] as const;
 type ConnectCategory = (typeof CONNECT_CATEGORIES)[number];
 
 const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string; category: ConnectCategory }> = [
@@ -62,6 +65,8 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'honeycomb', label: 'Honeycomb', hint: 'configuration API key', category: 'observability' },
   { value: 'axiom', label: 'Axiom', hint: 'API token', category: 'observability' },
   { value: 'betterstack', label: 'Better Stack', hint: 'global, Uptime and Telemetry tokens', category: 'observability' },
+  { value: 'openstatus', label: 'OpenStatus', hint: 'workspace API key', category: 'observability' },
+  { value: 'mixpanel', label: 'Mixpanel', hint: 'service account + project ID', category: 'product-analytics' },
   { value: 'devin', label: 'Devin', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'factory', label: 'Factory', hint: 'API key · coding agent', category: 'code-agent' },
@@ -132,6 +137,34 @@ const DATADOG_SITES = [
 function datadogConsoleUrl(site: string): string {
   const appPrefixed = site === 'datadoghq.com' || site === 'datadoghq.eu' || site === 'ddog-gov.com';
   return appPrefixed ? `https://app.${site}` : `https://${site}`;
+}
+
+// Same region list the console offers, strict because the API only accepts
+// these three data-residency values.
+const MIXPANEL_REGIONS = [
+  { value: 'us', label: 'US (mixpanel.com)' },
+  { value: 'eu', label: 'EU (eu.mixpanel.com)' },
+  { value: 'in', label: 'India (in.mixpanel.com)' },
+] as const;
+
+function mixpanelServiceAccountsUrl(region: 'us' | 'eu' | 'in'): string {
+  const host = region === 'us' ? 'mixpanel.com' : `${region}.mixpanel.com`;
+  return `https://${host}/settings/org#serviceaccounts`;
+}
+
+// The console discovers the accessible projects after validating the service
+// account, but that route is console-only, so the CLI asks for the numeric
+// project ID directly. One integration per project.
+function parseMixpanelProjectId(value: string, flag: string): number {
+  const parsed = Number(value.trim());
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new CLIError(
+      `Invalid value for ${flag}: "${value}"`,
+      ExitCode.USAGE,
+      'Pass the numeric project ID from your Mixpanel project URL (mixpanel.com/project/<id>) or from Project Settings > Overview.'
+    );
+  }
+  return parsed;
 }
 
 const CODE_AGENTS = {
@@ -539,6 +572,104 @@ async function connectWithCredentials(
     ]);
     if (!ok) return BACK;
     body = { type: 'betterstack', workspaceId, apiToken, uptimeApiToken, telemetryApiToken };
+  } else if (type === 'openstatus') {
+    let apiKey = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: 'OpenStatus API key',
+          instructions:
+            'In your OpenStatus dashboard, open Settings > API Token and create a key. It needs write access so agents can manage monitors and publish status reports. The key is an opaque string with no prefix. Polylane validates it against your workspace and provisions a webhook notification channel so monitor failures, degradations and recoveries land as alerts.',
+          link: 'https://app.openstatus.dev/settings/general',
+          linkLabel: 'Open OpenStatus settings',
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'openstatus', workspaceId, apiKey };
+  } else if (type === 'mixpanel') {
+    const ctx = { nonInteractive: config.nonInteractive };
+    let region: 'us' | 'eu' | 'in' = 'us';
+    let serviceAccountUsername = '';
+    let serviceAccountSecret = '';
+    let projectId = 0;
+    const ok = await runSteps([
+      choiceStep<'us' | 'eu' | 'in'>(
+        config,
+        args,
+        'region',
+        '--region',
+        'Mixpanel data residency region: the one in your Mixpanel URL',
+        [...MIXPANEL_REGIONS],
+        (v) => {
+          region = v;
+        },
+        { strict: true }
+      ),
+      async () => {
+        const fromFlag = getArgString(args, 'serviceAccountUsername');
+        if (fromFlag !== undefined) {
+          serviceAccountUsername = fromFlag;
+          return SKIPPED;
+        }
+        if (!isInteractive(config.nonInteractive)) {
+          throw new CLIError('Missing required flag: --service-account-username', ExitCode.USAGE);
+        }
+        note(
+          'In Mixpanel, go to Organization Settings > Service Accounts and create a service account. Give it the Admin role on the project so agents can also create annotations; the Consumer role works for read-only queries. The secret is shown only once.\n\nOpen Mixpanel service accounts:\n  ' +
+            mixpanelServiceAccountsUrl(region),
+          'Mixpanel service account'
+        );
+        const value = await promptTextOrBack(ctx, 'Service account username');
+        if (value === BACK) return BACK;
+        serviceAccountUsername = value;
+        return;
+      },
+      secretStep(
+        config,
+        args,
+        'serviceAccountSecret',
+        '--service-account-secret',
+        () => ({
+          message: 'Mixpanel service account secret',
+          instructions: 'Paste the secret that came with the service account username. It is shown only once, when the service account is created.',
+          link: mixpanelServiceAccountsUrl(region),
+          linkLabel: 'Open Mixpanel service accounts',
+        }),
+        (v) => {
+          serviceAccountSecret = v;
+        }
+      ),
+      async () => {
+        const fromFlag = getArgString(args, 'projectId');
+        if (fromFlag !== undefined) {
+          projectId = parseMixpanelProjectId(fromFlag, '--project-id');
+          return SKIPPED;
+        }
+        if (!isInteractive(config.nonInteractive)) {
+          throw new CLIError(
+            'Missing required flag: --project-id',
+            ExitCode.USAGE,
+            'The numeric project ID is in your Mixpanel project URL (mixpanel.com/project/<id>) and in Project Settings > Overview.'
+          );
+        }
+        const value = await promptTextOrBack(ctx, 'Mixpanel project ID (the number in your project URL: mixpanel.com/project/<id>)', {
+          validate: (v) => (/^\d+$/.test(v.trim()) ? undefined : 'Enter the numeric project ID'),
+        });
+        if (value === BACK) return BACK;
+        projectId = parseMixpanelProjectId(value, '--project-id');
+        return;
+      },
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'mixpanel', workspaceId, region, serviceAccountUsername, serviceAccountSecret, projectId };
   } else {
     const agent = CODE_AGENTS[type];
     let apiKey = '';
@@ -605,7 +736,7 @@ async function connectType(
 
 export const integrationConnectCommand: Command = {
   name: 'integration connect',
-  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, Devin, Cursor, Factory, Conductor, MCP)',
+  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, OpenStatus, Mixpanel, Devin, Cursor, Factory, Conductor, MCP)',
   operationId: 'integrations.connect',
   options: [
     {
@@ -619,12 +750,15 @@ export const integrationConnectCommand: Command = {
       type: 'string',
     },
     { flag: '--site <site>', description: 'Datadog site (e.g. us5.datadoghq.com)', type: 'string' },
-    { flag: '--region <region>', description: 'Honeycomb (us|eu) or Axiom (us-east-1|eu-central-1)', type: 'string' },
-    { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / Devin / Cursor / Factory / Conductor)', type: 'string' },
+    { flag: '--region <region>', description: 'Honeycomb (us|eu), Axiom (us-east-1|eu-central-1) or Mixpanel (us|eu|in)', type: 'string' },
+    { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / OpenStatus / Devin / Cursor / Factory / Conductor)', type: 'string' },
     { flag: '--app-key <key>', description: 'App key (Datadog only)', type: 'string' },
     { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token)', type: 'string' },
     { flag: '--uptime-api-token <token>', description: 'Uptime API token (Better Stack only)', type: 'string' },
     { flag: '--telemetry-api-token <token>', description: 'Telemetry API token (Better Stack only)', type: 'string' },
+    { flag: '--service-account-username <username>', description: 'Service account username (Mixpanel only)', type: 'string' },
+    { flag: '--service-account-secret <secret>', description: 'Service account secret (Mixpanel only)', type: 'string' },
+    { flag: '--project-id <id>', description: 'Numeric project ID (Mixpanel only)', type: 'string' },
     { flag: '--url <url>', description: 'MCP server URL', type: 'string' },
     { flag: '--name <name>', description: 'MCP server display name', type: 'string' },
     { flag: '--transport <t>', description: 'MCP transport: http | sse (default: http)', type: 'string' },
@@ -645,6 +779,8 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type honeycomb --region us --api-key ...',
     'polylane integration connect --type axiom --region us-east-1 --api-token ...',
     'polylane integration connect --type betterstack --api-token ... --uptime-api-token ... --telemetry-api-token ...',
+    'polylane integration connect --type openstatus --api-key ...',
+    'polylane integration connect --type mixpanel --region us --service-account-username ... --service-account-secret ... --project-id 1234567',
     'polylane integration connect --type cursor --api-key crsr_...',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP"',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP" --oauth',
