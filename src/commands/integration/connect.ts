@@ -130,7 +130,7 @@ const CODE_AGENTS = {
   conductor: {
     name: 'Conductor',
     instructions:
-      'Create an API key in Conductor under Users > API keys. Handed-off autofixes run as agents in Conductor Cloud workspaces on your account.',
+      'Create an API key in Conductor under Users > API keys. The key starts with sk_. Handed-off autofixes run as agents in Conductor Cloud workspaces on your account.',
     link: 'https://app.conductor.build/users/api-keys',
     linkLabel: 'Create API key',
   },
