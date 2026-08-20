@@ -84,7 +84,8 @@ export async function promptSelectOrBack<T extends string>(
   ctx: PromptContext,
   message: string,
   options: Array<{ value: T; label: string; hint?: string }>,
-  backLabel = '← Back'
+  backLabel = '← Back',
+  initialValue?: T
 ): Promise<T | typeof BACK> {
   ensureInteractive(ctx, message);
   type NavOption =
@@ -93,6 +94,7 @@ export async function promptSelectOrBack<T extends string>(
   const result = await p.select<NavOption[], string | typeof BACK>({
     message,
     options: [...options, { value: BACK, label: backLabel }],
+    ...(initialValue !== undefined ? { initialValue } : {}),
   });
   if (result === BACK || p.isCancel(result)) return BACK;
   return result as T;
