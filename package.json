@@ -1,6 +1,6 @@
 {
   "name": "@coreplane/polylane",
-  "version": "0.2.17",
+  "version": "0.2.19",
   "description": "Agent-focused CLI for the Polylane platform",
   "keywords": [
     "polylane",
@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.7.0",
+    "jsonc-parser": "^3.3.1",
     "ws": "^8.21.1"
   },
   "devDependencies": {

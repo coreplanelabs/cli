@@ -21,6 +21,8 @@ export {
   SKILL_DIRECTORY_NAME,
   writeSkillFile,
   upsertJsonEntry,
+  upsertJsoncEntry,
+  opencodeConfigFile,
   upsertTomlSection,
   upsertGooseExtension,
   vscodeUserDirectory,

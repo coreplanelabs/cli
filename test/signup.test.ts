@@ -142,7 +142,7 @@ describe('auth signup terms notice', () => {
     assert.equal(output.split(TERMS_LINE).length - 1, 1);
     assert.ok(output.includes('https://polylane.com/terms/'));
     assert.ok(output.includes('https://polylane.com/privacy/'));
-    assert.deepEqual(promptEnterCalls, ['Press Enter to continue, or Ctrl-C to cancel.']);
+    assert.deepEqual(promptEnterCalls, ['Continue?']);
   });
 
   it('prints the notice without gating on a non-interactive scripted signup', async () => {
@@ -202,6 +202,77 @@ describe('auth signup terms notice', () => {
     }
 
     assert.ok(!output.includes(TERMS_LINE));
+  });
+});
+
+// The existing-verified-account (re-auth) path: the signup POST returns a
+// verified user plus a session token immediately, no --code round-trip.
+describe('auth signup existing-account re-auth', () => {
+  const reauthRoutes = {
+    '/v1/auth/signup': signupResponse,
+    '/v1/auth/whoami': (): Response =>
+      jsonResponse({ success: true, error: null, result: { id: 'user_1', email: 'dev@acme.com' } }),
+    '/v1/workspaces': (): Response =>
+      jsonResponse({
+        success: true,
+        error: null,
+        result: { items: [{ id: WORKSPACE_ID, name: 'Acme', slug: 'acme' }], count: 1 },
+      }),
+  };
+
+  before(() => {
+    delete process.env.POLYLANE_API_KEY;
+    delete process.env.POLYLANE_WORKSPACE_ID;
+    delete process.env.POLYLANE_API_DOMAIN;
+  });
+
+  beforeEach(() => {
+    rmSync(CONFIG_FILE, { force: true });
+    rmSync(CREDENTIALS_FILE, { force: true });
+    delete process.env.POLYLANE_ONBOARDING_RUN;
+  });
+
+  async function run(overrides: Parameters<typeof mockConfig>[0] = {}): Promise<void> {
+    mockApi(reauthRoutes);
+    captureOutput();
+    try {
+      await authSignupCommand.execute(
+        mockConfig({ telemetry: false, ...overrides }),
+        {} as GlobalFlags,
+        { email: 'dev@acme.com', password: 'hunter2-hunter2' }
+      );
+    } finally {
+      restoreOutput();
+    }
+  }
+
+  it('text mode never prints the token, the raw user object, or "undefined"', async () => {
+    await run({ output: 'text' });
+    assert.ok(!output.includes('tok_signup'), 'session token leaked to text output');
+    assert.ok(!output.includes('emailVerified'), 'raw user object dumped to text output');
+    assert.ok(!output.includes('undefined'));
+    assert.ok(output.includes('Signed in as dev@acme.com.'));
+  });
+
+  it('JSON mode still emits the full envelope for scripts', async () => {
+    await run({ output: 'json' });
+    assert.ok(output.includes('tok_signup'));
+    assert.ok(output.includes('emailVerified'));
+  });
+
+  it('persists workspace_id to config.json on re-auth', async () => {
+    await run({ output: 'text' });
+    const config = JSON.parse(readFileSync(CONFIG_FILE, 'utf-8')) as { workspace_id?: string };
+    assert.equal(config.workspace_id, WORKSPACE_ID);
+  });
+
+  it('prints next steps by default but not with hints disabled', async () => {
+    await run({ output: 'text' });
+    assert.ok(output.includes('Onboarding (in order)'));
+
+    await run({ output: 'text', hints: false });
+    assert.ok(!output.includes('Onboarding (in order)'));
+    assert.ok(output.includes('Signed in as dev@acme.com.'));
   });
 });
 
@@ -310,44 +381,42 @@ describe('auth signup --code (email verification)', () => {
 });
 
 describe('nextSteps', () => {
-  const expiresAt = '2026-08-10T00:00:00.000Z';
-
   it('names a created workspace and does not suggest creating one', () => {
-    const text = nextSteps(expiresAt, { kind: 'created', workspaceSlug: 'acme' });
+    const text = nextSteps({ kind: 'created', workspaceSlug: 'acme' });
     assert.ok(text.includes('Your first workspace ("acme") was created'));
     assert.ok(!text.includes('polylane workspace create'));
   });
 
   it('names a joined workspace and does not suggest creating one', () => {
-    const text = nextSteps(expiresAt, { kind: 'joined', workspaceSlug: 'inviter' });
+    const text = nextSteps({ kind: 'joined', workspaceSlug: 'inviter' });
     assert.ok(text.includes('You joined the "inviter" workspace'));
     assert.ok(!text.includes('polylane workspace create'));
   });
 
   it('points existing members at picking a default workspace', () => {
-    const text = nextSteps(expiresAt, { kind: 'existing' });
+    const text = nextSteps({ kind: 'existing' });
     assert.ok(text.includes('Set your default workspace'));
     assert.ok(!text.includes('polylane workspace create'));
   });
 
   it('suggests creating a workspace when the landing kind is none', () => {
-    const text = nextSteps(expiresAt, { kind: 'none' });
+    const text = nextSteps({ kind: 'none' });
     assert.ok(text.includes('polylane workspace create'));
   });
 
   it('suggests creating a workspace when no landing is present', () => {
-    const text = nextSteps(expiresAt);
+    const text = nextSteps();
     assert.ok(text.includes('polylane workspace create'));
   });
 
   it('does not crash when a created landing has no workspaceSlug', () => {
-    const text = nextSteps(expiresAt, { kind: 'created' });
+    const text = nextSteps({ kind: 'created' });
     assert.ok(text.includes('Your first workspace was created'));
     assert.ok(!text.includes('polylane workspace create'));
   });
 
   it('suggests creating a workspace for an invite at capacity', () => {
-    const text = nextSteps(expiresAt, {
+    const text = nextSteps({
       kind: 'invite_at_capacity',
       workspace: { id: 'ws_1', name: 'Inviter' },
     });

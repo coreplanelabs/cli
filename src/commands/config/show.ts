@@ -20,6 +20,7 @@ export const configShowCommand: Command = {
       agent: config.agent ?? null,
       output: config.output,
       timeout: config.timeout,
+      hints: config.hints,
       apiKey: config.apiKey ? maskToken(config.apiKey) : null,
       authMethod,
       configFile: CONFIG_FILE,

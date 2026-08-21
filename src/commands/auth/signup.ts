@@ -108,10 +108,8 @@ function workspaceStep(landing?: Landing): string[] {
   }
 }
 
-export function nextSteps(expiresAt: string, landing?: Landing): string {
+export function nextSteps(landing?: Landing): string {
   return [
-    `Signed in. Session valid until ${expiresAt}.`,
-    ``,
     `Onboarding (in order):`,
     ``,
     ...workspaceStep(landing),
@@ -157,10 +155,7 @@ async function oauthSignup(config: Config, provider: 'google' | 'github'): Promi
     ].join('\n'),
     `Sign up with ${label}`
   );
-  await promptEnter(
-    { nonInteractive: config.nonInteractive },
-    'Press Enter to create your account, or Ctrl-C to cancel.'
-  );
+  await promptEnter({ nonInteractive: config.nonInteractive }, 'Create your account?');
   await oauthLogin(config, true, { signupEntry: true, provider });
 }
 
@@ -201,17 +196,24 @@ async function persistDefaultWorkspace(config: Config): Promise<void> {
   }
 }
 
+// Raw envelopes (user object, session token, landing) are output only in
+// JSON mode, where they are the data contract for scripts. In a terminal
+// the token already lives in credentials.json and the tables are noise.
+function emitResult(config: Config, data: unknown): void {
+  if (config.output === 'json') formatOutput(config, data);
+}
+
 async function finishEmailSignIn(config: Config, email: string, session: VerifiedSession): Promise<void> {
   if (!session.token) {
-    formatOutput(config, { landing: session.landing });
+    emitResult(config, { landing: session.landing });
     outro('Email verified, but no session was returned. Run `polylane auth login`.');
     return;
   }
   writeSessionCredential(session.token, session.expiresAt, email);
   await persistDefaultWorkspace(config);
-  formatOutput(config, { token: session.token, landing: session.landing });
-  note(nextSteps(session.expiresAt, session.landing), 'Next steps');
-  outro('Signed in.');
+  emitResult(config, { token: session.token, landing: session.landing });
+  if (config.hints) note(nextSteps(session.landing), 'Next steps');
+  outro(`Signed in as ${email}.`);
 }
 
 // Also the CLI's email sign-in path: signup is idempotent for an existing
@@ -245,10 +247,7 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
   // scripted consent: print the notice, never block on Enter.
   if (passwordArg === undefined && isInteractive(config.nonInteractive)) {
     note(TERMS_NOTICE);
-    await promptEnter(
-      { nonInteractive: config.nonInteractive },
-      'Press Enter to continue, or Ctrl-C to cancel.'
-    );
+    await promptEnter({ nonInteractive: config.nonInteractive }, 'Continue?');
   } else {
     process.stderr.write(`\n${TERMS_NOTICE}\n\n`);
   }
@@ -283,7 +282,7 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
   const { user, token } = json.result;
   if (!user) {
     // dry-run stub or unexpected server response
-    formatOutput(config, json.result);
+    emitResult(config, json.result);
     outro('Account created, but no session returned. Run `polylane auth login`.');
     return;
   }
@@ -291,15 +290,16 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
   if (user.emailVerified) {
     // Existing account re-authenticated: the session works immediately.
     if (!token) {
-      formatOutput(config, json.result);
+      emitResult(config, json.result);
       outro('Account created, but no session returned. Run `polylane auth login`.');
       return;
     }
     const expiresAt = parseSessionExpiresAt(res.headers.get('set-cookie')) ?? new Date().toISOString();
     writeSessionCredential(token, expiresAt, user.email ?? user.id);
-    formatOutput(config, json.result);
-    note(nextSteps(expiresAt), 'Next steps');
-    outro('Signed in.');
+    await persistDefaultWorkspace(config);
+    emitResult(config, json.result);
+    if (config.hints) note(nextSteps(), 'Next steps');
+    outro(`Signed in as ${user.email ?? user.id}.`);
     return;
   }
 
@@ -319,7 +319,7 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
   }
 
   if (!isInteractive(config.nonInteractive)) {
-    formatOutput(config, json.result);
+    emitResult(config, json.result);
     outro(
       `Check ${email} for a verification code, then run: polylane auth signup --email ${email} --code <code>`
     );

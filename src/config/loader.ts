@@ -39,7 +39,10 @@ function parseEnvNumber(v: string | undefined): number | undefined {
 
 function parseEnvBoolean(v: string | undefined): boolean | undefined {
   if (v === undefined) return undefined;
-  if (v === '' || v === '0' || v === 'false' || v === 'no') return false;
+  // 'off' and case-insensitivity match what the README has always documented
+  // for POLYLANE_TELEMETRY (and now POLYLANE_HINTS).
+  const norm = v.toLowerCase();
+  if (norm === '' || norm === '0' || norm === 'false' || norm === 'no' || norm === 'off') return false;
   return true;
 }
 
@@ -101,6 +104,17 @@ export function loadConfig(flags: GlobalFlags): Config {
     return true;
   })();
 
+  // Hints are next-step guidance for humans. An orchestrator that owns the
+  // journey (e.g. the install script) sets POLYLANE_HINTS=0 so commands stay
+  // composable inside its flow. Same boolean model as telemetry: env → config
+  // file → default on. No CLI flag until a per-invocation need shows up.
+  const hints = ((): boolean => {
+    const fromEnv = parseEnvBoolean(env.POLYLANE_HINTS);
+    if (fromEnv !== undefined) return fromEnv;
+    if (file.hints !== undefined) return file.hints;
+    return true;
+  })();
+
   return {
     apiKey,
     domain,
@@ -114,5 +128,6 @@ export function loadConfig(flags: GlobalFlags): Config {
     dryRun,
     nonInteractive,
     telemetry,
+    hints,
   };
 }

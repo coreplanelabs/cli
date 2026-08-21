@@ -15,7 +15,9 @@ import {
   choiceStep,
   secretStep,
   SKIPPED,
+  type WizardStep,
 } from '../helpers';
+import { buildCloudflareTokenUrl } from './cloudflare-token-url';
 import type { CloudAccount } from '../../generated/types';
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
@@ -27,6 +29,7 @@ import {
   note,
   promptSelectOrBack,
   promptConfirmOrBack,
+  promptPasswordOrBack,
 } from '../../utils/prompt';
 
 type ConnectBody = Parameters<PolylaneAPI['cloudAccountsConnect']>[0];
@@ -204,6 +207,74 @@ async function browserConnect(
   return confirmBrowserConnect(config, check, `${label} to connect`);
 }
 
+// Where to create the token when this terminal cannot open a browser. The
+// pre-filled creation URL is ~13KB (the permission list rides in a query
+// param), so it is never printed — the console's connect screen carries the
+// same link, and the short dashboard URL covers doing it fully by hand.
+const CLOUDFLARE_MANUAL_STEPS =
+  'Create the token from any machine with a browser:\n' +
+  '- Easiest: open your Polylane console > Settings > Clouds > Connect >\n' +
+  '  Cloudflare — its create-token link opens Cloudflare with the read-only\n' +
+  '  token pre-filled. Create it as-is.\n' +
+  '- By hand: open https://dash.cloudflare.com/?to=/:account/api-tokens and\n' +
+  '  create a custom token with Read access for the account and its zones.\n' +
+  'Then come back and paste the token here.';
+
+const CLOUDFLARE_HEADLESS_HINT =
+  'Create a read-only token from your Polylane console (Settings > Clouds > Connect > Cloudflare — the create-token link comes pre-filled), then re-run:\n' +
+  'polylane cloud connect --provider cloudflare --token <token>';
+
+// Token creation happens in-flow: the CLI opens Cloudflare's account API
+// token screen pre-filled with the read-only token, waits for the paste, and
+// never routes through the docs site. secretStep is not reusable here because
+// it prints its link everywhere it appears — this URL must only ever be
+// handed to a browser.
+function cloudflareTokenStep(
+  config: Config,
+  args: Record<string, unknown>,
+  noBrowser: boolean,
+  set: (value: string) => void
+): WizardStep {
+  return async () => {
+    const fromFlag = getArgString(args, 'token');
+    if (fromFlag !== undefined) {
+      set(fromFlag);
+      return SKIPPED;
+    }
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError('Missing required flag: --token', ExitCode.USAGE, CLOUDFLARE_HEADLESS_HINT);
+    }
+    const ctx = { nonInteractive: config.nonInteractive };
+    note(
+      'Polylane connects to Cloudflare with a read-only account API token.\n' +
+        'The CLI can open Cloudflare with the token pre-filled: create it as-is\n' +
+        '(nothing to edit) and paste it here.\n' +
+        'You must be a Super Administrator on the Cloudflare account.',
+      'Cloudflare API token'
+    );
+    let openIt = !noBrowser;
+    if (!noBrowser) {
+      const answer = await promptConfirmOrBack(ctx, 'Open Cloudflare in your browser to create the token?', true);
+      if (answer === BACK) return BACK;
+      openIt = answer;
+    }
+    if (openIt) {
+      process.stderr.write('Opening your browser to create the token… paste it here when done.\n');
+      openBrowser(buildCloudflareTokenUrl({ readOnly: true }));
+      // openBrowser is best-effort and the pre-filled URL must never be
+      // printed, so a silent spawn failure would leave the paste prompt with
+      // no way forward — always show the manual fallback too.
+      note(CLOUDFLARE_MANUAL_STEPS, "If the browser didn't open");
+    } else {
+      note(CLOUDFLARE_MANUAL_STEPS, 'No browser on this machine');
+    }
+    const value = await promptPasswordOrBack(ctx, 'Cloudflare API token (paste it here)');
+    if (value === BACK) return BACK;
+    set(value);
+    return;
+  };
+}
+
 // Each wizard step can go back to the previous one; backing out of the first
 // returns BACK to re-open provider selection.
 async function connectProvider(
@@ -331,30 +402,16 @@ async function connectProvider(
       ...(subscribeToAlarms ? { subscribeToAlarms } : {}),
     };
   } else if (provider === 'cloudflare') {
-    // Always read-only. The docs page offers two pre-filled tokens (read+write
-    // first, read-only second), so the copy has to name the read-only one by
-    // its button label: a token minted from the other link and pasted here
-    // would be stored under a read-only label it does not have, and every
-    // write for the account would then be refused with no way to re-enable it.
-    // Read-only is also what both console connect surfaces send.
+    // Always read-only: that is what both console connect surfaces send, and
+    // the pre-filled URL mints a token with every write downgraded to read. A
+    // broader token pasted here would be stored under a read-only label it
+    // does not have, and every write for the account would then be refused
+    // with no way to re-enable it.
     let token = '';
     const ok = await runSteps([
-      secretStep(
-        config,
-        args,
-        'token',
-        '--token',
-        {
-          message: 'Cloudflare API token',
-          instructions:
-            'On the docs page, use the "Create read-only token" link: it opens Cloudflare\'s account API token screen with a pre-filled, read-only token. Create it as-is and paste it here. You must be a Super Administrator on the account.',
-          link: 'https://docs.polylane.com/integrations/cloudflare',
-          linkLabel: 'Create the token (use the read-only link)',
-        },
-        (v) => {
-          token = v;
-        }
-      ),
+      cloudflareTokenStep(config, args, noBrowser, (v) => {
+        token = v;
+      }),
     ]);
     if (!ok) return BACK;
     body = { workspaceId, provider: 'cloudflare', token, readOnly: true };
@@ -520,7 +577,7 @@ export const cloudConnectCommand: Command = {
     { flag: '--organization <org>', description: 'PlanetScale organization', type: 'string' },
     // Render
     { flag: '--api-key <key>', description: 'Render API key', type: 'string' },
-    { flag: '--no-browser', description: 'AWS / Vercel / PlanetScale / Supabase: print the URL instead of opening it', type: 'boolean' },
+    { flag: '--no-browser', description: 'AWS / Vercel / PlanetScale / Supabase: print the URL instead of opening it; Cloudflare: show manual token-creation steps instead of opening the browser', type: 'boolean' },
     { flag: '--reconnect', description: 'AWS / Vercel / PlanetScale / Supabase / Kubernetes: run the connect flow even when the provider is already connected', type: 'boolean' },
   ],
   examples: [

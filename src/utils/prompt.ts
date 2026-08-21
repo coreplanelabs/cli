@@ -102,8 +102,11 @@ export async function promptSelectOrBack<T extends string>(
 
 export async function promptEnter(ctx: PromptContext, message: string): Promise<void> {
   ensureInteractive(ctx, message);
-  const result = await p.text({ message });
-  if (p.isCancel(result)) {
+  // Not p.text: a text prompt submitted empty renders a dim "undefined" as
+  // its final value. A confirm keeps Enter-to-continue and renders the
+  // chosen label instead.
+  const result = await p.confirm({ message, active: 'Continue', inactive: 'Cancel' });
+  if (p.isCancel(result) || result === false) {
     throw new CLIError('Cancelled', ExitCode.GENERAL);
   }
 }

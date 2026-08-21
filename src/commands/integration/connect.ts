@@ -16,8 +16,10 @@ import {
   choiceStep,
   secretStep,
   SKIPPED,
+  type WizardStep,
 } from '../helpers';
 import type { Integration } from '../../generated/types';
+import { isApiError } from '../../errors/api';
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { openBrowser } from '../../utils/browser';
@@ -165,6 +167,44 @@ function parseMixpanelProjectId(value: string, flag: string): number {
     );
   }
   return parsed;
+}
+
+// The backend detects the Axiom edge deployment region from the API token and
+// answers 422 when it cannot; --region is only an explicit override.
+type AxiomRegion = 'us-east-1' | 'eu-central-1';
+
+const AXIOM_REGIONS: Array<{ value: AxiomRegion; label: string }> = [
+  { value: 'us-east-1', label: 'US East 1' },
+  { value: 'eu-central-1', label: 'EU Central 1' },
+];
+
+const AXIOM_REGION_HINT = 'In Axiom: Settings > General > Edge deployment (https://app.axiom.co/settings/general)';
+
+export async function connectAxiom(
+  config: Config,
+  api: PolylaneAPI,
+  body: Extract<ConnectBody, { type: 'axiom' }>
+): Promise<typeof BACK | Integration> {
+  try {
+    return await api.integrationsConnect(body);
+  } catch (err) {
+    if (!isApiError(err) || err.status !== 422 || body.region !== undefined) throw err;
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(
+        err.message,
+        ExitCode.USAGE,
+        `Pass --region us-east-1 or --region eu-central-1.\n${AXIOM_REGION_HINT}`
+      );
+    }
+    note(`${err.message}\n${AXIOM_REGION_HINT}`, 'Axiom region');
+    const picked = await promptSelectOrBack<AxiomRegion>(
+      { nonInteractive: config.nonInteractive },
+      'Axiom edge deployment region',
+      AXIOM_REGIONS
+    );
+    if (picked === BACK) return BACK;
+    return api.integrationsConnect({ ...body, region: picked });
+  }
 }
 
 const CODE_AGENTS = {
@@ -387,6 +427,75 @@ async function connectMcp(
   return 'connected';
 }
 
+const MANAGEMENT_KEY_PAIR_HINT = 'Pass both --management-api-key-id and --management-api-key-secret.';
+
+// The API stores the Management API key only as a pair, and both halves are
+// required — a missing (or whitespace-only) half is a usage error before any
+// request is sent. Both halves are trimmed here so the flag and prompt paths
+// behave identically on pasted values.
+export function honeycombManagementKeyFields(
+  managementApiKeyId: string,
+  managementApiKeySecret: string
+): { managementApiKeyId: string; managementApiKeySecret: string } {
+  const id = managementApiKeyId.trim();
+  const secret = managementApiKeySecret.trim();
+  if (!id || !secret) {
+    const missing = !id ? '--management-api-key-id' : '--management-api-key-secret';
+    throw new CLIError(`Missing required flag: ${missing}`, ExitCode.USAGE, MANAGEMENT_KEY_PAIR_HINT);
+  }
+  return { managementApiKeyId: id, managementApiKeySecret: secret };
+}
+
+// Both management-key steps share the same shape: a flag short-circuits, a
+// non-interactive run without the flag is a usage error, and only the prompt
+// differs.
+function managementKeyStep(
+  config: Config,
+  args: Record<string, unknown>,
+  key: 'managementApiKeyId' | 'managementApiKeySecret',
+  flag: string,
+  prompt: () => Promise<string | typeof BACK>,
+  set: (value: string) => void
+): WizardStep {
+  return async () => {
+    const fromFlag = getArgString(args, key);
+    if (fromFlag !== undefined) {
+      set(fromFlag);
+      return SKIPPED;
+    }
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(`Missing required flag: ${flag}`, ExitCode.USAGE, MANAGEMENT_KEY_PAIR_HINT);
+    }
+    const value = await prompt();
+    if (value === BACK) return BACK;
+    set(value);
+    return;
+  };
+}
+
+// An API build that predates the management-key fields strips them from the
+// connect body and stores the integration without them. The response echoes
+// the stored metadata (the key ID survives redaction), so a missing ID there
+// means the key was silently dropped — that must fail loudly, not read as a
+// successful connect. The generated metadata type gains managementApiKeyId
+// only when the matching API deploy lands, so the field is read through a
+// structural cast, same trust boundary as the request-body spread.
+export function assertHoneycombManagementKeyStored(
+  integration: Pick<Integration, 'id' | 'metadata' | '_html_url'>
+): void {
+  const metadata = integration.metadata as { managementApiKeyId?: unknown } | null | undefined;
+  if (metadata != null && typeof metadata.managementApiKeyId === 'string' && metadata.managementApiKeyId !== '') {
+    return;
+  }
+  throw new CLIError(
+    'The Polylane API does not support the Honeycomb Management API key yet — the key was not stored',
+    ExitCode.GENERAL,
+    'Honeycomb was connected without query access. Disconnect it, then retry once the API is updated:\n' +
+      `polylane integration disconnect ${integration.id} --yes` +
+      (integration._html_url ? `\nor reconnect from the console: ${integration._html_url}` : '')
+  );
+}
+
 // --- Credential-based connects: each wizard step can go back to the previous
 // one, and backing out of the first returns BACK to re-open type selection ---
 async function connectWithCredentials(
@@ -443,6 +552,8 @@ async function connectWithCredentials(
   } else if (type === 'honeycomb') {
     let region: 'us' | 'eu' = 'us';
     let apiKey = '';
+    let managementApiKeyId = '';
+    let managementApiKeySecret = '';
     const ok = await runSteps([
       choiceStep<'us' | 'eu'>(
         config,
@@ -475,28 +586,56 @@ async function connectWithCredentials(
           apiKey = v;
         }
       ),
-    ]);
-    if (!ok) return BACK;
-    body = { type: 'honeycomb', workspaceId, region, apiKey };
-  } else if (type === 'axiom') {
-    let region: 'us-east-1' | 'eu-central-1' = 'us-east-1';
-    let apiToken = '';
-    const ok = await runSteps([
-      choiceStep<'us-east-1' | 'eu-central-1'>(
+      managementKeyStep(
         config,
         args,
-        'region',
-        '--region',
-        'Axiom edge deployment region: see your organization settings (https://app.axiom.co/settings/org)',
-        [
-          { value: 'us-east-1', label: 'US East 1' },
-          { value: 'eu-central-1', label: 'EU Central 1' },
-        ],
-        (v) => {
-          region = v;
+        'managementApiKeyId',
+        '--management-api-key-id',
+        () => {
+          note('Create one in your Honeycomb team settings under API Keys.', 'Management API key');
+          return promptTextOrBack({ nonInteractive: config.nonInteractive }, 'Management API key ID', {
+            validate: (v: string) => (v.trim() ? undefined : 'Required'),
+          });
         },
-        { strict: true }
+        (v) => {
+          managementApiKeyId = v;
+        }
       ),
+      managementKeyStep(
+        config,
+        args,
+        'managementApiKeySecret',
+        '--management-api-key-secret',
+        () => promptPasswordOrBack({ nonInteractive: config.nonInteractive }, 'Management API key secret'),
+        (v) => {
+          managementApiKeySecret = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    // Spread instead of literal fields: the client is generated from the live
+    // prod spec, which gains these two fields only when the matching API
+    // deploy lands. The spread keeps typecheck green on both sides; the old
+    // API strips unknown keys (caught after connect by
+    // assertHoneycombManagementKeyStored), the new one validates them.
+    body = {
+      type: 'honeycomb',
+      workspaceId,
+      region,
+      apiKey,
+      ...honeycombManagementKeyFields(managementApiKeyId, managementApiKeySecret),
+    };
+  } else if (type === 'axiom') {
+    const region = getArgString(args, 'region');
+    if (region !== undefined && !AXIOM_REGIONS.some((o) => o.value === region)) {
+      throw new CLIError(
+        `Invalid value for --region: "${region}"`,
+        ExitCode.USAGE,
+        `Use one of: ${AXIOM_REGIONS.map((o) => o.value).join(', ')}`
+      );
+    }
+    let apiToken = '';
+    const ok = await runSteps([
       secretStep(
         config,
         args,
@@ -515,7 +654,7 @@ async function connectWithCredentials(
       ),
     ]);
     if (!ok) return BACK;
-    body = { type: 'axiom', workspaceId, region, apiToken };
+    body = { type: 'axiom', workspaceId, apiToken, ...(region !== undefined ? { region: region as AxiomRegion } : {}) };
   } else if (type === 'betterstack') {
     let apiToken = '';
     let uptimeApiToken = '';
@@ -694,7 +833,9 @@ async function connectWithCredentials(
     body = { type, workspaceId, apiKey };
   }
 
-  const integration = await api.integrationsConnect(body);
+  const integration = body.type === 'axiom' ? await connectAxiom(config, api, body) : await api.integrationsConnect(body);
+  if (integration === BACK) return BACK;
+  if (type === 'honeycomb') assertHoneycombManagementKeyStored(integration);
   printConnectSuccess(config, integration, TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
   if (isCodeAgentType(integration.type) && !config.quiet && config.output !== 'json') {
     process.stderr.write(`Connecting ${CODE_AGENTS[integration.type].name} makes it the default autofix executor.\n`);
@@ -750,9 +891,11 @@ export const integrationConnectCommand: Command = {
       type: 'string',
     },
     { flag: '--site <site>', description: 'Datadog site (e.g. us5.datadoghq.com)', type: 'string' },
-    { flag: '--region <region>', description: 'Honeycomb (us|eu), Axiom (us-east-1|eu-central-1) or Mixpanel (us|eu|in)', type: 'string' },
+    { flag: '--region <region>', description: 'Honeycomb (us|eu), Axiom (us-east-1|eu-central-1; detected from the token if omitted) or Mixpanel (us|eu|in)', type: 'string' },
     { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / OpenStatus / Devin / Cursor / Factory / Conductor)', type: 'string' },
     { flag: '--app-key <key>', description: 'App key (Datadog only)', type: 'string' },
+    { flag: '--management-api-key-id <id>', description: 'Management API key ID (Honeycomb)', type: 'string' },
+    { flag: '--management-api-key-secret <secret>', description: 'Management API key secret (Honeycomb)', type: 'string' },
     { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token)', type: 'string' },
     { flag: '--uptime-api-token <token>', description: 'Uptime API token (Better Stack only)', type: 'string' },
     { flag: '--telemetry-api-token <token>', description: 'Telemetry API token (Better Stack only)', type: 'string' },
@@ -776,8 +919,8 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --category observability',
     'polylane integration connect --category code-agent',
     'polylane integration connect --type datadog --site us5.datadoghq.com --api-key ... --app-key ...',
-    'polylane integration connect --type honeycomb --region us --api-key ...',
-    'polylane integration connect --type axiom --region us-east-1 --api-token ...',
+    'polylane integration connect --type honeycomb --region us --api-key ... --management-api-key-id ... --management-api-key-secret ...',
+    'polylane integration connect --type axiom --api-token ...',
     'polylane integration connect --type betterstack --api-token ... --uptime-api-token ... --telemetry-api-token ...',
     'polylane integration connect --type openstatus --api-key ...',
     'polylane integration connect --type mixpanel --region us --service-account-username ... --service-account-secret ... --project-id 1234567',

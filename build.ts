@@ -48,6 +48,9 @@ async function main(): Promise<void> {
   const result = await build({
     entryPoints: ['src/main.ts'],
     bundle: true,
+    // jsonc-parser's default UMD entry passes `require` into its factory,
+    // which esbuild can't follow; its ESM build bundles cleanly.
+    alias: { 'jsonc-parser': 'jsonc-parser/lib/esm/main.js' },
     platform: 'node',
     target: 'node18',
     format: 'esm',

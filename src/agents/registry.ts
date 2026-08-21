@@ -2,6 +2,8 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
+import { applyEdits, modify, parse as parseJsonc, type ParseError } from 'jsonc-parser';
+
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
 import { ensureDir } from '../utils/fs';
@@ -88,6 +90,78 @@ export function upsertJsonEntry(
     writeFileSync(path, JSON.stringify(root, null, 2) + '\n', 'utf-8');
   }
   return { label, path, action: existed ? 'updated' : 'created' };
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function nestEntry(keys: string[], value: unknown): unknown {
+  return [...keys].reverse().reduce<unknown>((acc, key) => ({ [key]: acc }), value);
+}
+
+// JSONC-aware upsert for configs that may carry comments and trailing commas
+// (opencode parses everything as JSONC). Existing files are edited in place
+// with jsonc-parser — the same library opencode uses on its own config — so
+// comments and the formatting of existing members survive. Only a file
+// opencode itself couldn't parse is refused.
+export function upsertJsoncEntry(
+  path: string,
+  keyPath: string[],
+  value: unknown,
+  dryRun = false
+): WriteOutcome {
+  const label = 'MCP server';
+  if (!existsSync(path)) {
+    if (!dryRun) {
+      ensureDir(dirname(path));
+      writeFileSync(path, JSON.stringify(nestEntry(keyPath, value), null, 2) + '\n', 'utf-8');
+    }
+    return { label, path, action: 'created' };
+  }
+
+  const skip = (detail: string): WriteOutcome => ({
+    label,
+    path,
+    action: 'skipped',
+    detail,
+    needsManualStep: true,
+  });
+
+  const text = readFileSync(path, 'utf-8');
+  const errors: ParseError[] = [];
+  const parsed: unknown = parseJsonc(text, errors, { allowTrailingComma: true });
+  if (errors.length > 0) return skip('existing file is not valid JSONC');
+  if (!isJsonObject(parsed)) return skip('existing file is not a JSON object');
+
+  let node: Record<string, unknown> = parsed;
+  let reachedLeaf = true;
+  for (const key of keyPath.slice(0, -1)) {
+    const child = node[key];
+    if (child === undefined) {
+      reachedLeaf = false;
+      break;
+    }
+    if (!isJsonObject(child)) return skip(`"${key}" is not a JSON object`);
+    node = child;
+  }
+  if (reachedLeaf && node[keyPath[keyPath.length - 1]!] !== undefined) {
+    return { label, path, action: 'unchanged' };
+  }
+
+  const edits = modify(text, keyPath, value, {
+    formattingOptions: { insertSpaces: true, tabSize: 2 },
+    getInsertionIndex: () => 0,
+  });
+  if (!dryRun) writeFileSync(path, applyEdits(text, edits), 'utf-8');
+  return { label, path, action: 'updated' };
+}
+
+// opencode reads and merges both opencode.json and opencode.jsonc; edit the
+// file that exists instead of creating a sibling next to it.
+export function opencodeConfigFile(dir: string): string {
+  const jsonc = join(dir, 'opencode.jsonc');
+  return existsSync(jsonc) ? jsonc : join(dir, 'opencode.json');
 }
 
 export function upsertTomlSection(
@@ -242,8 +316,8 @@ export const AGENTS: AgentSetup[] = [
     detect: (home) => existsSync(join(home, '.config', 'opencode')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.config', 'opencode')), dryRun),
-      upsertJsonEntry(
-        join(home, '.config', 'opencode', 'opencode.json'),
+      upsertJsoncEntry(
+        opencodeConfigFile(join(home, '.config', 'opencode')),
         ['mcp', MCP_SERVER_NAME],
         { type: 'remote', url: MCP_SERVER_URL },
         dryRun
@@ -251,8 +325,8 @@ export const AGENTS: AgentSetup[] = [
     ],
     project: (projectDir, dryRun) => [
       writeSkillFile(skillFile(join(projectDir, '.opencode')), dryRun),
-      upsertJsonEntry(
-        join(projectDir, 'opencode.json'),
+      upsertJsoncEntry(
+        opencodeConfigFile(projectDir),
         ['mcp', MCP_SERVER_NAME],
         { type: 'remote', url: MCP_SERVER_URL },
         dryRun
