@@ -19,6 +19,7 @@ import {
   type WizardStep,
 } from '../helpers';
 import type { Integration } from '../../generated/types';
+import { isApiError } from '../../errors/api';
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { openBrowser } from '../../utils/browser';
@@ -134,6 +135,44 @@ const DATADOG_SITES = [
 function datadogConsoleUrl(site: string): string {
   const appPrefixed = site === 'datadoghq.com' || site === 'datadoghq.eu' || site === 'ddog-gov.com';
   return appPrefixed ? `https://app.${site}` : `https://${site}`;
+}
+
+// The backend detects the Axiom edge deployment region from the API token and
+// answers 422 when it cannot; --region is only an explicit override.
+type AxiomRegion = 'us-east-1' | 'eu-central-1';
+
+const AXIOM_REGIONS: Array<{ value: AxiomRegion; label: string }> = [
+  { value: 'us-east-1', label: 'US East 1' },
+  { value: 'eu-central-1', label: 'EU Central 1' },
+];
+
+const AXIOM_REGION_HINT = 'In Axiom: Settings > General > Edge deployment (https://app.axiom.co/settings/general)';
+
+export async function connectAxiom(
+  config: Config,
+  api: PolylaneAPI,
+  body: Extract<ConnectBody, { type: 'axiom' }>
+): Promise<typeof BACK | Integration> {
+  try {
+    return await api.integrationsConnect(body);
+  } catch (err) {
+    if (!isApiError(err) || err.status !== 422 || body.region !== undefined) throw err;
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(
+        err.message,
+        ExitCode.USAGE,
+        `Pass --region us-east-1 or --region eu-central-1.\n${AXIOM_REGION_HINT}`
+      );
+    }
+    note(`${err.message}\n${AXIOM_REGION_HINT}`, 'Axiom region');
+    const picked = await promptSelectOrBack<AxiomRegion>(
+      { nonInteractive: config.nonInteractive },
+      'Axiom edge deployment region',
+      AXIOM_REGIONS
+    );
+    if (picked === BACK) return BACK;
+    return api.integrationsConnect({ ...body, region: picked });
+  }
 }
 
 const CODE_AGENTS = {
@@ -555,24 +594,16 @@ async function connectWithCredentials(
       ...honeycombManagementKeyFields(managementApiKeyId, managementApiKeySecret),
     };
   } else if (type === 'axiom') {
-    let region: 'us-east-1' | 'eu-central-1' = 'us-east-1';
+    const region = getArgString(args, 'region');
+    if (region !== undefined && !AXIOM_REGIONS.some((o) => o.value === region)) {
+      throw new CLIError(
+        `Invalid value for --region: "${region}"`,
+        ExitCode.USAGE,
+        `Use one of: ${AXIOM_REGIONS.map((o) => o.value).join(', ')}`
+      );
+    }
     let apiToken = '';
     const ok = await runSteps([
-      choiceStep<'us-east-1' | 'eu-central-1'>(
-        config,
-        args,
-        'region',
-        '--region',
-        'Axiom edge deployment region: see your organization settings (https://app.axiom.co/settings/org)',
-        [
-          { value: 'us-east-1', label: 'US East 1' },
-          { value: 'eu-central-1', label: 'EU Central 1' },
-        ],
-        (v) => {
-          region = v;
-        },
-        { strict: true }
-      ),
       secretStep(
         config,
         args,
@@ -591,7 +622,7 @@ async function connectWithCredentials(
       ),
     ]);
     if (!ok) return BACK;
-    body = { type: 'axiom', workspaceId, region, apiToken };
+    body = { type: 'axiom', workspaceId, apiToken, ...(region !== undefined ? { region: region as AxiomRegion } : {}) };
   } else if (type === 'betterstack') {
     let apiToken = '';
     let uptimeApiToken = '';
@@ -672,7 +703,8 @@ async function connectWithCredentials(
     body = { type, workspaceId, apiKey };
   }
 
-  const integration = await api.integrationsConnect(body);
+  const integration = body.type === 'axiom' ? await connectAxiom(config, api, body) : await api.integrationsConnect(body);
+  if (integration === BACK) return BACK;
   if (type === 'honeycomb') assertHoneycombManagementKeyStored(integration);
   printConnectSuccess(config, integration, TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
   if (isCodeAgentType(integration.type) && !config.quiet && config.output !== 'json') {
@@ -729,7 +761,7 @@ export const integrationConnectCommand: Command = {
       type: 'string',
     },
     { flag: '--site <site>', description: 'Datadog site (e.g. us5.datadoghq.com)', type: 'string' },
-    { flag: '--region <region>', description: 'Honeycomb (us|eu) or Axiom (us-east-1|eu-central-1)', type: 'string' },
+    { flag: '--region <region>', description: 'Honeycomb (us|eu) or Axiom (us-east-1|eu-central-1; detected from the token if omitted)', type: 'string' },
     { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / Devin / Cursor / Factory / Conductor)', type: 'string' },
     { flag: '--app-key <key>', description: 'App key (Datadog only)', type: 'string' },
     { flag: '--management-api-key-id <id>', description: 'Management API key ID (Honeycomb)', type: 'string' },
@@ -755,7 +787,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --category code-agent',
     'polylane integration connect --type datadog --site us5.datadoghq.com --api-key ... --app-key ...',
     'polylane integration connect --type honeycomb --region us --api-key ... --management-api-key-id ... --management-api-key-secret ...',
-    'polylane integration connect --type axiom --region us-east-1 --api-token ...',
+    'polylane integration connect --type axiom --api-token ...',
     'polylane integration connect --type betterstack --api-token ... --uptime-api-token ... --telemetry-api-token ...',
     'polylane integration connect --type cursor --api-key crsr_...',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP"',
