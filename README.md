@@ -73,7 +73,7 @@ polylane setup --project                  # this project instead of the home dir
 |---|---|---|
 | Claude Code | `~/.claude/skills/polylane-cli/` | `~/.claude.json` |
 | Cursor | `~/.cursor/skills/polylane-cli/` | `~/.cursor/mcp.json` |
-| OpenCode | `~/.config/opencode/skills/polylane-cli/` | `~/.config/opencode/opencode.json` |
+| OpenCode | `~/.config/opencode/skills/polylane-cli/` | `~/.config/opencode/opencode.jsonc` if present, else `opencode.json` |
 | Codex CLI | `~/.codex/skills/polylane-cli/` | `~/.codex/config.toml` |
 | Pi | `~/.pi/agent/skills/polylane-cli/` | `~/.pi/agent/mcp.json` |
 | Warp | `~/.warp/skills/polylane-cli/` | `~/.warp/.mcp.json` |
