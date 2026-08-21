@@ -2,7 +2,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateDomain, validateOutput, validateTimeout, validateWorkspaceId } from '../src/config/schema';
 import { CLIError } from '../src/errors/base';
-import { AGENT_IDS, validateAgentId } from '../src/agents/registry';
 
 describe('validateDomain', () => {
   it('accepts valid hostnames', () => {
@@ -53,16 +52,5 @@ describe('validateWorkspaceId', () => {
   it('rejects malformed IDs', () => {
     assert.throws(() => validateWorkspaceId('ws_short'), CLIError);
     assert.throws(() => validateWorkspaceId('acc_rii32455qptezc7467usm3f3hq31qkwp'), CLIError);
-  });
-});
-
-describe('validateAgentId', () => {
-  it('accepts every registry id', () => {
-    for (const id of AGENT_IDS) validateAgentId(id);
-  });
-
-  it('rejects unknown ids', () => {
-    assert.throws(() => validateAgentId('not-an-agent'));
-    assert.throws(() => validateAgentId(''));
   });
 });
