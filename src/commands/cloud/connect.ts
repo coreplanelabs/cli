@@ -259,6 +259,10 @@ function cloudflareTokenStep(
     if (openIt) {
       process.stderr.write('Opening your browser to create the token… paste it here when done.\n');
       openBrowser(buildCloudflareTokenUrl({ readOnly: true }));
+      // openBrowser is best-effort and the pre-filled URL must never be
+      // printed, so a silent spawn failure would leave the paste prompt with
+      // no way forward — always show the manual fallback too.
+      note(CLOUDFLARE_MANUAL_STEPS, "If the browser didn't open");
     } else {
       note(CLOUDFLARE_MANUAL_STEPS, 'No browser on this machine');
     }
