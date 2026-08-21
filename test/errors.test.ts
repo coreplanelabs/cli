@@ -46,6 +46,13 @@ describe('mapApiError', () => {
     assert.equal(err.message, 'workspace xyz missing');
   });
 
+  it('maps 422 -> USAGE with the status preserved', () => {
+    const err = mapApiError(422, { message: 'Unprocessable content', detail: 'pass region' });
+    assert.equal(err.exitCode, ExitCode.USAGE);
+    assert.equal(err.message, 'pass region');
+    assert.equal(err.status, 422);
+  });
+
   it('maps 426 -> QUOTA', () => {
     const err = mapApiError(426, { message: 'Upgrade Required' });
     assert.equal(err.exitCode, ExitCode.QUOTA);

@@ -1,170 +1,66 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { axiomRegionFromEdgeDeployment, detectAxiomRegion } from '../src/commands/integration/connect';
+import { connectAxiom } from '../src/commands/integration/connect';
+import { ApiError } from '../src/errors/api';
+import { CLIError } from '../src/errors/base';
+import { ExitCode } from '../src/errors/codes';
+import type { Config } from '../src/config/schema';
+import type { PolylaneAPI } from '../src/generated/client';
+import type { Integration } from '../src/generated/types';
 
-describe('axiomRegionFromEdgeDeployment', () => {
-  it('maps edge deployment identifiers to regions', () => {
-    assert.equal(axiomRegionFromEdgeDeployment('cloud.eu-central-1.aws'), 'eu-central-1');
-    assert.equal(axiomRegionFromEdgeDeployment('cloud.us-east-1.aws'), 'us-east-1');
-    assert.equal(axiomRegionFromEdgeDeployment('eu-central-1.aws.edge.axiom.co'), 'eu-central-1');
-    assert.equal(axiomRegionFromEdgeDeployment('us-east-1.aws.edge.axiom.co'), 'us-east-1');
-  });
+const config = { nonInteractive: true } as Config;
+const body = { type: 'axiom', workspaceId: 'ws_1', apiToken: 'xaat-token' } as const;
 
-  it('returns null for unknown or non-string values', () => {
-    assert.equal(axiomRegionFromEdgeDeployment('cloud.ap-south-1.aws'), null);
-    assert.equal(axiomRegionFromEdgeDeployment(''), null);
-    assert.equal(axiomRegionFromEdgeDeployment(undefined), null);
-    assert.equal(axiomRegionFromEdgeDeployment(42), null);
-  });
-});
-
-type Route = { status: number; body?: unknown } | 'error';
-
-function mockFetch(routes: Record<string, Route>): typeof fetch {
-  return (async (input: string | URL | Request) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const path = new URL(url).pathname;
-    const route = routes[path];
-    assert.ok(route, `unexpected fetch: ${path}`);
-    if (route === 'error') throw new Error('network down');
-    return new Response(JSON.stringify(route.body ?? null), {
-      status: route.status,
-      headers: { 'content-type': 'application/json' },
-    });
-  }) as typeof fetch;
+function mockApi(connect: (body: unknown) => Promise<unknown>): PolylaneAPI {
+  return { integrationsConnect: connect } as unknown as PolylaneAPI;
 }
 
-describe('detectAxiomRegion', () => {
-  it('detects the region from the org default edge deployment', async () => {
-    const result = await detectAxiomRegion(
-      'xaat-token',
-      mockFetch({
-        '/v2/orgs': { status: 200, body: [{ id: 'org1', defaultEdgeDeployment: 'cloud.eu-central-1.aws' }] },
-        '/v2/datasets': { status: 200, body: [] },
-      })
-    );
-    assert.deepEqual(result, { outcome: 'detected', region: 'eu-central-1' });
+describe('connectAxiom', () => {
+  it('sends the body without region and returns the integration', async () => {
+    const seen: unknown[] = [];
+    const integration = { id: 'int_1', type: 'axiom' } as Integration;
+    const api = mockApi(async (b) => {
+      seen.push(b);
+      return integration;
+    });
+    assert.equal(await connectAxiom(config, api, body), integration);
+    assert.deepEqual(seen, [body]);
   });
 
-  it('falls back to dataset edge deployments when orgs is forbidden', async () => {
-    const result = await detectAxiomRegion(
-      'xaat-token',
-      mockFetch({
-        '/v2/orgs': { status: 403 },
-        '/v2/datasets': {
-          status: 200,
-          body: [
-            { id: 'logs', edgeDeployment: 'cloud.us-east-1.aws' },
-            { id: 'traces', edgeDeployment: 'cloud.us-east-1.aws' },
-          ],
-        },
-      })
+  it('turns a 422 into a usage error with a --region hint when not interactive', async () => {
+    const api = mockApi(async () => {
+      throw new ApiError(422, 'Could not detect the region from the token. Pass region.', ExitCode.USAGE);
+    });
+    await assert.rejects(
+      () => connectAxiom(config, api, body),
+      (err: unknown) =>
+        err instanceof CLIError &&
+        err.exitCode === ExitCode.USAGE &&
+        err.message.includes('Could not detect the region') &&
+        (err.hint?.includes('--region us-east-1') ?? false) &&
+        (err.hint?.includes('Settings > General > Edge deployment') ?? false)
     );
-    assert.deepEqual(result, { outcome: 'detected', region: 'us-east-1' });
   });
 
-  it('falls back to datasets when org regions are ambiguous', async () => {
-    const result = await detectAxiomRegion(
-      'xaat-token',
-      mockFetch({
-        '/v2/orgs': {
-          status: 200,
-          body: [
-            { id: 'org1', defaultEdgeDeployment: 'cloud.us-east-1.aws' },
-            { id: 'org2', defaultEdgeDeployment: 'cloud.eu-central-1.aws' },
-          ],
-        },
-        '/v2/datasets': { status: 200, body: [{ id: 'logs', edgeDeployment: 'cloud.eu-central-1.aws' }] },
-      })
+  it('rethrows a 422 when a region was already sent', async () => {
+    const original = new ApiError(422, 'Invalid region', ExitCode.USAGE);
+    const api = mockApi(async () => {
+      throw original;
+    });
+    await assert.rejects(
+      () => connectAxiom(config, api, { ...body, region: 'us-east-1' }),
+      (err: unknown) => err === original
     );
-    assert.deepEqual(result, { outcome: 'detected', region: 'eu-central-1' });
   });
 
-  it('is unknown when datasets span both regions', async () => {
-    const result = await detectAxiomRegion(
-      'xaat-token',
-      mockFetch({
-        '/v2/orgs': { status: 403 },
-        '/v2/datasets': {
-          status: 200,
-          body: [
-            { id: 'logs', edgeDeployment: 'cloud.us-east-1.aws' },
-            { id: 'traces', edgeDeployment: 'cloud.eu-central-1.aws' },
-          ],
-        },
-      })
+  it('rethrows non-422 errors untouched', async () => {
+    const original = new ApiError(401, 'Not signed in.', ExitCode.AUTH);
+    const api = mockApi(async () => {
+      throw original;
+    });
+    await assert.rejects(
+      () => connectAxiom(config, api, body),
+      (err: unknown) => err === original
     );
-    assert.deepEqual(result, { outcome: 'unknown' });
-  });
-
-  it('is unknown when no response carries an edge deployment', async () => {
-    const result = await detectAxiomRegion(
-      'xaat-token',
-      mockFetch({
-        '/v2/orgs': { status: 200, body: [{ id: 'org1' }] },
-        '/v2/datasets': { status: 200, body: [{ id: 'logs' }] },
-      })
-    );
-    assert.deepEqual(result, { outcome: 'unknown' });
-  });
-
-  it('is unauthorized when every probe returns 401', async () => {
-    const result = await detectAxiomRegion(
-      'xaat-bad',
-      mockFetch({
-        '/v2/orgs': { status: 401 },
-        '/v2/datasets': { status: 401 },
-      })
-    );
-    assert.deepEqual(result, { outcome: 'unauthorized' });
-  });
-
-  it('is unauthorized on a single 401 even when the other probe fails on the network', async () => {
-    const result = await detectAxiomRegion(
-      'xaat-token',
-      mockFetch({
-        '/v2/orgs': 'error',
-        '/v2/datasets': { status: 401 },
-      })
-    );
-    assert.deepEqual(result, { outcome: 'unauthorized' });
-  });
-
-  it('is unknown when both probes fail on the network', async () => {
-    const result = await detectAxiomRegion(
-      'xaat-token',
-      mockFetch({
-        '/v2/orgs': 'error',
-        '/v2/datasets': 'error',
-      })
-    );
-    assert.deepEqual(result, { outcome: 'unknown' });
-  });
-
-  it('is unknown when a body is not the expected array', async () => {
-    const result = await detectAxiomRegion(
-      'xaat-token',
-      mockFetch({
-        '/v2/orgs': { status: 200, body: { defaultEdgeDeployment: 'cloud.us-east-1.aws' } },
-        '/v2/datasets': { status: 200, body: 'nope' },
-      })
-    );
-    assert.deepEqual(result, { outcome: 'unknown' });
-  });
-
-  it('sends the token as a bearer header to api.axiom.co', async () => {
-    const seen: Array<{ url: string; auth: string | null }> = [];
-    const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      const headers = new Headers(init?.headers);
-      seen.push({ url, auth: headers.get('authorization') });
-      return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
-    }) as typeof fetch;
-    await detectAxiomRegion('xaat-secret', fetchFn);
-    assert.equal(seen.length, 2);
-    for (const req of seen) {
-      assert.ok(req.url.startsWith('https://api.axiom.co/v2/'), req.url);
-      assert.equal(req.auth, 'Bearer xaat-secret');
-    }
   });
 });

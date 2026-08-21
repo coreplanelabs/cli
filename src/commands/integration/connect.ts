@@ -19,6 +19,7 @@ import {
   type WizardStep,
 } from '../helpers';
 import type { Integration } from '../../generated/types';
+import { isApiError } from '../../errors/api';
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { openBrowser } from '../../utils/browser';
@@ -136,72 +137,42 @@ function datadogConsoleUrl(site: string): string {
   return appPrefixed ? `https://app.${site}` : `https://${site}`;
 }
 
-// Axiom's console and management API are region-less (app.axiom.co /
-// api.axiom.co); only the org's edge deployment differs, shown in the console
-// under Settings > General > Edge deployment and returned by the management
-// API as identifiers like "cloud.eu-central-1.aws".
-// https://axiom.co/docs/reference/edge-deployments
-export type AxiomRegion = 'us-east-1' | 'eu-central-1';
+// The backend detects the Axiom edge deployment region from the API token and
+// answers 422 when it cannot; --region is only an explicit override.
+type AxiomRegion = 'us-east-1' | 'eu-central-1';
 
 const AXIOM_REGIONS: Array<{ value: AxiomRegion; label: string }> = [
   { value: 'us-east-1', label: 'US East 1' },
   { value: 'eu-central-1', label: 'EU Central 1' },
 ];
 
-const AXIOM_API_BASE = 'https://api.axiom.co';
-const AXIOM_PROBE_TIMEOUT_MS = 5000;
 const AXIOM_REGION_HINT = 'In Axiom: Settings > General > Edge deployment (https://app.axiom.co/settings/general)';
 
-export function axiomRegionFromEdgeDeployment(value: unknown): AxiomRegion | null {
-  if (typeof value !== 'string') return null;
-  if (value.includes('eu-central-1')) return 'eu-central-1';
-  if (value.includes('us-east-1')) return 'us-east-1';
-  return null;
-}
-
-function uniqueAxiomRegion(items: unknown, field: string): AxiomRegion | null {
-  if (!Array.isArray(items)) return null;
-  const regions = new Set<AxiomRegion>();
-  for (const item of items) {
-    const value = (item as Record<string, unknown> | null)?.[field];
-    const region = axiomRegionFromEdgeDeployment(value);
-    if (region !== null) regions.add(region);
-  }
-  return regions.size === 1 ? [...regions][0]! : null;
-}
-
-export type AxiomRegionDetection =
-  | { outcome: 'detected'; region: AxiomRegion }
-  | { outcome: 'unauthorized' }
-  | { outcome: 'unknown' };
-
-// Detect the org's edge deployment from the token: /v2/orgs carries
-// defaultEdgeDeployment but needs an org permission the recommended token may
-// lack; /v2/datasets works with the Datasets-read permission the connect
-// instructions require and carries edgeDeployment per dataset. Ambiguity
-// (multi-edge org, no datasets, network trouble) falls back to asking.
-export async function detectAxiomRegion(
-  apiToken: string,
-  fetchFn: typeof fetch = fetch
-): Promise<AxiomRegionDetection> {
-  const probe = async (path: string): Promise<{ status: number; body: unknown } | null> => {
-    try {
-      const res = await fetchFn(`${AXIOM_API_BASE}${path}`, {
-        headers: { authorization: `Bearer ${apiToken}` },
-        signal: AbortSignal.timeout(AXIOM_PROBE_TIMEOUT_MS),
-      });
-      return { status: res.status, body: res.ok ? ((await res.json()) as unknown) : null };
-    } catch {
-      return null;
+export async function connectAxiom(
+  config: Config,
+  api: PolylaneAPI,
+  body: Extract<ConnectBody, { type: 'axiom' }>
+): Promise<typeof BACK | Integration> {
+  try {
+    return await api.integrationsConnect(body);
+  } catch (err) {
+    if (!isApiError(err) || err.status !== 422 || body.region !== undefined) throw err;
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(
+        err.message,
+        ExitCode.USAGE,
+        `Pass --region us-east-1 or --region eu-central-1.\n${AXIOM_REGION_HINT}`
+      );
     }
-  };
-  const [orgs, datasets] = await Promise.all([probe('/v2/orgs'), probe('/v2/datasets')]);
-  const fromOrgs = orgs?.status === 200 ? uniqueAxiomRegion(orgs.body, 'defaultEdgeDeployment') : null;
-  if (fromOrgs !== null) return { outcome: 'detected', region: fromOrgs };
-  const fromDatasets = datasets?.status === 200 ? uniqueAxiomRegion(datasets.body, 'edgeDeployment') : null;
-  if (fromDatasets !== null) return { outcome: 'detected', region: fromDatasets };
-  if (orgs?.status === 401 || datasets?.status === 401) return { outcome: 'unauthorized' };
-  return { outcome: 'unknown' };
+    note(`${err.message}\n${AXIOM_REGION_HINT}`, 'Axiom region');
+    const picked = await promptSelectOrBack<AxiomRegion>(
+      { nonInteractive: config.nonInteractive },
+      'Axiom edge deployment region',
+      AXIOM_REGIONS
+    );
+    if (picked === BACK) return BACK;
+    return api.integrationsConnect({ ...body, region: picked });
+  }
 }
 
 const CODE_AGENTS = {
@@ -623,9 +594,15 @@ async function connectWithCredentials(
       ...honeycombManagementKeyFields(managementApiKeyId, managementApiKeySecret),
     };
   } else if (type === 'axiom') {
-    let region: AxiomRegion = 'us-east-1';
+    const region = getArgString(args, 'region');
+    if (region !== undefined && !AXIOM_REGIONS.some((o) => o.value === region)) {
+      throw new CLIError(
+        `Invalid value for --region: "${region}"`,
+        ExitCode.USAGE,
+        `Use one of: ${AXIOM_REGIONS.map((o) => o.value).join(', ')}`
+      );
+    }
     let apiToken = '';
-    const quiet = config.quiet || config.output === 'json';
     const ok = await runSteps([
       secretStep(
         config,
@@ -643,58 +620,9 @@ async function connectWithCredentials(
           apiToken = v;
         }
       ),
-      // Region: flag wins, then auto-detection from the token, then (only when
-      // detection is ambiguous) an interactive prompt.
-      async () => {
-        const fromFlag = getArgString(args, 'region');
-        if (fromFlag !== undefined) {
-          if (!AXIOM_REGIONS.some((o) => o.value === fromFlag)) {
-            throw new CLIError(
-              `Invalid value for --region: "${fromFlag}"`,
-              ExitCode.USAGE,
-              `Use one of: ${AXIOM_REGIONS.map((o) => o.value).join(', ')}`
-            );
-          }
-          region = fromFlag as AxiomRegion;
-          return SKIPPED;
-        }
-        if (!quiet) process.stderr.write('Detecting your Axiom region…\n');
-        const detection = await detectAxiomRegion(apiToken);
-        if (detection.outcome === 'detected') {
-          region = detection.region;
-          if (!quiet) process.stderr.write(`✓ Axiom region: ${detection.region}\n`);
-          return SKIPPED;
-        }
-        if (detection.outcome === 'unauthorized') {
-          if (!isInteractive(config.nonInteractive) || getArgString(args, 'apiToken') !== undefined) {
-            throw new CLIError(
-              'Axiom rejected the API token',
-              ExitCode.AUTH,
-              'Create a token at https://app.axiom.co/settings/api-tokens and retry.'
-            );
-          }
-          note('Axiom rejected the token (401 from api.axiom.co). Paste it again — it starts with xaat-.', 'Axiom API token');
-          return BACK;
-        }
-        if (!isInteractive(config.nonInteractive)) {
-          throw new CLIError(
-            'Missing required flag: --region',
-            ExitCode.USAGE,
-            `Could not detect the region from the token. Pass --region us-east-1 or --region eu-central-1.\n${AXIOM_REGION_HINT}`
-          );
-        }
-        const picked = await promptSelectOrBack<AxiomRegion>(
-          { nonInteractive: config.nonInteractive },
-          `Axiom region — could not detect it from the token. ${AXIOM_REGION_HINT}`,
-          AXIOM_REGIONS
-        );
-        if (picked === BACK) return BACK;
-        region = picked;
-        return;
-      },
     ]);
     if (!ok) return BACK;
-    body = { type: 'axiom', workspaceId, region, apiToken };
+    body = { type: 'axiom', workspaceId, apiToken, ...(region !== undefined ? { region: region as AxiomRegion } : {}) };
   } else if (type === 'betterstack') {
     let apiToken = '';
     let uptimeApiToken = '';
@@ -775,7 +703,8 @@ async function connectWithCredentials(
     body = { type, workspaceId, apiKey };
   }
 
-  const integration = await api.integrationsConnect(body);
+  const integration = body.type === 'axiom' ? await connectAxiom(config, api, body) : await api.integrationsConnect(body);
+  if (integration === BACK) return BACK;
   if (type === 'honeycomb') assertHoneycombManagementKeyStored(integration);
   printConnectSuccess(config, integration, TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
   if (isCodeAgentType(integration.type) && !config.quiet && config.output !== 'json') {
