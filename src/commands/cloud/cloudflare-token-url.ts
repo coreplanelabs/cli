@@ -1,0 +1,246 @@
+// Duplicated from coreplanelabs/nominal
+// apps/console/app/utils/cloudflare-token-url.ts (buildCloudflareTokenUrl) —
+// the source of truth the console connect flow and the docs codegen both use.
+// The Polylane API does not serve this URL yet, so the CLI carries its own
+// copy; keep it in sync with the nominal file when the permission set changes.
+// The generated URL is ~13KB (the permission list rides in a query param):
+// fine for a browser to open, never print it to a terminal.
+type CloudflarePermissionType = 'read' | 'edit' | 'run' | 'send' | 'purge';
+
+type CloudflarePermission = {
+  key: string;
+  type: CloudflarePermissionType;
+};
+
+// Account-owned token permission keys, derived from the dashboard permission-group
+// labels (key = label minus its trailing type segment). Zero Trust is read-only;
+// billing/token-mint/SSO/SCIM/OAuth writes and user-scoped groups are deliberately omitted.
+const NOMINAL_PERMISSIONS: CloudflarePermission[] = [
+  { key: 'access', type: 'read' },
+  { key: 'access_acct', type: 'read' },
+  { key: 'access_app', type: 'read' },
+  { key: 'access_audit_log', type: 'read' },
+  { key: 'access_certificate', type: 'read' },
+  { key: 'access_custom_page', type: 'read' },
+  { key: 'access_device_posture', type: 'read' },
+  { key: 'access_group', type: 'read' },
+  { key: 'access_idp', type: 'read' },
+  { key: 'access_key', type: 'read' },
+  { key: 'access_org', type: 'read' },
+  { key: 'access_policy', type: 'read' },
+  { key: 'access_policy_test', type: 'read' },
+  { key: 'access_population', type: 'read' },
+  { key: 'access_saml_certificate', type: 'read' },
+  { key: 'access_scim_log', type: 'read' },
+  { key: 'access_service_token', type: 'read' },
+  { key: 'access_ssh_auditing', type: 'read' },
+  { key: 'access_tag', type: 'read' },
+  { key: 'access_users', type: 'read' },
+  { key: 'account_abuse_protection_pii', type: 'read' },
+  { key: 'account_analytics', type: 'read' },
+  { key: 'account_api_gateway', type: 'edit' },
+  { key: 'account_api_tokens', type: 'read' },
+  { key: 'account_custom_asset', type: 'edit' },
+  { key: 'account_custom_error_rules', type: 'edit' },
+  { key: 'account_custom_pages', type: 'edit' },
+  { key: 'account_disable_esc', type: 'edit' },
+  { key: 'account_dns_settings', type: 'edit' },
+  { key: 'account_firewall_access_rules', type: 'edit' },
+  { key: 'account_logs', type: 'edit' },
+  { key: 'account_rule_lists', type: 'edit' },
+  { key: 'account_rule_policies', type: 'edit' },
+  { key: 'account_rulesets', type: 'edit' },
+  { key: 'account_security_center_insights', type: 'edit' },
+  { key: 'account_settings', type: 'edit' },
+  { key: 'account_ssl_and_certificates', type: 'edit' },
+  { key: 'account_waf', type: 'edit' },
+  { key: 'account_waiting_rooms', type: 'read' },
+  { key: 'address_maps', type: 'edit' },
+  { key: 'agent-memory', type: 'edit' },
+  { key: 'agw', type: 'edit' },
+  { key: 'agw', type: 'run' },
+  { key: 'ai', type: 'edit' },
+  { key: 'ai_search', type: 'edit' },
+  { key: 'ai_search', type: 'run' },
+  { key: 'ai_search_index', type: 'edit' },
+  { key: 'aiaudit', type: 'edit' },
+  { key: 'aig', type: 'edit' },
+  { key: 'aig', type: 'run' },
+  { key: 'analytics', type: 'read' },
+  { key: 'api_gateway', type: 'edit' },
+  { key: 'apps', type: 'edit' },
+  { key: 'argotunnel', type: 'read' },
+  { key: 'artifacts', type: 'edit' },
+  { key: 'billing', type: 'read' },
+  { key: 'bot_management', type: 'edit' },
+  { key: 'bot_management_feedback', type: 'edit' },
+  { key: 'browser_rendering', type: 'edit' },
+  { key: 'cache', type: 'purge' },
+  { key: 'cache_settings', type: 'edit' },
+  { key: 'calls', type: 'edit' },
+  { key: 'casb', type: 'read' },
+  { key: 'cf_agents', type: 'edit' },
+  { key: 'challenge_widgets', type: 'edit' },
+  { key: 'chinanetwork_steering', type: 'edit' },
+  { key: 'cloud_connector', type: 'edit' },
+  { key: 'cloud_email_security', type: 'edit' },
+  { key: 'cloudchamber', type: 'edit' },
+  { key: 'cloudforce_one', type: 'edit' },
+  { key: 'config_settings', type: 'edit' },
+  { key: 'connectivity_directory', type: 'edit' },
+  { key: 'constellation', type: 'edit' },
+  { key: 'containers', type: 'edit' },
+  { key: 'custom_errors', type: 'edit' },
+  { key: 'custom_pages', type: 'edit' },
+  { key: 'd1', type: 'edit' },
+  { key: 'd1_metadata', type: 'read' },
+  { key: 'ddos_botnet_feed', type: 'edit' },
+  { key: 'ddos_protection', type: 'edit' },
+  { key: 'dls', type: 'read' },
+  { key: 'dns', type: 'edit' },
+  { key: 'dns_firewall', type: 'edit' },
+  { key: 'dns_view', type: 'edit' },
+  { key: 'domain_page_shield', type: 'edit' },
+  { key: 'dynamic_redirect', type: 'edit' },
+  { key: 'email_routing_address', type: 'edit' },
+  { key: 'email_routing_rule', type: 'edit' },
+  { key: 'email_routing_suppression', type: 'edit' },
+  { key: 'email_security_dmarcreports', type: 'edit' },
+  { key: 'email_sending', type: 'edit' },
+  { key: 'fbm', type: 'edit' },
+  { key: 'firewall_for_ai', type: 'edit' },
+  { key: 'firewall_services', type: 'edit' },
+  { key: 'flagship', type: 'edit' },
+  { key: 'flagship', type: 'run' },
+  { key: 'fraud_detection', type: 'edit' },
+  { key: 'fraud_events', type: 'edit' },
+  { key: 'granular_workers_scripts', type: 'read' },
+  { key: 'healthcheck', type: 'edit' },
+  { key: 'http_applications', type: 'edit' },
+  { key: 'http_ddos_managed_ruleset', type: 'edit' },
+  { key: 'images', type: 'edit' },
+  { key: 'images_metadata', type: 'read' },
+  { key: 'integration', type: 'edit' },
+  { key: 'intel', type: 'edit' },
+  { key: 'iot', type: 'edit' },
+  { key: 'ip_prefix', type: 'edit' },
+  { key: 'ip_prefix_bgp_on_demand', type: 'edit' },
+  { key: 'l4_ddos_managed_ruleset', type: 'edit' },
+  { key: 'load_balancers', type: 'edit' },
+  { key: 'load_balancers_account', type: 'edit' },
+  { key: 'load_balancing_monitors_and_pools', type: 'edit' },
+  { key: 'logs', type: 'edit' },
+  { key: 'magic_firewall', type: 'edit' },
+  { key: 'magic_transit', type: 'edit' },
+  { key: 'magic_wan', type: 'edit' },
+  { key: 'managed_headers', type: 'edit' },
+  { key: 'mass_url_redirects', type: 'edit' },
+  { key: 'mcp_portals', type: 'edit' },
+  { key: 'moq', type: 'edit' },
+  { key: 'notifications', type: 'edit' },
+  { key: 'oauth_client', type: 'read' },
+  { key: 'origin', type: 'edit' },
+  { key: 'page', type: 'edit' },
+  { key: 'page_rules', type: 'edit' },
+  { key: 'page_shield', type: 'edit' },
+  { key: 'pcaps_api', type: 'edit' },
+  { key: 'pipelines', type: 'edit' },
+  { key: 'pipelines', type: 'send' },
+  { key: 'pubsub', type: 'edit' },
+  { key: 'query_cache', type: 'edit' },
+  { key: 'queues', type: 'edit' },
+  { key: 'queues_metadata', type: 'read' },
+  { key: 'r2_catalog', type: 'edit' },
+  { key: 'r2_catalog_sql', type: 'read' },
+  { key: 'radar', type: 'read' },
+  { key: 'rag', type: 'edit' },
+  { key: 'rag', type: 'run' },
+  { key: 'realtime', type: 'edit' },
+  { key: 'registrar_domains', type: 'edit' },
+  { key: 'reports_application_security_report', type: 'read' },
+  { key: 'request_tracer', type: 'read' },
+  { key: 'resource_library', type: 'edit' },
+  { key: 'resource_sharing', type: 'read' },
+  { key: 'response_compression', type: 'edit' },
+  { key: 'sanitize', type: 'edit' },
+  { key: 'secrets_store', type: 'edit' },
+  { key: 'select_configuration', type: 'edit' },
+  { key: 'snippets', type: 'edit' },
+  { key: 'ssl_and_certificates', type: 'edit' },
+  { key: 'sso_connector', type: 'read' },
+  { key: 'stream', type: 'edit' },
+  { key: 'stream_metadata', type: 'read' },
+  { key: 'tag', type: 'edit' },
+  { key: 'teams', type: 'read' },
+  { key: 'teams_cds_compute_account', type: 'read' },
+  { key: 'teams_connector_cloudflared', type: 'read' },
+  { key: 'teams_connector_warp', type: 'read' },
+  { key: 'teams_connectors', type: 'read' },
+  { key: 'teams_dex', type: 'edit' },
+  { key: 'teams_networks', type: 'read' },
+  { key: 'teams_pii', type: 'read' },
+  { key: 'teams_resilience', type: 'read' },
+  { key: 'transform_rules', type: 'edit' },
+  { key: 'trust_and_safety', type: 'edit' },
+  { key: 'url_scanner', type: 'edit' },
+  { key: 'vectorize', type: 'edit' },
+  { key: 'waiting_rooms', type: 'edit' },
+  { key: 'web3_hostnames', type: 'edit' },
+  { key: 'websearch', type: 'run' },
+  { key: 'workers_ci', type: 'edit' },
+  { key: 'workers_kv_storage', type: 'edit' },
+  { key: 'workers_kv_storage_metadata', type: 'read' },
+  { key: 'workers_observability', type: 'edit' },
+  { key: 'workers_observability_telemetry', type: 'edit' },
+  { key: 'workers_r2', type: 'edit' },
+  { key: 'workers_r2_bucket_item', type: 'edit' },
+  { key: 'workers_r2_metadata', type: 'read' },
+  { key: 'workers_routes', type: 'edit' },
+  { key: 'workers_scripts', type: 'edit' },
+  { key: 'workers_tail', type: 'read' },
+  { key: 'workers_websearch', type: 'edit' },
+  { key: 'zaraz', type: 'edit' },
+  { key: 'zaraz_edit', type: 'edit' },
+  { key: 'zone', type: 'edit' },
+  { key: 'zone_access', type: 'read' },
+  { key: 'zone_custom_asset', type: 'edit' },
+  { key: 'zone_disable_esc', type: 'edit' },
+  { key: 'zone_dns_settings', type: 'edit' },
+  { key: 'zone_security_center_insights', type: 'edit' },
+  { key: 'zone_settings', type: 'edit' },
+  { key: 'zone_transform_rules', type: 'edit' },
+  { key: 'zone_versioning', type: 'edit' },
+  { key: 'zone_waf', type: 'edit' },
+];
+
+// A read-only token keeps every readable resource but downgrades each 'edit' grant to
+// 'read' and drops the action-only grants (run/send/purge), which have no read equivalent.
+// Keys are de-duplicated so a resource that appears as both edit and run collapses to one
+// read entry.
+function toReadOnlyPermissions(permissions: CloudflarePermission[]): CloudflarePermission[] {
+  const keys = new Set<string>();
+  const result: CloudflarePermission[] = [];
+  for (const permission of permissions) {
+    if (permission.type !== 'read' && permission.type !== 'edit') continue;
+    if (keys.has(permission.key)) continue;
+    keys.add(permission.key);
+    result.push({ key: permission.key, type: 'read' });
+  }
+  return result;
+}
+
+export function buildCloudflareTokenUrl(options?: {
+  permissions?: CloudflarePermission[];
+  name?: string;
+  readOnly?: boolean;
+}): string {
+  const base = options?.permissions ?? NOMINAL_PERMISSIONS;
+  const permissions = options?.readOnly ? toReadOnlyPermissions(base) : base;
+  const name = options?.name ?? 'Polylane';
+  const params = new URLSearchParams({
+    to: '/:account/api-tokens',
+    permissionGroupKeys: JSON.stringify(permissions),
+    name,
+  });
+  return `https://dash.cloudflare.com/?${params.toString()}`;
+}
