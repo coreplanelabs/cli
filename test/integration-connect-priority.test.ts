@@ -24,7 +24,7 @@ describe('prioritizeCodeAgent', () => {
   it('keeps grouping intact', () => {
     const { options } = prioritizeCodeAgent(typeOptionsForCategory(undefined), 'cursor');
     const categories = options.map((o) => o.category);
-    assert.deepEqual([...new Set(categories)], ['git', 'communication', 'observability', 'code-agent', 'protocol']);
+    assert.deepEqual([...new Set(categories)], ['git', 'communication', 'observability', 'code-agent', 'issue-tracking', 'protocol']);
     assert.equal(options.length, typeOptionsForCategory(undefined).length);
   });
 

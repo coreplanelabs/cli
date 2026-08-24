@@ -49,12 +49,13 @@ type ConnectableType =
   | 'cursor'
   | 'factory'
   | 'conductor'
+  | 'linear'
   | 'mcp';
 
 // Mirrors each type's subcategory in the integrations catalog
 // (`polylane integration catalog`), so callers like the install script can
 // narrow the picker to one family of integrations.
-export const CONNECT_CATEGORIES = ['git', 'communication', 'observability', 'code-agent', 'protocol'] as const;
+export const CONNECT_CATEGORIES = ['git', 'communication', 'observability', 'code-agent', 'issue-tracking', 'protocol'] as const;
 type ConnectCategory = (typeof CONNECT_CATEGORIES)[number];
 
 const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string; category: ConnectCategory }> = [
@@ -69,6 +70,7 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'factory', label: 'Factory', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'conductor', label: 'Conductor', hint: 'API key · coding agent', category: 'code-agent' },
+  { value: 'linear', label: 'Linear', hint: 'personal API key · issue tracking', category: 'issue-tracking' },
   { value: 'mcp', label: 'MCP server', hint: 'any MCP server by URL', category: 'protocol' },
 ];
 
@@ -679,6 +681,28 @@ async function connectWithCredentials(
     ]);
     if (!ok) return BACK;
     body = { type: 'betterstack', workspaceId, apiToken, uptimeApiToken, telemetryApiToken };
+  } else if (type === 'linear') {
+    let apiKey = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: 'Linear API key',
+          instructions:
+            'In Linear, open Settings > Security & access and create a key under Personal API keys. It needs write access so agents can create and update issues; issue writes still ask for confirmation before they execute. The key starts with lin_api_ and is shown only once.',
+          link: 'https://linear.app/settings/account/security',
+          linkLabel: 'Open Linear settings',
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'linear', workspaceId, apiKey };
   } else {
     const agent = CODE_AGENTS[type];
     let apiKey = '';
@@ -747,7 +771,7 @@ async function connectType(
 
 export const integrationConnectCommand: Command = {
   name: 'integration connect',
-  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, Devin, Cursor, Factory, Conductor, MCP)',
+  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, Devin, Cursor, Factory, Conductor, Linear, MCP)',
   operationId: 'integrations.connect',
   options: [
     {
@@ -762,7 +786,7 @@ export const integrationConnectCommand: Command = {
     },
     { flag: '--site <site>', description: 'Datadog site (e.g. us5.datadoghq.com)', type: 'string' },
     { flag: '--region <region>', description: 'Honeycomb (us|eu) or Axiom (us-east-1|eu-central-1; detected from the token if omitted)', type: 'string' },
-    { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / Devin / Cursor / Factory / Conductor)', type: 'string' },
+    { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / Devin / Cursor / Factory / Conductor / Linear)', type: 'string' },
     { flag: '--app-key <key>', description: 'App key (Datadog only)', type: 'string' },
     { flag: '--management-api-key-id <id>', description: 'Management API key ID (Honeycomb)', type: 'string' },
     { flag: '--management-api-key-secret <secret>', description: 'Management API key secret (Honeycomb)', type: 'string' },
@@ -790,6 +814,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type axiom --api-token ...',
     'polylane integration connect --type betterstack --api-token ... --uptime-api-token ... --telemetry-api-token ...',
     'polylane integration connect --type cursor --api-key crsr_...',
+    'polylane integration connect --type linear --api-key lin_api_...',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP"',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP" --oauth',
   ],
