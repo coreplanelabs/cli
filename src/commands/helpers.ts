@@ -321,6 +321,52 @@ export async function waitForBrowserCompletion<T>(
   }
 }
 
+export interface BackgroundCompletion<T> {
+  peek: () => T | null;
+  stop: () => void;
+}
+
+// Poll a check in the background without holding the terminal: nothing is
+// written while a prompt may be active — callers read progress with peek()
+// between prompts. Timers are unref'd so a finished command never waits on
+// the poller; stop() before any foreground wait takes over the same check.
+export function startBackgroundCompletion<T>(
+  check: () => Promise<T | null>,
+  intervalMs: number
+): BackgroundCompletion<T> {
+  let found: T | null = null;
+  let stopped = false;
+  let timer: NodeJS.Timeout | null = null;
+  const tick = async (): Promise<void> => {
+    timer = null;
+    let result: T | null = null;
+    try {
+      result = await check();
+    } catch {
+      // Transient poll failures are expected — keep polling.
+    }
+    if (stopped || found) return;
+    if (result) {
+      found = result;
+      return;
+    }
+    schedule();
+  };
+  const schedule = (): void => {
+    timer = setTimeout(() => void tick(), intervalMs);
+    timer.unref();
+  };
+  schedule();
+  return {
+    peek: () => found,
+    stop: () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      timer = null;
+    },
+  };
+}
+
 export function getArgString(args: Record<string, unknown>, key: string): string | undefined {
   const v = args[key];
   return typeof v === 'string' ? v : undefined;
