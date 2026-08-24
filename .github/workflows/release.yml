@@ -78,10 +78,17 @@ jobs:
       - name: Publish to npm
         run: npm publish "${{ steps.pack.outputs.tarball_local }}" --access public --provenance
 
-      # Stage release artifacts. Only polylane.mjs ships now — install.sh and
-      # install.ps1 both fetch it directly from the GitHub Release.
+      # Stage release artifacts: polylane.mjs plus checksums.txt (sha256sum
+      # format, one line per asset). install.sh verifies downloads against the
+      # GitHub API's per-asset digest and falls back to this checksums.txt
+      # when the API is unavailable (anonymous rate limits) — without it, an
+      # API outage would block every install now that unverified installs are
+      # refused. install.ps1 can adopt the same file.
       - name: Stage release artifacts
-        run: cp dist/polylane.mjs release-artifacts/
+        run: |
+          cp dist/polylane.mjs release-artifacts/
+          (cd release-artifacts && sha256sum polylane.mjs > checksums.txt)
+          cat release-artifacts/checksums.txt
 
       - name: Capture release metadata
         id: meta
@@ -101,6 +108,7 @@ jobs:
           generate_release_notes: true
           files: |
             release-artifacts/polylane.mjs
+            release-artifacts/checksums.txt
 
   update-homebrew:
     name: Bump Homebrew formula
