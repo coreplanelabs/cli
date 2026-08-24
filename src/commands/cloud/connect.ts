@@ -19,6 +19,7 @@ import {
 } from '../helpers';
 import { buildCloudflareTokenUrl } from './cloudflare-token-url';
 import type { CloudAccount } from '../../generated/types';
+import { isApiError } from '../../errors/api';
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { openBrowser } from '../../utils/browser';
@@ -30,6 +31,7 @@ import {
   promptSelectOrBack,
   promptConfirmOrBack,
   promptPasswordOrBack,
+  promptTextOrBack,
 } from '../../utils/prompt';
 
 type ConnectBody = Parameters<PolylaneAPI['cloudAccountsConnect']>[0];
@@ -43,6 +45,9 @@ type Provider =
   | 'planetscale'
   | 'supabase'
   | 'modal'
+  | 'convex'
+  | 'clickhouse'
+  | 'turso'
   | 'kubernetes';
 
 const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> = [
@@ -54,6 +59,9 @@ const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> 
   { value: 'planetscale', label: 'PlanetScale', hint: 'authorize in the browser, or a service token' },
   { value: 'supabase', label: 'Supabase', hint: 'authorize in the browser' },
   { value: 'modal', label: 'Modal', hint: 'token ID + secret' },
+  { value: 'convex', label: 'Convex', hint: 'team access token' },
+  { value: 'clickhouse', label: 'ClickHouse', hint: 'API key ID + secret' },
+  { value: 'turso', label: 'Turso', hint: 'platform API token' },
   { value: 'kubernetes', label: 'Kubernetes', hint: 'in-cluster agent, installed with Helm (console)' },
 ];
 
@@ -156,6 +164,47 @@ function printConnectSuccess(config: Config, result: ConnectResult): void {
   }
   for (const failure of result.failures) {
     process.stderr.write(`Couldn't connect ${failure.account}: ${failure.message}\n`);
+  }
+}
+
+const TURSO_ORGANIZATION_HINT =
+  'List your organizations with `turso org list`, or check the switcher in the Turso dashboard (https://app.turso.tech).';
+
+// A Turso platform API token carries the permissions of the account that
+// minted it, so it can reach every organization that account belongs to. The
+// API refuses to guess (400) when there is more than one; pick the
+// organization here and retry instead of surfacing a dead end.
+export async function connectTurso(
+  config: Config,
+  api: PolylaneAPI,
+  body: Extract<ConnectBody, { provider: 'turso' }>
+): Promise<typeof BACK | ConnectResult> {
+  try {
+    return await api.cloudAccountsConnect(body);
+  } catch (err) {
+    if (
+      !isApiError(err) ||
+      err.status !== 400 ||
+      body.organization !== undefined ||
+      !/multiple turso organizations/i.test(err.message)
+    ) {
+      throw err;
+    }
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(
+        err.message,
+        ExitCode.USAGE,
+        `Pass --organization <slug>.\n${TURSO_ORGANIZATION_HINT}`
+      );
+    }
+    note(`${err.message}\n${TURSO_ORGANIZATION_HINT}`, 'Turso organization');
+    const picked = await promptTextOrBack(
+      { nonInteractive: config.nonInteractive },
+      'Turso organization slug',
+      { validate: (v: string) => (v.trim() ? undefined : 'Required') }
+    );
+    if (picked === BACK) return BACK;
+    return api.cloudAccountsConnect({ ...body, organization: picked.trim() });
   }
 }
 
@@ -314,6 +363,38 @@ async function connectProvider(
     printConnectSuccess(config, result);
     return 'connected';
   }
+  if (provider === 'turso') {
+    let token = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'token',
+        '--token',
+        {
+          message: 'Turso platform API token',
+          instructions:
+            'In Turso, open Account settings > API Tokens and mint a platform API token, or run "turso auth api-tokens mint polylane" from the Turso CLI. Platform API tokens are different from database auth tokens; they carry the permissions of the account that minted them, and Polylane only reads organization, group, and database metadata during sync.',
+          link: 'https://app.turso.tech/settings/api-tokens',
+          linkLabel: 'Create token',
+        },
+        (v) => {
+          token = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    const organization = getArgString(args, 'organization');
+    const result = await connectTurso(config, api, {
+      workspaceId,
+      provider: 'turso',
+      token,
+      ...(organization !== undefined ? { organization } : {}),
+    });
+    if (result === BACK) return BACK;
+    printConnectSuccess(config, result);
+    return 'connected';
+  }
   if (provider === 'kubernetes') {
     // The kubeconfig upload no longer exists in the API: Kubernetes connects
     // through the in-cluster Polylane agent, which registers itself and opens
@@ -457,6 +538,66 @@ async function connectProvider(
     ]);
     if (!ok) return BACK;
     body = { workspaceId, provider: 'render', apiKey };
+  } else if (provider === 'convex') {
+    let token = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'token',
+        '--token',
+        {
+          message: 'Convex team access token',
+          instructions:
+            'In the Convex dashboard, open Team Settings > Access Tokens and create an access token. A team access token is scoped to exactly one team, so one token connects one team. Project-scoped tokens and deploy keys are rejected. Polylane only reads projects and deployments during sync; it never queries your tables.',
+          link: 'https://dashboard.convex.dev/',
+          linkLabel: 'Open Convex dashboard',
+        },
+        (v) => {
+          token = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { workspaceId, provider: 'convex', token };
+  } else if (provider === 'clickhouse') {
+    let keyId = '';
+    let keySecret = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'keyId',
+        '--key-id',
+        {
+          message: 'ClickHouse Cloud key ID',
+          instructions:
+            'In the ClickHouse Cloud console, pick your organization and go to Organization > API Keys, then create a new API key with the read-only Developer role: Polylane only reads during sync. An API key belongs to exactly one organization. You get a key ID and a key secret, shown only once.',
+          link: 'https://console.clickhouse.cloud/organizations',
+          linkLabel: 'Create API key',
+        },
+        (v) => {
+          keyId = v;
+        }
+      ),
+      secretStep(
+        config,
+        args,
+        'keySecret',
+        '--key-secret',
+        {
+          message: 'ClickHouse Cloud key secret',
+          instructions: 'Paste the key secret that came with the key ID.',
+          link: 'https://console.clickhouse.cloud/organizations',
+          linkLabel: 'Open ClickHouse Cloud',
+        },
+        (v) => {
+          keySecret = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { workspaceId, provider: 'clickhouse', keyId, keySecret };
   } else {
     // modal
     let tokenId = '';
@@ -522,7 +663,7 @@ async function connectProvider(
 
 export const cloudConnectCommand: Command = {
   name: 'cloud connect',
-  description: 'Connect a cloud account (AWS, Cloudflare, Vercel, Fly.io, Render, PlanetScale, Supabase, Modal, Kubernetes)',
+  description: 'Connect a cloud account (AWS, Cloudflare, Vercel, Fly.io, Render, PlanetScale, Supabase, Modal, Convex, ClickHouse, Turso, Kubernetes)',
   operationId: 'cloud_accounts.connect',
   options: [
     {
@@ -535,8 +676,8 @@ export const cloudConnectCommand: Command = {
     { flag: '--region <region>', description: 'AWS region (e.g. us-east-1)', type: 'string' },
     { flag: '--create-alarms', description: 'AWS: create monitoring alarms', type: 'boolean' },
     { flag: '--subscribe-alarms', description: 'AWS: subscribe to existing CloudWatch alarms', type: 'boolean' },
-    // Cloudflare / Fly / PlanetScale
-    { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, or PlanetScale service token', type: 'string' },
+    // Cloudflare / Fly / PlanetScale / Convex / Turso
+    { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, PlanetScale service token, Convex team access token, or Turso platform API token', type: 'string' },
     // Retired in 0.2.16: Cloudflare now always connects read-only, which is
     // what anyone passing this flag was asking for. Accepted and ignored for
     // one release so existing scripts do not start exiting 2 on an unknown
@@ -545,9 +686,12 @@ export const cloudConnectCommand: Command = {
     // PlanetScale / Modal
     { flag: '--token-id <id>', description: 'PlanetScale service token ID, or Modal token ID', type: 'string' },
     { flag: '--token-secret <secret>', description: 'Modal token secret', type: 'string' },
-    { flag: '--organization <org>', description: 'PlanetScale organization', type: 'string' },
+    { flag: '--organization <org>', description: 'PlanetScale organization, or Turso organization slug', type: 'string' },
     // Render
     { flag: '--api-key <key>', description: 'Render API key', type: 'string' },
+    // ClickHouse
+    { flag: '--key-id <id>', description: 'ClickHouse Cloud API key ID', type: 'string' },
+    { flag: '--key-secret <secret>', description: 'ClickHouse Cloud API key secret', type: 'string' },
     { flag: '--no-browser', description: 'AWS / Vercel / PlanetScale / Supabase: print the URL instead of opening it; Cloudflare: show manual token-creation steps instead of opening the browser', type: 'boolean' },
     { flag: '--reconnect', description: 'AWS / Vercel / PlanetScale / Supabase / Kubernetes: run the connect flow even when the provider is already connected', type: 'boolean' },
   ],
@@ -561,6 +705,10 @@ export const cloudConnectCommand: Command = {
     'polylane cloud connect --provider supabase',
     'polylane cloud connect --provider planetscale --token-id <id> --token <token> --organization <org>',
     'polylane cloud connect --provider modal --token-id ak-... --token-secret as-...',
+    'polylane cloud connect --provider convex --token <token>',
+    'polylane cloud connect --provider clickhouse --key-id <id> --key-secret <secret>',
+    'polylane cloud connect --provider turso --token <token>',
+    'polylane cloud connect --provider turso --token <token> --organization <slug>',
     'polylane cloud connect --provider kubernetes',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
