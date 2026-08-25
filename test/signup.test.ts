@@ -27,16 +27,18 @@ mock.module('../src/utils/env', {
 });
 
 const realPrompt = (await import('../src/utils/prompt.ts?real' as string)) as typeof import('../src/utils/prompt');
-const promptEnterCalls: string[] = [];
+// Marker so tests can assert where the password prompt falls relative to
+// other output (the real prompt is a TTY interaction).
+const PASSWORD_PROMPT_MARKER = '[password-prompt]';
 mock.module('../src/utils/prompt', {
   namedExports: {
     ...realPrompt,
     note: (message: string, title?: string): void => {
       process.stderr.write(`${title ? `${title}\n` : ''}${message}\n`);
     },
-    promptPassword: async (): Promise<string> => 'prompted-password',
-    promptEnter: async (_ctx: unknown, message: string): Promise<void> => {
-      promptEnterCalls.push(message);
+    promptPassword: async (): Promise<string> => {
+      process.stderr.write(`${PASSWORD_PROMPT_MARKER}\n`);
+      return 'prompted-password';
     },
   },
 });
@@ -122,10 +124,9 @@ describe('auth signup terms notice', () => {
   beforeEach(() => {
     rmSync(CONFIG_FILE, { force: true });
     rmSync(CREDENTIALS_FILE, { force: true });
-    promptEnterCalls.length = 0;
   });
 
-  it('shows the notice once and gates on Enter on the interactive email path', async () => {
+  it('shows the notice once, before the credential prompts, with no Enter gate on the interactive email path', async () => {
     mockApi({ '/v1/auth/signup': signupResponse });
 
     captureOutput();
@@ -142,7 +143,11 @@ describe('auth signup terms notice', () => {
     assert.equal(output.split(TERMS_LINE).length - 1, 1);
     assert.ok(output.includes('https://polylane.com/terms/'));
     assert.ok(output.includes('https://polylane.com/privacy/'));
-    assert.deepEqual(promptEnterCalls, ['Continue?']);
+    // Entering credentials is the "continuing" — no separate consent step.
+    assert.ok(!output.includes('Continue?'));
+    const noticeAt = output.indexOf(TERMS_LINE);
+    const passwordAt = output.indexOf(PASSWORD_PROMPT_MARKER);
+    assert.ok(passwordAt !== -1 && noticeAt < passwordAt, 'notice precedes the password prompt');
   });
 
   it('prints the notice without gating on a non-interactive scripted signup', async () => {
@@ -160,10 +165,10 @@ describe('auth signup terms notice', () => {
     }
 
     assert.equal(output.split(TERMS_LINE).length - 1, 1);
-    assert.deepEqual(promptEnterCalls, []);
+    assert.ok(!output.includes('Continue?'));
   });
 
-  it('keeps the notice but skips the gate when --password is passed interactively', async () => {
+  it('shows the notice without a gate when --password is passed interactively', async () => {
     mockApi({ '/v1/auth/signup': signupResponse });
 
     captureOutput();
@@ -178,7 +183,7 @@ describe('auth signup terms notice', () => {
     }
 
     assert.equal(output.split(TERMS_LINE).length - 1, 1);
-    assert.deepEqual(promptEnterCalls, []);
+    assert.ok(!output.includes('Continue?'));
   });
 
   it('does not show the notice on the --code completion path', async () => {
