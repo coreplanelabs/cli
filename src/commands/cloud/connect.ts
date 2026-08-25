@@ -9,6 +9,7 @@ import {
   promptChoice,
   canWaitForBrowser,
   waitForBrowserCompletion,
+  startBackgroundCompletion,
   cliConnectUrl,
   runSteps,
   textStep,
@@ -88,8 +89,10 @@ const AWS_REGIONS = [
 
 // A completed handoff is only counted as connected when the account actually
 // showed up — a timed-out wait must not look like a success to the caller's
-// exit code.
-export type ConnectOutcome = 'connected' | 'timeout';
+// exit code. 'pending' is the background AWS path only: the stack launch went
+// through and polling continues invisibly, so the command exits clean after
+// telling the user how to check.
+export type ConnectOutcome = 'connected' | 'timeout' | 'pending';
 
 export interface AccountBaseline {
   existing: CloudAccount[];
@@ -144,13 +147,81 @@ async function confirmBrowserConnect(
   });
   if (found) {
     for (const account of found) {
-      const detail = [account.account, account.region].filter(Boolean).join(', ');
-      process.stderr.write(`✓ Connected: ${account.alias || account.account}${detail ? ` (${detail})` : ''}\n`);
+      process.stderr.write(`✓ Connected: ${accountLabel(account)}\n`);
     }
     return 'connected';
   }
   process.stderr.write('Timed out waiting — the connection has not shown up yet. Check with `polylane cloud list`.\n');
   return 'timeout';
+}
+
+function accountLabel(account: CloudAccount): string {
+  const detail = [account.account, account.region].filter(Boolean).join(', ');
+  return `${account.alias || account.account}${detail ? ` (${detail})` : ''}`;
+}
+
+const AWS_WAIT_INTERVAL_MS = 5_000;
+const AWS_SETTLE_TIMEOUT_MS = 2 * 60_000;
+const AWS_CHECK_HINT = 'Check with `polylane cloud list`.';
+const AWS_STILL_CONNECTING =
+  'AWS is still connecting — the CloudFormation stack has not shown up yet.\n' +
+  'Check later with `polylane cloud list`. If the stack failed or rolled back,\n' +
+  'your AWS CloudFormation console shows the reason; fix it and re-run\n' +
+  '`polylane cloud connect --provider aws`.';
+
+export interface AwsStackWait {
+  pending: () => boolean;
+  flush: () => void;
+  settle: () => Promise<Extract<ConnectOutcome, 'connected' | 'pending'>>;
+}
+
+// The picker flow hands the CloudFormation deploy to this instead of blocking
+// on it: polling runs in the background while the user keeps connecting other
+// clouds, flush() prints the "AWS connected" transition between prompts (never
+// over one), and settle() ends the session with a short bounded foreground
+// wait so a stack that is still deploying reports its state instead of
+// holding the terminal for the full deploy.
+export function startAwsStackWait(
+  config: Config,
+  check: () => Promise<CloudAccount[] | null>,
+  opts: { settleTimeoutMs?: number; intervalMs?: number } = {}
+): AwsStackWait {
+  const intervalMs = opts.intervalMs ?? AWS_WAIT_INTERVAL_MS;
+  const settleTimeoutMs = opts.settleTimeoutMs ?? AWS_SETTLE_TIMEOUT_MS;
+  const background = startBackgroundCompletion(check, intervalMs);
+  let reported: 'connected' | 'pending' | null = null;
+  const reportConnected = (accounts: CloudAccount[]): 'connected' => {
+    reported = 'connected';
+    for (const account of accounts) {
+      process.stderr.write(`✓ AWS connected: ${accountLabel(account)}\n`);
+    }
+    return 'connected';
+  };
+  return {
+    pending: () => reported === null,
+    flush: (): void => {
+      if (reported !== null) return;
+      const found = background.peek();
+      if (found) reportConnected(found);
+    },
+    settle: async (): Promise<'connected' | 'pending'> => {
+      if (reported !== null) return reported;
+      background.stop();
+      const already = background.peek();
+      if (already) return reportConnected(already);
+      const found = await waitForBrowserCompletion(config, check, {
+        waitingFor: 'the CloudFormation stack to deploy (usually a few minutes)',
+        interruptHint: AWS_CHECK_HINT,
+        startHint: 'AWS: waiting for the CloudFormation stack to finish deploying.',
+        timeoutMs: settleTimeoutMs,
+        intervalMs,
+      });
+      if (found) return reportConnected(found);
+      reported = 'pending';
+      process.stderr.write(`${AWS_STILL_CONNECTING}\n`);
+      return 'pending';
+    },
+  };
 }
 
 type ConnectResult = Awaited<ReturnType<PolylaneAPI['cloudAccountsConnect']>>;
@@ -161,8 +232,7 @@ function printConnectSuccess(config: Config, result: ConnectResult): void {
     return;
   }
   for (const account of result.accounts) {
-    const detail = [account.account, account.region].filter(Boolean).join(', ');
-    process.stderr.write(`✓ Connected: ${account.alias || account.account}${detail ? ` (${detail})` : ''}\n`);
+    process.stderr.write(`✓ Connected: ${accountLabel(account)}\n`);
   }
   for (const failure of result.failures) {
     process.stderr.write(`Couldn't connect ${failure.account}: ${failure.message}\n`);
@@ -325,15 +395,18 @@ function cloudflareTokenStep(
 }
 
 // Each wizard step can go back to the previous one; backing out of the first
-// returns BACK to re-open provider selection.
+// returns BACK to re-open provider selection. `background` is set by the
+// interactive picker flow (the one the installer drives): AWS then returns an
+// AwsStackWait instead of blocking on the CloudFormation deploy.
 async function connectProvider(
   config: Config,
   api: PolylaneAPI,
   args: Record<string, unknown>,
   workspaceId: string,
   provider: Provider,
-  noBrowser: boolean
-): Promise<typeof BACK | ConnectOutcome> {
+  noBrowser: boolean,
+  background: boolean
+): Promise<typeof BACK | ConnectOutcome | AwsStackWait> {
   const ctx = { nonInteractive: config.nonInteractive };
   const reconnect = getArgBoolean(args, 'reconnect') === true;
 
@@ -675,12 +748,21 @@ async function connectProvider(
   const result = await api.cloudAccountsConnect(body);
 
   // AWS returns a CloudFormation URL the user must open to deploy the stack.
-  // Open it in the browser unless suppressed.
+  // Open it in the browser unless suppressed. In the picker flow the deploy
+  // is watched in the background so the rest of the session isn't blocked;
+  // an explicit --provider aws keeps the foreground wait for scripts.
   if (result.provider === 'aws') {
     await openOrPrintInstallUrl(config, result.url, 'the AWS CloudFormation stack', noBrowser);
+    if (background && awsCheck) {
+      process.stderr.write('\nAWS: CloudFormation stack creating — finish it in your browser.\n');
+      if (!config.quiet) {
+        process.stderr.write(`Polylane keeps checking in the background while you continue. ${AWS_CHECK_HINT}\n`);
+      }
+      return startAwsStackWait(config, awsCheck);
+    }
     return confirmBrowserConnect(config, awsCheck, 'the CloudFormation stack to deploy (usually a few minutes)', {
       timeoutMs: 15 * 60_000,
-      intervalMs: 5_000,
+      intervalMs: AWS_WAIT_INTERVAL_MS,
     });
   }
 
@@ -746,12 +828,19 @@ export const cloudConnectCommand: Command = {
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
     const api = new PolylaneAPI(config);
     const providerFromFlag = getArgString(args, 'provider') !== undefined;
+    const interactivePicker = !providerFromFlag && isInteractive(config.nonInteractive);
 
     // Provider selection restarts whenever the user backs out of the first
     // step of the chosen flow, so nothing is committed until a flow completes.
+    // While an AWS CloudFormation deploy runs in the background the picker
+    // stays open so other clouds can connect meanwhile; its transitions are
+    // flushed between prompts and the session settles them before it ends.
+    let awsWait: AwsStackWait | null = null;
     for (;;) {
-      const provider =
-        providerFromFlag || !isInteractive(config.nonInteractive)
+      awsWait?.flush();
+      const exitLabel: string = awsWait !== null && awsWait.pending() ? 'Done' : 'Cancel';
+      const provider: Provider | typeof BACK =
+        !interactivePicker
           ? await promptChoice<Provider>(
               config,
               args,
@@ -765,15 +854,29 @@ export const cloudConnectCommand: Command = {
               { nonInteractive: config.nonInteractive },
               'Which cloud do you want to connect?',
               PROVIDER_OPTIONS,
-              'Cancel'
+              exitLabel
             );
       if (provider === BACK) break;
-      const outcome = await connectProvider(config, api, args, workspaceId, provider, noBrowser);
-      if (outcome !== BACK) {
-        if (outcome === 'timeout') process.exitCode = ExitCode.GENERAL;
-        return;
+      if (provider === 'aws' && awsWait?.pending()) {
+        process.stderr.write('AWS: still waiting for the CloudFormation stack — connect another cloud or pick Done.\n');
+        continue;
       }
-      if (providerFromFlag) break;
+      const outcome = await connectProvider(config, api, args, workspaceId, provider, noBrowser, interactivePicker);
+      if (outcome === BACK) {
+        if (providerFromFlag) break;
+        continue;
+      }
+      if (typeof outcome !== 'string') {
+        awsWait = outcome;
+        continue;
+      }
+      if (awsWait) await awsWait.settle();
+      if (outcome === 'timeout') process.exitCode = ExitCode.GENERAL;
+      return;
+    }
+    if (awsWait) {
+      await awsWait.settle();
+      return;
     }
     cancel('Nothing connected.');
   },

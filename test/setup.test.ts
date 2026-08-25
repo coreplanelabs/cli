@@ -1,9 +1,10 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync } from 'node:fs';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
+import type { Config } from '../src/config/schema';
 import {
   AGENTS,
   writeSkillFile,
@@ -13,9 +14,13 @@ import {
   upsertTomlSection,
   upsertGooseExtension,
   vscodeUserDirectory,
+  hasAgentFootprint,
+  detectedAgents,
+  detectedAgentIds,
+  SKILLS_SH_IDS,
+  setupCommand,
   MCP_SERVER_NAME,
   MCP_SERVER_URL,
-  decidePrimaryAgent,
 } from '../src/commands/setup';
 import { SKILL_MD } from '../src/generated/skill';
 
@@ -33,6 +38,15 @@ function agent(id: string) {
   const found = AGENTS.find((a) => a.id === id);
   assert.ok(found, `agent ${id} is defined`);
   return found;
+}
+
+// A directory with a config file in it — what an installed agent looks like.
+// Returns the path of the file written, so callers can overwrite it.
+function seedDir(dir: string): string {
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, 'settings.json');
+  writeFileSync(file, '{}', 'utf-8');
+  return file;
 }
 
 describe('writeSkillFile', () => {
@@ -404,40 +418,171 @@ describe('agent definitions', () => {
 
   it('detects agents from their home directories', () => {
     assert.equal(agent('claude').detect(tempDir), false);
-    mkdirSync(join(tempDir, '.claude'), { recursive: true });
+    seedDir(join(tempDir, '.claude'));
     assert.equal(agent('claude').detect(tempDir), true);
 
     assert.equal(agent('codex').detect(tempDir), false);
-    mkdirSync(join(tempDir, '.codex'), { recursive: true });
+    seedDir(join(tempDir, '.codex'));
     assert.equal(agent('codex').detect(tempDir), true);
 
     assert.equal(agent('windsurf').detect(tempDir), false);
-    mkdirSync(join(tempDir, '.codeium', 'windsurf'), { recursive: true });
+    seedDir(join(tempDir, '.codeium', 'windsurf'));
     assert.equal(agent('windsurf').detect(tempDir), true);
 
     assert.equal(agent('pi').detect(tempDir), false);
-    mkdirSync(join(tempDir, '.pi'), { recursive: true });
+    seedDir(join(tempDir, '.pi'));
     assert.equal(agent('pi').detect(tempDir), true);
 
     assert.equal(agent('warp').detect(tempDir), false);
-    mkdirSync(join(tempDir, '.warp'), { recursive: true });
+    seedDir(join(tempDir, '.warp'));
     assert.equal(agent('warp').detect(tempDir), true);
 
     assert.equal(agent('cline').detect(tempDir), false);
-    mkdirSync(join(tempDir, '.cline'), { recursive: true });
+    seedDir(join(tempDir, '.cline'));
     assert.equal(agent('cline').detect(tempDir), true);
+
+    assert.equal(agent('vscode').detect(tempDir), false);
+    seedDir(vscodeUserDirectory(tempDir));
+    assert.equal(agent('vscode').detect(tempDir), true);
 
     assert.equal(agent('roo').detect(tempDir), false);
     mkdirSync(join(vscodeUserDirectory(tempDir), 'globalStorage', 'rooveterinaryinc.roo-cline'), { recursive: true });
     assert.equal(agent('roo').detect(tempDir), true);
 
     assert.equal(agent('goose').detect(tempDir), false);
-    mkdirSync(join(tempDir, '.config', 'goose'), { recursive: true });
+    seedDir(join(tempDir, '.config', 'goose'));
     assert.equal(agent('goose').detect(tempDir), true);
 
     assert.equal(agent('gemini').detect(tempDir), false);
-    mkdirSync(join(tempDir, '.gemini'), { recursive: true });
+    seedDir(join(tempDir, '.gemini'));
     assert.equal(agent('gemini').detect(tempDir), true);
+  });
+
+  // skills.sh writes <agent dir>/skills/<skill>/SKILL.md for agents it
+  // installs to — with -y and nothing detected, for every agent it knows. A
+  // directory holding nothing but skills is skills.sh's footprint, not the
+  // agent's, and must not make `polylane setup` believe the agent is installed.
+  it('ignores directories that hold nothing but a skills tree', () => {
+    writeFileSync(seedDir(join(tempDir, '.cursor', 'skills', 'polylane-cli')), '# skill', 'utf-8');
+    assert.equal(agent('cursor').detect(tempDir), false);
+
+    writeFileSync(seedDir(join(tempDir, '.pi', 'agent', 'skills', 'polylane-cli')), '# skill', 'utf-8');
+    assert.equal(agent('pi').detect(tempDir), false);
+    writeFileSync(join(tempDir, '.pi', 'agent', 'mcp.json'), '{}', 'utf-8');
+    assert.equal(agent('pi').detect(tempDir), true);
+
+    seedDir(join(tempDir, '.claude', 'skills', 'polylane-cli'));
+    assert.equal(agent('claude').detect(tempDir), false);
+
+    seedDir(join(tempDir, '.cline', 'skills', 'polylane-cli'));
+    assert.equal(agent('cline').detect(tempDir), false);
+    seedDir(join(tempDir, '.cline', 'data', 'settings'));
+    assert.equal(agent('cline').detect(tempDir), true);
+
+    seedDir(join(tempDir, '.codex', 'skills', 'polylane-cli'));
+    assert.equal(agent('codex').detect(tempDir), false);
+    seedDir(join(tempDir, '.gemini', 'antigravity', 'skills', 'x'));
+    assert.equal(agent('gemini').detect(tempDir), false);
+  });
+
+  it('hasAgentFootprint: files count, skills trees do not, nested config does', () => {
+    assert.equal(hasAgentFootprint(join(tempDir, 'missing')), false);
+    mkdirSync(join(tempDir, 'empty'));
+    assert.equal(hasAgentFootprint(join(tempDir, 'empty')), false);
+    mkdirSync(join(tempDir, 'only-skills', 'skills', 'a', 'b'), { recursive: true });
+    writeFileSync(join(tempDir, 'only-skills', 'skills', 'a', 'b', 'SKILL.md'), '#', 'utf-8');
+    assert.equal(hasAgentFootprint(join(tempDir, 'only-skills')), false);
+    mkdirSync(join(tempDir, 'deep', 'agent', 'skills'), { recursive: true });
+    mkdirSync(join(tempDir, 'deep', 'agent', 'sessions', 'x'), { recursive: true });
+    assert.equal(hasAgentFootprint(join(tempDir, 'deep')), false);
+    writeFileSync(join(tempDir, 'deep', 'agent', 'sessions', 'x', 'log'), '', 'utf-8');
+    assert.equal(hasAgentFootprint(join(tempDir, 'deep')), true);
+  });
+
+  it('detectedAgents lists installed agents in registry order and ignores skills-only dirs', () => {
+    assert.deepEqual(detectedAgents(tempDir), []);
+    seedDir(join(tempDir, '.codex'));
+    seedDir(join(tempDir, '.pi', 'agent', 'skills', 'x'));
+    writeFileSync(join(tempDir, '.claude.json'), '{}', 'utf-8');
+    assert.deepEqual(
+      detectedAgents(tempDir).map((a) => a.id),
+      ['claude', 'codex']
+    );
+  });
+
+  it('every registry agent has a skills.sh id decision', () => {
+    assert.deepEqual(Object.keys(SKILLS_SH_IDS).sort(), AGENTS.map((a) => a.id).sort());
+  });
+
+  it('detectedAgentIds translates to skills.sh ids and omits agents skills.sh does not know', () => {
+    writeFileSync(join(tempDir, '.claude.json'), '{}', 'utf-8');
+    seedDir(join(tempDir, '.gemini'));
+    seedDir(join(tempDir, '.cline'));
+    seedDir(vscodeUserDirectory(tempDir));
+    assert.deepEqual(detectedAgentIds(tempDir, 'polylane'), ['claude', 'cline', 'gemini', 'vscode']);
+    assert.deepEqual(detectedAgentIds(tempDir, 'skills-sh'), ['claude-code', 'cline', 'gemini-cli']);
+    assert.deepEqual(detectedAgentIds(join(tempDir, 'nowhere'), 'skills-sh'), []);
+  });
+
+  async function captureListDetected(
+    args: Record<string, unknown>,
+    output: 'text' | 'json' = 'text'
+  ): Promise<string[]> {
+    const lines: string[] = [];
+    const original = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      lines.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await setupCommand.execute(
+        { output, quiet: false, dryRun: false } as unknown as Config,
+        {} as never,
+        { listDetected: true, ...args }
+      );
+    } finally {
+      process.stdout.write = original;
+    }
+    return lines;
+  }
+
+  it('setup --list-detected prints one detected id per line and writes nothing', async () => {
+    assert.deepEqual(await captureListDetected({}), detectedAgentIds(homedir(), 'polylane').map((id) => id + '\n'));
+  });
+
+  it('setup --list-detected --ids skills-sh prints skills.sh ids; an unknown namespace is a usage error', async () => {
+    assert.deepEqual(
+      await captureListDetected({ ids: 'skills-sh' }),
+      detectedAgentIds(homedir(), 'skills-sh').map((id) => id + '\n')
+    );
+    await assert.rejects(captureListDetected({ ids: 'npm' }), /Unknown id namespace: "npm"/);
+  });
+
+  // The installer pipes this command, which selects JSON: the piped shape is
+  // the one the real consumer sees, so it is pinned per namespace.
+  it('setup --list-detected in json mode prints one JSON array of ids', async () => {
+    for (const namespace of ['polylane', 'skills-sh'] as const) {
+      const out = (await captureListDetected({ ids: namespace }, 'json')).join('');
+      assert.deepEqual(JSON.parse(out), detectedAgentIds(homedir(), namespace));
+    }
+  });
+
+  it('hasAgentFootprint follows symlinks: a linked skills dir is skipped, a linked file counts', () => {
+    // stow/chezmoi-style dotfiles: the agent dir holds a symlink to a skills
+    // tree kept elsewhere. Dirents report the link as neither file nor dir.
+    mkdirSync(join(tempDir, 'store', 'skills', 'x'), { recursive: true });
+    writeFileSync(join(tempDir, 'store', 'skills', 'x', 'SKILL.md'), '#', 'utf-8');
+    mkdirSync(join(tempDir, 'linked'));
+    symlinkSync(join(tempDir, 'store', 'skills'), join(tempDir, 'linked', 'skills'));
+    assert.equal(hasAgentFootprint(join(tempDir, 'linked')), false);
+
+    writeFileSync(join(tempDir, 'store', 'settings.json'), '{}', 'utf-8');
+    symlinkSync(join(tempDir, 'store', 'settings.json'), join(tempDir, 'linked', 'settings.json'));
+    assert.equal(hasAgentFootprint(join(tempDir, 'linked')), true);
+
+    mkdirSync(join(tempDir, 'dangling'));
+    symlinkSync(join(tempDir, 'nowhere'), join(tempDir, 'dangling', 'config'));
+    assert.equal(hasAgentFootprint(join(tempDir, 'dangling')), true);
   });
 
   it('detects cline from the VS Code extension storage alone', () => {
@@ -641,41 +786,5 @@ describe('agent definitions', () => {
     const mcp = outcomes.find((o) => o.label === 'MCP server');
     assert.ok(mcp);
     assert.equal(mcp.action, 'skipped');
-  });
-});
-
-describe('decidePrimaryAgent', () => {
-  const byId = (id: string) => {
-    const found = AGENTS.find((a) => a.id === id);
-    assert.ok(found);
-    return found;
-  };
-
-  it('keeps an existing stored choice', () => {
-    const decision = decidePrimaryAgent('claude', [byId('claude'), byId('cursor')], true);
-    assert.deepEqual(decision, { kind: 'keep' });
-  });
-
-  it('does nothing when no agents are selected', () => {
-    const decision = decidePrimaryAgent(undefined, [], true);
-    assert.deepEqual(decision, { kind: 'keep' });
-  });
-
-  it('persists silently when exactly one agent is in play', () => {
-    const decision = decidePrimaryAgent(undefined, [byId('codex')], false);
-    assert.deepEqual(decision, { kind: 'persist', id: 'codex' });
-  });
-
-  it('prompts among the selected agents when several are detected interactively', () => {
-    const candidates = [byId('claude'), byId('cursor'), byId('gemini')];
-    const decision = decidePrimaryAgent(undefined, candidates, true);
-    assert.equal(decision.kind, 'prompt');
-    assert.ok(decision.kind === 'prompt');
-    assert.deepEqual(decision.candidates.map((a) => a.id), ['claude', 'cursor', 'gemini']);
-  });
-
-  it('does not prompt outside an interactive terminal', () => {
-    const decision = decidePrimaryAgent(undefined, [byId('claude'), byId('cursor')], false);
-    assert.deepEqual(decision, { kind: 'keep' });
   });
 });

@@ -17,7 +17,6 @@ export const configShowCommand: Command = {
     const result = {
       domain: config.domain,
       workspaceId: config.workspaceId ?? null,
-      agent: config.agent ?? null,
       output: config.output,
       timeout: config.timeout,
       hints: config.hints,

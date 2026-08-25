@@ -78,10 +78,17 @@ jobs:
       - name: Publish to npm
         run: npm publish "${{ steps.pack.outputs.tarball_local }}" --access public --provenance
 
-      # Stage release artifacts. Only polylane.mjs ships now — install.sh and
-      # install.ps1 both fetch it directly from the GitHub Release.
+      # Stage release artifacts: polylane.mjs plus checksums.txt (sha256sum
+      # format, one line per asset). install.sh verifies downloads against the
+      # GitHub API's per-asset digest and falls back to this checksums.txt
+      # when the API is unavailable (anonymous rate limits) — without it, an
+      # API outage would block every install now that unverified installs are
+      # refused. install.ps1 can adopt the same file.
       - name: Stage release artifacts
-        run: cp dist/polylane.mjs release-artifacts/
+        run: |
+          cp dist/polylane.mjs release-artifacts/
+          (cd release-artifacts && sha256sum polylane.mjs > checksums.txt)
+          cat release-artifacts/checksums.txt
 
       - name: Capture release metadata
         id: meta
@@ -101,6 +108,23 @@ jobs:
           generate_release_notes: true
           files: |
             release-artifacts/polylane.mjs
+            release-artifacts/checksums.txt
+
+  # Real install of the just-published release through the production
+  # installer (polylane.com/install), API-digest and checksums.txt legs both.
+  # Catches a release that breaks the installer contract within minutes of
+  # publishing instead of at polylanedotcom's daily install-bytes cron — the
+  # class of failure that took installs down for 15 minutes on v0.2.20 (RCA:
+  # https://github.com/coreplanelabs/polylanedotcom/pull/176). Alerts Slack
+  # on failure; the release itself is already published by then, so the
+  # mitigation lives in the alert text, not in blocking this workflow.
+  install-smoke:
+    name: Real install smoke via polylane.com
+    needs: release
+    uses: ./.github/workflows/install-smoke.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+    secrets: inherit
 
   update-homebrew:
     name: Bump Homebrew formula

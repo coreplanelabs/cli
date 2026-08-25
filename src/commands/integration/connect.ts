@@ -34,6 +34,7 @@ import {
   promptPasswordOrBack,
   promptTextOrBack,
 } from '../../utils/prompt';
+import { printSlackChannelsLater, runSlackChannelStep } from './slack-channels';
 
 type ConnectBody = Parameters<PolylaneAPI['integrationsConnect']>[0];
 
@@ -105,23 +106,6 @@ export function shouldOfferCodeAgent(
 export function resolveTypeOptions(category: string | undefined, typeFromFlag: boolean): typeof TYPE_OPTIONS {
   const filtered = typeOptionsForCategory(category);
   return typeFromFlag ? TYPE_OPTIONS : filtered;
-}
-
-// When the user's primary local agent (config.agent, persisted by `polylane
-// setup`) also exists as a cloud code agent, surface it first in its category
-// and pre-highlight it in the picker. Exact id match only — the local
-// registry and the integration types share ids where they overlap (cursor).
-export function prioritizeCodeAgent(
-  options: typeof TYPE_OPTIONS,
-  localAgent: string | undefined
-): { options: typeof TYPE_OPTIONS; initialValue: ConnectableType | undefined } {
-  const idx = options.findIndex((o) => o.category === 'code-agent' && o.value === localAgent);
-  if (idx < 0) return { options, initialValue: undefined };
-  const first = options.findIndex((o) => o.category === 'code-agent');
-  const reordered = [...options];
-  const [own] = reordered.splice(idx, 1);
-  reordered.splice(first, 0, { ...own!, hint: own!.hint.replace(/coding agent$/, 'your coding agent') });
-  return { options: reordered, initialValue: own!.value };
 }
 
 // Same site list the console offers; the flag accepts any value so orgs on
@@ -886,12 +870,31 @@ async function connectType(
     const reconnect = getArgBoolean(args, 'reconnect') === true;
     const baseline = config.dryRun ? null : await integrationBaseline(api, workspaceId, type);
     if (baseline && !reconnect && baseline.existing.length > 0) {
-      printAlreadyConnected(config, names[type], baseline.existing[0]!);
+      const existing = baseline.existing[0]!;
+      printAlreadyConnected(config, names[type], existing);
+      if (type === 'slack') {
+        if (canWaitForBrowser(config)) {
+          await runSlackChannelStep(config, api, workspaceId, existing.id, { alreadyConnected: true });
+        } else {
+          printSlackChannelsLater(config);
+        }
+      }
       return 'connected';
     }
     const check = canWaitForBrowser(config) && baseline ? baseline.check : null;
     await openOrPrintInstallUrl(config, cliConnectUrl(config, type, workspaceId), labels[type], noBrowser);
-    return confirmBrowserConnect(config, check, names[type]);
+    const outcome = await confirmBrowserConnect(config, check, names[type]);
+    // The channel step needs the new integration's id; the browser wait already spotted the row,
+    // so one more check() returns it without another wait.
+    if (type === 'slack') {
+      if (outcome === 'connected' && check) {
+        const created = await check();
+        if (created) await runSlackChannelStep(config, api, workspaceId, created.id, { alreadyConnected: false });
+      } else if (!check) {
+        printSlackChannelsLater(config);
+      }
+    }
+    return outcome;
   }
   if (type === 'mcp') {
     return connectMcp(config, api, args, workspaceId, noBrowser);
@@ -958,10 +961,7 @@ export const integrationConnectCommand: Command = {
     const typeFromFlag = getArgString(args, 'type') !== undefined;
     const category = getArgString(args, 'category');
     // --type always wins: the category filter only narrows the picker.
-    const { options: typeOptions, initialValue } = prioritizeCodeAgent(
-      resolveTypeOptions(category, typeFromFlag),
-      config.agent
-    );
+    const typeOptions = resolveTypeOptions(category, typeFromFlag);
 
     if (shouldOfferCodeAgent(category, typeFromFlag, isInteractive(config.nonInteractive))) {
       note(
@@ -1000,8 +1000,7 @@ export const integrationConnectCommand: Command = {
               { nonInteractive: config.nonInteractive },
               'Which integration do you want to connect?',
               typeOptions,
-              'Cancel',
-              initialValue
+              'Cancel'
             );
       if (type === BACK) break;
       const outcome = await connectType(config, api, args, workspaceId, type, noBrowser);

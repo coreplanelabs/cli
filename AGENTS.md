@@ -27,6 +27,7 @@ also carries the LGTM verdict contract the auto-approve workflow depends on.
 - JSON when piped, text in TTY; `--output` always overrides.
 - Every error ends with the exact command that fixes it.
 - The full API surface lives under `polylane api call <operationId>` as an escape hatch — wrap an op only when it earns a first-class command.
+- **The install script is a thin shim over this CLI.** `curl polylane.com/install | sh` (polylanedotcom `src/assets/install.sh`) only bootstraps: download, PATH, sign-in prompts, then `polylane setup`. Everything that knows about coding agents — detection, config paths, ids — lives in `src/agents/registry.ts` and is exposed for the installer to *call* (`polylane setup --list-detected --ids skills-sh` hands skills.sh its agent list; the polylane→skills.sh id table is `SKILLS_SH_IDS` here), never re-implemented in shell — not even an id map. When installer work needs new agent knowledge, add the flag or command here first.
 
 ## Commands (build, lint, test)
 

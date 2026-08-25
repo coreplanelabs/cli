@@ -13,7 +13,6 @@ import {
 import type { GlobalFlags, OutputFormat } from '../types/flags';
 import { readJsonFile, writeJsonFile } from '../utils/fs';
 import { isStdoutTTY } from '../utils/env';
-import { isAgentId } from '../agents/registry';
 
 export function loadConfigFile(): RawConfig | null {
   return readJsonFile<RawConfig>(CONFIG_FILE);
@@ -74,12 +73,6 @@ export function loadConfig(flags: GlobalFlags): Config {
   const workspaceId = flags.workspace ?? env.POLYLANE_WORKSPACE_ID ?? file.workspace_id;
   if (workspaceId !== undefined) validateWorkspaceId(workspaceId);
 
-  // Primary coding agent. Unknown ids are dropped rather than thrown so a
-  // stale stored value (e.g. an id removed from the registry) never bricks
-  // every invocation; `config set --key agent` is where strict validation happens.
-  const agentRaw = env.POLYLANE_AGENT ?? file.agent;
-  const agent = agentRaw !== undefined && isAgentId(agentRaw) ? agentRaw : undefined;
-
   const timeout =
     flags.timeout ?? parseEnvNumber(env.POLYLANE_TIMEOUT) ?? file.timeout ?? DEFAULT_TIMEOUT;
   validateTimeout(timeout);
@@ -119,7 +112,6 @@ export function loadConfig(flags: GlobalFlags): Config {
     apiKey,
     domain,
     workspaceId,
-    agent,
     output,
     timeout,
     verbose,

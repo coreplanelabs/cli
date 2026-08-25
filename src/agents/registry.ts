@@ -1,11 +1,9 @@
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 
 import { applyEdits, modify, parse as parseJsonc, type ParseError } from 'jsonc-parser';
 
-import { CLIError } from '../errors/base';
-import { ExitCode } from '../errors/codes';
 import { ensureDir } from '../utils/fs';
 import { SKILL_MD } from '../generated/skill';
 
@@ -189,6 +187,43 @@ export function upsertTomlSection(
   return { label, path, action: 'created' };
 }
 
+/**
+ * Whether `dir` looks like an installed agent's home rather than a directory
+ * some other tool created. skills.sh writes `<agent dir>/skills/<skill>/` for
+ * every agent it installs to — with `-y` and nothing detected, for every agent
+ * it knows — so a directory whose only content is a `skills` tree (at any
+ * depth, e.g. `~/.pi/agent/skills`) is skills.sh's footprint, not the agent's.
+ * Any regular file, or any non-`skills` subdirectory that itself has a
+ * footprint, counts. Stops at the first file found.
+ */
+export function hasAgentFootprint(dir: string): boolean {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    const path = join(dir, entry.name);
+    // Dirents report a symlink as neither file nor directory; follow it so a
+    // dotfiles-managed (stow/chezmoi) symlinked `skills` dir is still skipped
+    // and a symlinked config file still counts. A dangling link counts as a
+    // file: something put it there on purpose.
+    let isDirectory = entry.isDirectory();
+    if (entry.isSymbolicLink()) {
+      try {
+        isDirectory = statSync(path).isDirectory();
+      } catch {
+        isDirectory = false;
+      }
+    }
+    if (!isDirectory) return true;
+    if (entry.name === 'skills') continue;
+    if (hasAgentFootprint(path)) return true;
+  }
+  return false;
+}
+
 export function vscodeUserDirectory(home: string): string {
   if (process.platform === 'darwin') {
     return join(home, 'Library', 'Application Support', 'Code', 'User');
@@ -285,7 +320,7 @@ export const AGENTS: AgentSetup[] = [
     id: 'claude',
     name: 'Claude Code',
     headlessRun: { bin: 'claude', args: (prompt) => ['-p', prompt, '--permission-mode', 'bypassPermissions'] },
-    detect: (home) => existsSync(join(home, '.claude')) || existsSync(join(home, '.claude.json')),
+    detect: (home) => hasAgentFootprint(join(home, '.claude')) || existsSync(join(home, '.claude.json')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.claude')), dryRun),
       upsertJsonEntry(join(home, '.claude.json'), ['mcpServers', MCP_SERVER_NAME], HTTP_SERVER_ENTRY, dryRun),
@@ -299,7 +334,7 @@ export const AGENTS: AgentSetup[] = [
     id: 'cursor',
     name: 'Cursor',
     headlessRun: { bin: 'cursor-agent', args: (prompt) => ['-p', prompt, '--force'] },
-    detect: (home) => existsSync(join(home, '.cursor')),
+    detect: (home) => hasAgentFootprint(join(home, '.cursor')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.cursor')), dryRun),
       upsertJsonEntry(join(home, '.cursor', 'mcp.json'), ['mcpServers', MCP_SERVER_NAME], HTTP_SERVER_ENTRY, dryRun),
@@ -313,7 +348,7 @@ export const AGENTS: AgentSetup[] = [
     id: 'opencode',
     name: 'OpenCode',
     headlessRun: { bin: 'opencode', args: (prompt) => ['run', prompt] },
-    detect: (home) => existsSync(join(home, '.config', 'opencode')),
+    detect: (home) => hasAgentFootprint(join(home, '.config', 'opencode')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.config', 'opencode')), dryRun),
       upsertJsoncEntry(
@@ -337,7 +372,7 @@ export const AGENTS: AgentSetup[] = [
     id: 'codex',
     name: 'Codex CLI',
     headlessRun: { bin: 'codex', args: (prompt) => ['exec', '--full-auto', prompt] },
-    detect: (home) => existsSync(join(home, '.codex')),
+    detect: (home) => hasAgentFootprint(join(home, '.codex')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.codex')), dryRun),
       upsertTomlSection(join(home, '.codex', 'config.toml'), CODEX_SECTION_HEADER, CODEX_SECTION_BODY, dryRun),
@@ -356,7 +391,7 @@ export const AGENTS: AgentSetup[] = [
     id: 'pi',
     name: 'Pi',
     headlessRun: { bin: 'pi', args: (prompt) => ['-p', prompt] },
-    detect: (home) => existsSync(join(home, '.pi')),
+    detect: (home) => hasAgentFootprint(join(home, '.pi')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.pi', 'agent')), dryRun),
       upsertJsonEntry(join(home, '.pi', 'agent', 'mcp.json'), ['mcpServers', MCP_SERVER_NAME], URL_SERVER_ENTRY, dryRun),
@@ -369,7 +404,7 @@ export const AGENTS: AgentSetup[] = [
   {
     id: 'warp',
     name: 'Warp',
-    detect: (home) => existsSync(join(home, '.warp')),
+    detect: (home) => hasAgentFootprint(join(home, '.warp')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.warp')), dryRun),
       upsertJsonEntry(join(home, '.warp', '.mcp.json'), ['mcpServers', MCP_SERVER_NAME], URL_SERVER_ENTRY, dryRun),
@@ -388,7 +423,7 @@ export const AGENTS: AgentSetup[] = [
     // so we never create VS Code's storage tree for an uninstalled extension.
     detect: (home) =>
       existsSync(join(vscodeUserDirectory(home), 'globalStorage', 'saoudrizwan.claude-dev')) ||
-      existsSync(join(home, '.cline')),
+      hasAgentFootprint(join(home, '.cline')),
     user: (home, dryRun) => {
       const outcomes: WriteOutcome[] = [];
       const extensionDir = join(vscodeUserDirectory(home), 'globalStorage', 'saoudrizwan.claude-dev');
@@ -424,14 +459,14 @@ export const AGENTS: AgentSetup[] = [
     id: 'goose',
     name: 'Goose',
     headlessRun: { bin: 'goose', args: (prompt) => ['run', '--no-session', '-t', prompt], env: { GOOSE_MODE: 'auto' } },
-    detect: (home) => existsSync(join(home, '.config', 'goose')),
+    detect: (home) => hasAgentFootprint(join(home, '.config', 'goose')),
     user: (home, dryRun) => [upsertGooseExtension(join(home, '.config', 'goose', 'config.yaml'), dryRun)],
   },
   {
     id: 'gemini',
     name: 'Gemini CLI',
     headlessRun: { bin: 'gemini', args: (prompt) => ['-p', prompt, '--yolo'] },
-    detect: (home) => existsSync(join(home, '.gemini')),
+    detect: (home) => hasAgentFootprint(join(home, '.gemini')),
     user: (home, dryRun) => [
       upsertJsonEntry(join(home, '.gemini', 'settings.json'), ['mcpServers', MCP_SERVER_NAME], GEMINI_SERVER_ENTRY, dryRun),
     ],
@@ -439,7 +474,7 @@ export const AGENTS: AgentSetup[] = [
   {
     id: 'windsurf',
     name: 'Windsurf',
-    detect: (home) => existsSync(join(home, '.codeium', 'windsurf')),
+    detect: (home) => hasAgentFootprint(join(home, '.codeium', 'windsurf')),
     user: (home, dryRun) => [
       upsertJsonEntry(
         join(home, '.codeium', 'windsurf', 'mcp_config.json'),
@@ -452,7 +487,7 @@ export const AGENTS: AgentSetup[] = [
   {
     id: 'zed',
     name: 'Zed',
-    detect: (home) => existsSync(join(home, '.config', 'zed')),
+    detect: (home) => hasAgentFootprint(join(home, '.config', 'zed')),
     user: (home, dryRun) => [
       upsertJsonEntry(
         join(home, '.config', 'zed', 'settings.json'),
@@ -465,7 +500,7 @@ export const AGENTS: AgentSetup[] = [
   {
     id: 'vscode',
     name: 'VS Code',
-    detect: (home) => existsSync(vscodeUserDirectory(home)),
+    detect: (home) => hasAgentFootprint(vscodeUserDirectory(home)),
     user: (home, dryRun) => [
       upsertJsonEntry(
         join(vscodeUserDirectory(home), 'mcp.json'),
@@ -487,20 +522,49 @@ export const AGENTS: AgentSetup[] = [
 
 export const AGENT_IDS = AGENTS.map((a) => a.id);
 
+/** The agents installed for `home`, in registry order. The one detection the installer and setup share. */
+export function detectedAgents(home: string): AgentSetup[] {
+  return AGENTS.filter((a) => a.detect(home));
+}
+
+/**
+ * skills.sh agent ids (`npx skills add … -a <id>`) for each registry agent;
+ * `null` when skills.sh has no counterpart (VS Code's closest, github-copilot,
+ * targets ~/.copilot — a different product). The installer pins the skills.sh
+ * version (SKILLS_CLI in polylanedotcom's install.sh); re-check this table on
+ * a bump. Every registry agent must appear here — a test enforces it — so a
+ * new agent is a deliberate skills.sh decision, not a silent drop.
+ */
+export const SKILLS_SH_IDS: Record<string, string | null> = {
+  claude: 'claude-code',
+  cursor: 'cursor',
+  opencode: 'opencode',
+  codex: 'codex',
+  pi: 'pi',
+  warp: 'warp',
+  cline: 'cline',
+  roo: 'roo',
+  goose: 'goose',
+  gemini: 'gemini-cli',
+  windsurf: 'windsurf',
+  zed: 'zed',
+  vscode: null,
+};
+
+export type AgentIdNamespace = 'polylane' | 'skills-sh';
+export const AGENT_ID_NAMESPACES: AgentIdNamespace[] = ['polylane', 'skills-sh'];
+
+/** Ids of the detected agents in the requested namespace; agents with no id there are omitted. */
+export function detectedAgentIds(home: string, namespace: AgentIdNamespace): string[] {
+  const ids: string[] = [];
+  for (const agent of detectedAgents(home)) {
+    const id = namespace === 'polylane' ? agent.id : SKILLS_SH_IDS[agent.id];
+    if (id) ids.push(id);
+  }
+  return ids;
+}
+
 export function agentById(id: string): AgentSetup | undefined {
   return AGENTS.find((a) => a.id === id);
 }
 
-export function isAgentId(id: string): boolean {
-  return AGENTS.some((a) => a.id === id);
-}
-
-export function validateAgentId(id: string): void {
-  if (!isAgentId(id)) {
-    throw new CLIError(
-      `Unknown agent: "${id}"`,
-      ExitCode.USAGE,
-      `Supported agents: ${AGENT_IDS.join(', ')}`
-    );
-  }
-}
