@@ -324,6 +324,7 @@ Anonymous usage telemetry is on by default. `polylane telemetry status` prints e
 | 4 | Rate limit or plan upgrade required |
 | 5 | Timeout |
 | 6 | Network error |
+| 7 | Pending (finished, but not yet complete upstream: re-check with `list`) |
 | 130 | Interrupted (Ctrl-C) |
 
 See [ERRORS.md](../ERRORS.md) for categories, envelope shape, and the patterns agents should branch on.
