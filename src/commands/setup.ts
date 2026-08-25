@@ -26,6 +26,7 @@ export {
   upsertTomlSection,
   upsertGooseExtension,
   vscodeUserDirectory,
+  hasAgentFootprint,
   type AgentSetup,
   type WriteAction,
   type WriteOutcome,
