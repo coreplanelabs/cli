@@ -2,7 +2,7 @@ import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { formatOutput } from '../../output/formatter';
 import { getArgString, promptIfMissing } from '../helpers';
-import { promptEnter, promptPassword, promptSelect, promptText, intro, outro, note } from '../../utils/prompt';
+import { promptPassword, promptSelect, promptText, intro, outro, note } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
 import { oauthLogin, selectWorkspace, type WhoamiResult } from './login';
 import { writeCredentials } from '../../auth/credentials';
@@ -155,7 +155,6 @@ async function oauthSignup(config: Config, provider: 'google' | 'github'): Promi
     ].join('\n'),
     `Sign up with ${label}`
   );
-  await promptEnter({ nonInteractive: config.nonInteractive }, 'Create your account?');
   await oauthLogin(config, true, { signupEntry: true, provider });
 }
 
@@ -219,10 +218,20 @@ async function finishEmailSignIn(config: Config, email: string, session: Verifie
 // Also the CLI's email sign-in path: signup is idempotent for an existing
 // user with a matching password, so `auth login`'s Email option routes here.
 export async function emailSignup(config: Config, args: Record<string, unknown>): Promise<void> {
-  const email = await promptIfMissing(config, args, 'email', 'Email', '--email');
-
   // `--code` completes a signup that already received its verification email.
   const codeArg = getArgString(args, 'code');
+
+  // The notice leads the credential prompts: entering an email and password is
+  // the "continuing", the same way creating a workspace is the acceptance in
+  // the console (nominal#465). No separate confirm step — that was tried in
+  // cli#53 and reverted. Scripted runs get it on stderr, never blocking. The
+  // --code completion path creates nothing, so it stays silent.
+  if (!codeArg) {
+    if (isInteractive(config.nonInteractive)) note(TERMS_NOTICE);
+    else process.stderr.write(`\n${TERMS_NOTICE}\n\n`);
+  }
+
+  const email = await promptIfMissing(config, args, 'email', 'Email', '--email');
   if (codeArg) {
     const session = await verifyEmail(config, email, codeArg.trim());
     if (!session) {
@@ -239,18 +248,6 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
   const passwordArg = getArgString(args, 'password');
   const password =
     passwordArg ?? (await promptPassword({ nonInteractive: config.nonInteractive }, 'Password'));
-
-  // The terms notice rides the one account-creating POST below; emailSignup and
-  // oauthSignup are mutually exclusive per run, so it shows at most once. The
-  // gate wording is neutral because this is also `auth login`'s Email route and
-  // signup is idempotent for an existing account. A --password invocation is
-  // scripted consent: print the notice, never block on Enter.
-  if (passwordArg === undefined && isInteractive(config.nonInteractive)) {
-    note(TERMS_NOTICE);
-    await promptEnter({ nonInteractive: config.nonInteractive }, 'Continue?');
-  } else {
-    process.stderr.write(`\n${TERMS_NOTICE}\n\n`);
-  }
 
   // Need response headers (Set-Cookie -> session expiry) so call request() directly
   // rather than via the generated client which only exposes the body.

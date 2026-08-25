@@ -31,7 +31,7 @@ export const workspaceCreateCommand: Command = {
     // out loud first — on stderr, like every other notice, so piped stdout
     // stays pure data. Printed before the call and regardless of --quiet.
     process.stderr.write(
-      'By creating a workspace you accept the Polylane Terms of Service: https://console.polylane.com/terms\n',
+      'By creating a workspace you accept the Polylane Terms of Service: https://polylane.com/terms/\n',
     );
 
     const body: CreateWorkspaceBody = { name };
