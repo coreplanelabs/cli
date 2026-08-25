@@ -524,6 +524,48 @@ export const AGENTS: AgentSetup[] = [
 
 export const AGENT_IDS = AGENTS.map((a) => a.id);
 
+/** The agents installed for `home`, in registry order. The one detection the installer and setup share. */
+export function detectedAgents(home: string): AgentSetup[] {
+  return AGENTS.filter((a) => a.detect(home));
+}
+
+/**
+ * skills.sh agent ids (`npx skills add … -a <id>`) for each registry agent;
+ * `null` when skills.sh has no counterpart (VS Code's closest, github-copilot,
+ * targets ~/.copilot — a different product). The installer pins the skills.sh
+ * version (SKILLS_CLI in polylanedotcom's install.sh); re-check this table on
+ * a bump. Every registry agent must appear here — a test enforces it — so a
+ * new agent is a deliberate skills.sh decision, not a silent drop.
+ */
+export const SKILLS_SH_IDS: Record<string, string | null> = {
+  claude: 'claude-code',
+  cursor: 'cursor',
+  opencode: 'opencode',
+  codex: 'codex',
+  pi: 'pi',
+  warp: 'warp',
+  cline: 'cline',
+  roo: 'roo',
+  goose: 'goose',
+  gemini: 'gemini-cli',
+  windsurf: 'windsurf',
+  zed: 'zed',
+  vscode: null,
+};
+
+export type AgentIdNamespace = 'polylane' | 'skills-sh';
+export const AGENT_ID_NAMESPACES: AgentIdNamespace[] = ['polylane', 'skills-sh'];
+
+/** Ids of the detected agents in the requested namespace; agents with no id there are omitted. */
+export function detectedAgentIds(home: string, namespace: AgentIdNamespace): string[] {
+  const ids: string[] = [];
+  for (const agent of detectedAgents(home)) {
+    const id = namespace === 'polylane' ? agent.id : SKILLS_SH_IDS[agent.id];
+    if (id) ids.push(id);
+  }
+  return ids;
+}
+
 export function agentById(id: string): AgentSetup | undefined {
   return AGENTS.find((a) => a.id === id);
 }

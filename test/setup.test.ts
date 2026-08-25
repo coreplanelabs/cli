@@ -1,9 +1,10 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
+import type { Config } from '../src/config/schema';
 import {
   AGENTS,
   writeSkillFile,
@@ -14,6 +15,10 @@ import {
   upsertGooseExtension,
   vscodeUserDirectory,
   hasAgentFootprint,
+  detectedAgents,
+  detectedAgentIds,
+  SKILLS_SH_IDS,
+  setupCommand,
   MCP_SERVER_NAME,
   MCP_SERVER_URL,
   decidePrimaryAgent,
@@ -493,6 +498,74 @@ describe('agent definitions', () => {
     assert.equal(hasAgentFootprint(join(tempDir, 'deep')), false);
     writeFileSync(join(tempDir, 'deep', 'agent', 'sessions', 'x', 'log'), '', 'utf-8');
     assert.equal(hasAgentFootprint(join(tempDir, 'deep')), true);
+  });
+
+  it('detectedAgents lists installed agents in registry order and ignores skills-only dirs', () => {
+    assert.deepEqual(detectedAgents(tempDir), []);
+    seedDir(join(tempDir, '.codex'));
+    seedDir(join(tempDir, '.pi', 'agent', 'skills', 'x'));
+    writeFileSync(join(tempDir, '.claude.json'), '{}', 'utf-8');
+    assert.deepEqual(
+      detectedAgents(tempDir).map((a) => a.id),
+      ['claude', 'codex']
+    );
+  });
+
+  it('every registry agent has a skills.sh id decision', () => {
+    assert.deepEqual(Object.keys(SKILLS_SH_IDS).sort(), AGENTS.map((a) => a.id).sort());
+  });
+
+  it('detectedAgentIds translates to skills.sh ids and omits agents skills.sh does not know', () => {
+    writeFileSync(join(tempDir, '.claude.json'), '{}', 'utf-8');
+    seedDir(join(tempDir, '.gemini'));
+    seedDir(join(tempDir, '.cline'));
+    seedDir(vscodeUserDirectory(tempDir));
+    assert.deepEqual(detectedAgentIds(tempDir, 'polylane'), ['claude', 'cline', 'gemini', 'vscode']);
+    assert.deepEqual(detectedAgentIds(tempDir, 'skills-sh'), ['claude-code', 'cline', 'gemini-cli']);
+    assert.deepEqual(detectedAgentIds(join(tempDir, 'nowhere'), 'skills-sh'), []);
+  });
+
+  async function captureListDetected(
+    args: Record<string, unknown>,
+    output: 'text' | 'json' = 'text'
+  ): Promise<string[]> {
+    const lines: string[] = [];
+    const original = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      lines.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await setupCommand.execute(
+        { output, quiet: false, dryRun: false } as unknown as Config,
+        {} as never,
+        { listDetected: true, ...args }
+      );
+    } finally {
+      process.stdout.write = original;
+    }
+    return lines;
+  }
+
+  it('setup --list-detected prints one detected id per line and writes nothing', async () => {
+    assert.deepEqual(await captureListDetected({}), detectedAgentIds(homedir(), 'polylane').map((id) => id + '\n'));
+  });
+
+  it('setup --list-detected --ids skills-sh prints skills.sh ids; an unknown namespace is a usage error', async () => {
+    assert.deepEqual(
+      await captureListDetected({ ids: 'skills-sh' }),
+      detectedAgentIds(homedir(), 'skills-sh').map((id) => id + '\n')
+    );
+    await assert.rejects(captureListDetected({ ids: 'npm' }), /Unknown id namespace: "npm"/);
+  });
+
+  // The installer pipes this command, which selects JSON: the piped shape is
+  // the one the real consumer sees, so it is pinned per namespace.
+  it('setup --list-detected in json mode prints one JSON array of ids', async () => {
+    for (const namespace of ['polylane', 'skills-sh'] as const) {
+      const out = (await captureListDetected({ ids: namespace }, 'json')).join('');
+      assert.deepEqual(JSON.parse(out), detectedAgentIds(homedir(), namespace));
+    }
   });
 
   it('hasAgentFootprint follows symlinks: a linked skills dir is skipped, a linked file counts', () => {
