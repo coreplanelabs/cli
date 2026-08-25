@@ -1,9 +1,10 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
+import type { Config } from '../src/config/schema';
 import {
   AGENTS,
   writeSkillFile,
@@ -14,6 +15,8 @@ import {
   upsertGooseExtension,
   vscodeUserDirectory,
   hasAgentFootprint,
+  detectedAgents,
+  setupCommand,
   MCP_SERVER_NAME,
   MCP_SERVER_URL,
   decidePrimaryAgent,
@@ -493,6 +496,37 @@ describe('agent definitions', () => {
     assert.equal(hasAgentFootprint(join(tempDir, 'deep')), false);
     writeFileSync(join(tempDir, 'deep', 'agent', 'sessions', 'x', 'log'), '', 'utf-8');
     assert.equal(hasAgentFootprint(join(tempDir, 'deep')), true);
+  });
+
+  it('detectedAgents lists installed agents in registry order and ignores skills-only dirs', () => {
+    assert.deepEqual(detectedAgents(tempDir), []);
+    seedDir(join(tempDir, '.codex'));
+    seedDir(join(tempDir, '.pi', 'agent', 'skills', 'x'));
+    writeFileSync(join(tempDir, '.claude.json'), '{}', 'utf-8');
+    assert.deepEqual(
+      detectedAgents(tempDir).map((a) => a.id),
+      ['claude', 'codex']
+    );
+  });
+
+  it('setup --list-detected prints one detected id per line and writes nothing', async () => {
+    const lines: string[] = [];
+    const original = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      lines.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await setupCommand.execute(
+        { output: 'text', quiet: false, dryRun: false } as unknown as Config,
+        {} as never,
+        { listDetected: true }
+      );
+    } finally {
+      process.stdout.write = original;
+    }
+    const expected = detectedAgents(homedir()).map((a) => a.id + '\n');
+    assert.deepEqual(lines, expected);
   });
 
   it('hasAgentFootprint follows symlinks: a linked skills dir is skipped, a linked file counts', () => {

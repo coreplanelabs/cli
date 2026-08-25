@@ -9,7 +9,8 @@ import { isInteractive } from '../utils/env';
 import { promptSelect } from '../utils/prompt';
 import { writeConfigFile } from '../config/loader';
 import { getArgArray, getArgBoolean } from './helpers';
-import { AGENTS, type AgentSetup, type WriteAction, type WriteOutcome } from '../agents/registry';
+import { formatOutput } from '../output/formatter';
+import { AGENTS, detectedAgents, type AgentSetup, type WriteAction, type WriteOutcome } from '../agents/registry';
 
 // The registry (agent table + config writers) lives in src/agents/registry.ts
 // so the config loader can validate the stored agent id without importing a
@@ -27,6 +28,7 @@ export {
   upsertGooseExtension,
   vscodeUserDirectory,
   hasAgentFootprint,
+  detectedAgents,
   type AgentSetup,
   type WriteAction,
   type WriteOutcome,
@@ -96,17 +98,35 @@ export const setupCommand: Command = {
       description: 'Install into the current project (e.g. ./.claude, ./.cursor) instead of the home directory',
       type: 'boolean',
     },
+    {
+      flag: '--list-detected',
+      description: 'Print the ids of the coding agents detected on this machine (one per line) and exit without writing anything',
+      type: 'boolean',
+    },
   ],
   examples: [
     'polylane setup',
     'polylane setup --agent claude --agent cursor',
     'polylane setup --project',
     'polylane setup --dry-run',
+    'polylane setup --list-detected',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const project = getArgBoolean(args, 'project') === true;
     const requested = getArgArray(args, 'agent');
     const home = homedir();
+
+    // The installer asks this instead of keeping its own agent table: detection
+    // lives here, the shell script only forwards the answer (to skills.sh).
+    if (getArgBoolean(args, 'listDetected') === true) {
+      const ids = detectedAgents(home).map((a) => a.id);
+      if (config.output === 'json') {
+        formatOutput(config, ids);
+      } else {
+        for (const id of ids) process.stdout.write(id + '\n');
+      }
+      return;
+    }
 
     if (requested) {
       const known = new Set(AGENTS.map((a) => a.id));

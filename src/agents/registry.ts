@@ -524,6 +524,11 @@ export const AGENTS: AgentSetup[] = [
 
 export const AGENT_IDS = AGENTS.map((a) => a.id);
 
+/** The agents installed for `home`, in registry order. The one detection the installer and setup share. */
+export function detectedAgents(home: string): AgentSetup[] {
+  return AGENTS.filter((a) => a.detect(home));
+}
+
 export function agentById(id: string): AgentSetup | undefined {
   return AGENTS.find((a) => a.id === id);
 }
