@@ -43,7 +43,7 @@ mock.module('../src/utils/prompt', {
   },
 });
 
-const { authSignupCommand, nextSteps } = await import('../src/commands/auth/signup');
+const { authSignupCommand, nextSteps, workspaceOutcome } = await import('../src/commands/auth/signup');
 const { mockConfig } = await import('./helpers/config');
 
 const CONFIG_FILE = join(tempHome, '.polylane', 'config.json');
@@ -265,10 +265,12 @@ describe('auth signup existing-account re-auth', () => {
     assert.ok(output.includes('emailVerified'));
   });
 
-  it('persists workspace_id to config.json on re-auth', async () => {
+  it('persists workspace_id to config.json on re-auth and announces it as "using", not created', async () => {
     await run({ output: 'text' });
     const config = JSON.parse(readFileSync(CONFIG_FILE, 'utf-8')) as { workspace_id?: string };
     assert.equal(config.workspace_id, WORKSPACE_ID);
+    assert.ok(output.includes('Using workspace "Acme" as your default.'), output);
+    assert.ok(!output.includes('Created your first workspace'));
   });
 
   it('prints next steps by default but not with hints disabled', async () => {
@@ -329,6 +331,34 @@ describe('auth signup --code (email verification)', () => {
     assert.equal(creds.access_token, 'tok_test');
   });
 
+  it('says the workspace was created for a first-time user, gutter-aligned, without the raw id', async () => {
+    mockApi({
+      '/v1/auth/verify_email': () => verifyEmailResponse({ kind: 'created', workspaceSlug: 'acme' }),
+      '/v1/auth/whoami': () =>
+        jsonResponse({ success: true, error: null, result: { id: 'user_1', email: 'dev@acme.com' } }),
+      '/v1/workspaces': () =>
+        jsonResponse({
+          success: true,
+          error: null,
+          result: { items: [{ id: WORKSPACE_ID, name: 'Acme', slug: 'acme' }], count: 1 },
+        }),
+    });
+
+    captureOutput();
+    try {
+      await authSignupCommand.execute(
+        mockConfig({ telemetry: false }),
+        {} as GlobalFlags,
+        { email: 'dev@acme.com', code: '123456' }
+      );
+    } finally {
+      restoreOutput();
+    }
+
+    assert.ok(output.includes('Created your first workspace (called "Acme"), and set it as your default.'), output);
+    assert.ok(!output.includes(`Using workspace Acme (${WORKSPACE_ID})`), 'raw un-aligned workspace line still printed');
+  });
+
   it('parses the landing shape and names the workspace in next steps', async () => {
     mockApi({
       '/v1/auth/verify_email': () => verifyEmailResponse({ kind: 'joined', workspaceSlug: 'acme' }),
@@ -354,6 +384,7 @@ describe('auth signup --code (email verification)', () => {
     }
 
     assert.ok(output.includes('You joined the "acme" workspace'));
+    assert.ok(output.includes('Joined the "Acme" workspace, and set it as your default.'), output);
     assert.ok(!output.includes('polylane workspace create'));
   });
 
@@ -382,6 +413,20 @@ describe('auth signup --code (email verification)', () => {
     const creds = JSON.parse(readFileSync(CREDENTIALS_FILE, 'utf-8')) as { access_token?: string };
     assert.equal(creds.access_token, 'tok_test');
     assert.ok(output.includes('polylane workspace create'));
+  });
+});
+
+describe('workspaceOutcome', () => {
+  const ws = { id: 'ws_1', name: 'Acme', slug: 'acme' };
+  it('names a created workspace as created', () => {
+    assert.equal(workspaceOutcome(ws, { kind: 'created' }), 'Created your first workspace (called "Acme"), and set it as your default.');
+  });
+  it('names a joined workspace as joined', () => {
+    assert.equal(workspaceOutcome(ws, { kind: 'joined' }), 'Joined the "Acme" workspace, and set it as your default.');
+  });
+  it('falls back to "using" for existing accounts and unknown landings', () => {
+    assert.equal(workspaceOutcome(ws, { kind: 'existing' }), 'Using workspace "Acme" as your default.');
+    assert.equal(workspaceOutcome(ws), 'Using workspace "Acme" as your default.');
   });
 });
 

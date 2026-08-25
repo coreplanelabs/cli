@@ -2,9 +2,9 @@ import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { formatOutput } from '../../output/formatter';
 import { getArgString, promptIfMissing } from '../helpers';
-import { promptPassword, promptSelect, promptText, intro, outro, note } from '../../utils/prompt';
+import { promptPassword, promptSelect, promptText, intro, outro, note, step } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
-import { oauthLogin, selectWorkspace, type WhoamiResult } from './login';
+import { oauthLogin, selectWorkspace, type WhoamiResult, type WorkspaceItem } from './login';
 import { writeCredentials } from '../../auth/credentials';
 import { resolveOnboardingRunId, consumeOnboardingRunFile } from '../../auth/onboarding-run';
 import { parseSessionExpiresAt } from '../../auth/signup-helpers';
@@ -180,13 +180,26 @@ async function verifyEmail(config: Config, email: string, code: string): Promise
   return { ...json.result, expiresAt };
 }
 
-async function persistDefaultWorkspace(config: Config): Promise<void> {
+// What the sign-in did about the workspace, said plainly: a first-time user
+// never asked for one, so "Using workspace X" reads as if it already existed.
+export function workspaceOutcome(ws: WorkspaceItem, landing?: Landing): string {
+  switch (landing?.kind) {
+    case 'created':
+      return `Created your first workspace (called "${ws.name}"), and set it as your default.`;
+    case 'joined':
+      return `Joined the "${ws.name}" workspace, and set it as your default.`;
+    default:
+      return `Using workspace "${ws.name}" as your default.`;
+  }
+}
+
+async function persistDefaultWorkspace(config: Config, landing?: Landing): Promise<void> {
   try {
     const user = await requestJson<WhoamiResult>(config, {
       method: 'GET',
       url: '/v1/auth/whoami',
     });
-    const wsId = await selectWorkspace(config, user);
+    const wsId = await selectWorkspace(config, user, (ws) => step(workspaceOutcome(ws, landing)));
     if (wsId) {
       writeConfigFile({ workspace_id: wsId });
     }
@@ -209,7 +222,7 @@ async function finishEmailSignIn(config: Config, email: string, session: Verifie
     return;
   }
   writeSessionCredential(session.token, session.expiresAt, email);
-  await persistDefaultWorkspace(config);
+  await persistDefaultWorkspace(config, session.landing);
   emitResult(config, { token: session.token, landing: session.landing });
   if (config.hints) note(nextSteps(session.landing), 'Next steps');
   outro(`Signed in as ${email}.`);

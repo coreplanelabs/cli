@@ -129,6 +129,12 @@ export function outro(message: string): void {
   p.outro(message);
 }
 
+// A gutter-aligned status line between prompts (clack's ◇ step marker), for
+// outcomes that happen without a question — e.g. the default workspace.
+export function step(message: string): void {
+  p.log.step(message);
+}
+
 export function cancel(message: string): void {
   p.cancel(message);
 }
