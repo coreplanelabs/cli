@@ -274,6 +274,19 @@ export function cliConnectUrl(config: Config, flow: string, workspaceId: string)
 // not just end — keep it alive and poll until the connection shows up
 // server-side, so the user comes back to a confirmation instead of a dead
 // prompt.
+// A step that wants Ctrl+C to mean "stop this step" instead of "kill the CLI" has to displace
+// main.ts's global SIGINT handler for its duration: Node runs same-event listeners in
+// registration order, so a later process.once() never gets a turn before the global exit(130).
+export function scopedSigint(onSigint: () => void): () => void {
+  const prior = process.listeners('SIGINT');
+  process.removeAllListeners('SIGINT');
+  process.once('SIGINT', onSigint);
+  return () => {
+    process.removeListener('SIGINT', onSigint);
+    for (const listener of prior) process.on('SIGINT', listener as (...args: unknown[]) => void);
+  };
+}
+
 export function canWaitForBrowser(config: Config): boolean {
   return !config.dryRun && config.output !== 'json' && isInteractive(config.nonInteractive);
 }
@@ -294,7 +307,7 @@ export async function waitForBrowserCompletion<T>(
     process.exit(0);
   };
   spinner.start();
-  process.once('SIGINT', onSigint);
+  const restoreSigint = scopedSigint(onSigint);
   try {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -317,8 +330,54 @@ export async function waitForBrowserCompletion<T>(
     spinner.fail();
     throw err;
   } finally {
-    process.removeListener('SIGINT', onSigint);
+    restoreSigint();
   }
+}
+
+export interface BackgroundCompletion<T> {
+  peek: () => T | null;
+  stop: () => void;
+}
+
+// Poll a check in the background without holding the terminal: nothing is
+// written while a prompt may be active — callers read progress with peek()
+// between prompts. Timers are unref'd so a finished command never waits on
+// the poller; stop() before any foreground wait takes over the same check.
+export function startBackgroundCompletion<T>(
+  check: () => Promise<T | null>,
+  intervalMs: number
+): BackgroundCompletion<T> {
+  let found: T | null = null;
+  let stopped = false;
+  let timer: NodeJS.Timeout | null = null;
+  const tick = async (): Promise<void> => {
+    timer = null;
+    let result: T | null = null;
+    try {
+      result = await check();
+    } catch {
+      // Transient poll failures are expected — keep polling.
+    }
+    if (stopped || found) return;
+    if (result) {
+      found = result;
+      return;
+    }
+    schedule();
+  };
+  const schedule = (): void => {
+    timer = setTimeout(() => void tick(), intervalMs);
+    timer.unref();
+  };
+  schedule();
+  return {
+    peek: () => found,
+    stop: () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      timer = null;
+    },
+  };
 }
 
 export function getArgString(args: Record<string, unknown>, key: string): string | undefined {
