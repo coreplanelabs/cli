@@ -274,6 +274,19 @@ export function cliConnectUrl(config: Config, flow: string, workspaceId: string)
 // not just end — keep it alive and poll until the connection shows up
 // server-side, so the user comes back to a confirmation instead of a dead
 // prompt.
+// A step that wants Ctrl+C to mean "stop this step" instead of "kill the CLI" has to displace
+// main.ts's global SIGINT handler for its duration: Node runs same-event listeners in
+// registration order, so a later process.once() never gets a turn before the global exit(130).
+export function scopedSigint(onSigint: () => void): () => void {
+  const prior = process.listeners('SIGINT');
+  process.removeAllListeners('SIGINT');
+  process.once('SIGINT', onSigint);
+  return () => {
+    process.removeListener('SIGINT', onSigint);
+    for (const listener of prior) process.on('SIGINT', listener as (...args: unknown[]) => void);
+  };
+}
+
 export function canWaitForBrowser(config: Config): boolean {
   return !config.dryRun && config.output !== 'json' && isInteractive(config.nonInteractive);
 }
@@ -294,7 +307,7 @@ export async function waitForBrowserCompletion<T>(
     process.exit(0);
   };
   spinner.start();
-  process.once('SIGINT', onSigint);
+  const restoreSigint = scopedSigint(onSigint);
   try {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -317,7 +330,7 @@ export async function waitForBrowserCompletion<T>(
     spinner.fail();
     throw err;
   } finally {
-    process.removeListener('SIGINT', onSigint);
+    restoreSigint();
   }
 }
 

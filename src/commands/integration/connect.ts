@@ -34,6 +34,7 @@ import {
   promptPasswordOrBack,
   promptTextOrBack,
 } from '../../utils/prompt';
+import { printSlackChannelsLater, runSlackChannelStep } from './slack-channels';
 
 type ConnectBody = Parameters<PolylaneAPI['integrationsConnect']>[0];
 
@@ -756,12 +757,31 @@ async function connectType(
     const reconnect = getArgBoolean(args, 'reconnect') === true;
     const baseline = config.dryRun ? null : await integrationBaseline(api, workspaceId, type);
     if (baseline && !reconnect && baseline.existing.length > 0) {
-      printAlreadyConnected(config, names[type], baseline.existing[0]!);
+      const existing = baseline.existing[0]!;
+      printAlreadyConnected(config, names[type], existing);
+      if (type === 'slack') {
+        if (canWaitForBrowser(config)) {
+          await runSlackChannelStep(config, api, workspaceId, existing.id, { alreadyConnected: true });
+        } else {
+          printSlackChannelsLater(config);
+        }
+      }
       return 'connected';
     }
     const check = canWaitForBrowser(config) && baseline ? baseline.check : null;
     await openOrPrintInstallUrl(config, cliConnectUrl(config, type, workspaceId), labels[type], noBrowser);
-    return confirmBrowserConnect(config, check, names[type]);
+    const outcome = await confirmBrowserConnect(config, check, names[type]);
+    // The channel step needs the new integration's id; the browser wait already spotted the row,
+    // so one more check() returns it without another wait.
+    if (type === 'slack') {
+      if (outcome === 'connected' && check) {
+        const created = await check();
+        if (created) await runSlackChannelStep(config, api, workspaceId, created.id, { alreadyConnected: false });
+      } else if (!check) {
+        printSlackChannelsLater(config);
+      }
+    }
+    return outcome;
   }
   if (type === 'mcp') {
     return connectMcp(config, api, args, workspaceId, noBrowser);
