@@ -146,7 +146,7 @@ export const mapCommand: Command = {
   options: [
     {
       flag: '--agent <id>',
-      description: 'Coding agent to run the map (defaults to your configured agent)',
+      description: 'Coding agent to run the map (defaults to an installed agent)',
       type: 'string',
     },
   ],
@@ -164,13 +164,9 @@ export const mapCommand: Command = {
       );
     }
 
-    // Resolve the primary agent: explicit flag > configured choice > the only
-    // installed agent > interactive pick among installed agents.
-    let primary = requestedId
-      ? agentById(requestedId)
-      : config.agent
-        ? agentById(config.agent)
-        : undefined;
+    // Resolve the primary agent: explicit flag > the only installed agent >
+    // interactive pick among installed agents.
+    let primary = requestedId ? agentById(requestedId) : undefined;
     if (!primary && installed.length === 1) {
       primary = installed[0];
     } else if (!primary && installed.length > 1 && isInteractive(config.nonInteractive)) {

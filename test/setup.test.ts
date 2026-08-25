@@ -21,7 +21,6 @@ import {
   setupCommand,
   MCP_SERVER_NAME,
   MCP_SERVER_URL,
-  decidePrimaryAgent,
 } from '../src/commands/setup';
 import { SKILL_MD } from '../src/generated/skill';
 
@@ -787,41 +786,5 @@ describe('agent definitions', () => {
     const mcp = outcomes.find((o) => o.label === 'MCP server');
     assert.ok(mcp);
     assert.equal(mcp.action, 'skipped');
-  });
-});
-
-describe('decidePrimaryAgent', () => {
-  const byId = (id: string) => {
-    const found = AGENTS.find((a) => a.id === id);
-    assert.ok(found);
-    return found;
-  };
-
-  it('keeps an existing stored choice', () => {
-    const decision = decidePrimaryAgent('claude', [byId('claude'), byId('cursor')], true);
-    assert.deepEqual(decision, { kind: 'keep' });
-  });
-
-  it('does nothing when no agents are selected', () => {
-    const decision = decidePrimaryAgent(undefined, [], true);
-    assert.deepEqual(decision, { kind: 'keep' });
-  });
-
-  it('persists silently when exactly one agent is in play', () => {
-    const decision = decidePrimaryAgent(undefined, [byId('codex')], false);
-    assert.deepEqual(decision, { kind: 'persist', id: 'codex' });
-  });
-
-  it('prompts among the selected agents when several are detected interactively', () => {
-    const candidates = [byId('claude'), byId('cursor'), byId('gemini')];
-    const decision = decidePrimaryAgent(undefined, candidates, true);
-    assert.equal(decision.kind, 'prompt');
-    assert.ok(decision.kind === 'prompt');
-    assert.deepEqual(decision.candidates.map((a) => a.id), ['claude', 'cursor', 'gemini']);
-  });
-
-  it('does not prompt outside an interactive terminal', () => {
-    const decision = decidePrimaryAgent(undefined, [byId('claude'), byId('cursor')], false);
-    assert.deepEqual(decision, { kind: 'keep' });
   });
 });

@@ -5,9 +5,6 @@ import type { Config } from '../config/schema';
 import { tryResolveCredential } from '../auth/resolver';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
-import { isInteractive } from '../utils/env';
-import { promptSelect } from '../utils/prompt';
-import { writeConfigFile } from '../config/loader';
 import { getArgArray, getArgBoolean, getArgString } from './helpers';
 import { formatOutput } from '../output/formatter';
 import {
@@ -16,14 +13,12 @@ import {
   detectedAgents,
   detectedAgentIds,
   type AgentIdNamespace,
-  type AgentSetup,
   type WriteAction,
   type WriteOutcome,
 } from '../agents/registry';
 
-// The registry (agent table + config writers) lives in src/agents/registry.ts
-// so the config loader can validate the stored agent id without importing a
-// command module; re-exported here because this was its original home.
+// The registry (agent table + config writers) lives in src/agents/registry.ts;
+// re-exported here because this was its original home.
 export {
   AGENTS,
   MCP_SERVER_NAME,
@@ -51,49 +46,6 @@ const ACTION_LABEL: Record<WriteAction, string> = {
   unchanged: 'already up to date',
   skipped: 'skipped',
 };
-
-export type PrimaryAgentDecision =
-  | { kind: 'keep' }
-  | { kind: 'persist'; id: string }
-  | { kind: 'prompt'; candidates: AgentSetup[] };
-
-// The primary agent is the one downstream handoffs address ("open <agent> and
-// ask ..."); wiring is unaffected — every selected agent gets configured.
-export function decidePrimaryAgent(
-  stored: string | undefined,
-  selected: AgentSetup[],
-  interactive: boolean
-): PrimaryAgentDecision {
-  if (stored !== undefined) return { kind: 'keep' };
-  if (selected.length === 0) return { kind: 'keep' };
-  if (selected.length === 1) return { kind: 'persist', id: selected[0]!.id };
-  if (interactive) return { kind: 'prompt', candidates: selected };
-  return { kind: 'keep' };
-}
-
-async function settlePrimaryAgent(
-  config: Config,
-  selected: AgentSetup[],
-  say: (line: string) => void
-): Promise<void> {
-  if (config.dryRun) return;
-  const decision = decidePrimaryAgent(config.agent, selected, isInteractive(config.nonInteractive));
-  if (decision.kind === 'keep') return;
-
-  let id: string;
-  if (decision.kind === 'persist') {
-    id = decision.id;
-  } else {
-    id = await promptSelect(
-      { nonInteractive: config.nonInteractive },
-      'Which coding agent do you mainly use?',
-      decision.candidates.map((a) => ({ value: a.id, label: a.name })),
-    );
-  }
-  writeConfigFile({ agent: id });
-  const name = selected.find((a) => a.id === id)?.name ?? id;
-  say(`Primary coding agent: ${name} (change with \`polylane config set --key agent --value <id>\`)`);
-}
 
 export const setupCommand: Command = {
   name: 'setup',
@@ -208,8 +160,6 @@ export const setupCommand: Command = {
         }
       }
     }
-
-    await settlePrimaryAgent(config, selected, say);
 
     const credential = await tryResolveCredential(config);
     if (credential) {

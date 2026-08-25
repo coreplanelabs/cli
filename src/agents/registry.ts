@@ -4,8 +4,6 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from '
 
 import { applyEdits, modify, parse as parseJsonc, type ParseError } from 'jsonc-parser';
 
-import { CLIError } from '../errors/base';
-import { ExitCode } from '../errors/codes';
 import { ensureDir } from '../utils/fs';
 import { SKILL_MD } from '../generated/skill';
 
@@ -570,16 +568,3 @@ export function agentById(id: string): AgentSetup | undefined {
   return AGENTS.find((a) => a.id === id);
 }
 
-export function isAgentId(id: string): boolean {
-  return AGENTS.some((a) => a.id === id);
-}
-
-export function validateAgentId(id: string): void {
-  if (!isAgentId(id)) {
-    throw new CLIError(
-      `Unknown agent: "${id}"`,
-      ExitCode.USAGE,
-      `Supported agents: ${AGENT_IDS.join(', ')}`
-    );
-  }
-}

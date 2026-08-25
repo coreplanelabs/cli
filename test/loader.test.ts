@@ -1,7 +1,21 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadConfig } from '../src/config/loader';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { GlobalFlags } from '../src/types/flags';
+
+// Point HOME at a temp dir before importing any source module, so the loader
+// reads this test's config file instead of the developer's real
+// ~/.polylane/config.json. Same pattern as signup.test.ts.
+const tempHome = mkdtempSync(join(tmpdir(), 'polylane-loader-test-'));
+process.env.HOME = tempHome;
+after(() => rmSync(tempHome, { recursive: true, force: true }));
+
+const { loadConfig } = await import('../src/config/loader');
+
+const configDir = join(tempHome, '.polylane');
+const configFile = join(configDir, 'config.json');
 
 describe('loadConfig', () => {
   const originalEnv = { ...process.env };
@@ -13,8 +27,8 @@ describe('loadConfig', () => {
     delete process.env.POLYLANE_TIMEOUT;
     delete process.env.POLYLANE_OUTPUT;
     delete process.env.POLYLANE_VERBOSE;
-    delete process.env.POLYLANE_AGENT;
     delete process.env.POLYLANE_HINTS;
+    rmSync(configFile, { force: true });
   });
 
   afterEach(() => {
@@ -49,16 +63,17 @@ describe('loadConfig', () => {
     assert.equal(config.verbose, true);
   });
 
-  it('reads the primary agent from env', () => {
-    process.env.POLYLANE_AGENT = 'cursor';
+  it('silently tolerates unknown fields in the config file (e.g. a legacy agent key)', () => {
+    // Older CLI versions persisted a primary coding agent choice; existing
+    // config files still carry it. It must be ignored, never an error.
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(
+      configFile,
+      JSON.stringify({ domain: 'api.legacy.example.com', agent: 'cursor', some_future_key: true })
+    );
     const config = loadConfig({} as GlobalFlags);
-    assert.equal(config.agent, 'cursor');
-  });
-
-  it('drops an unknown agent id instead of throwing', () => {
-    process.env.POLYLANE_AGENT = 'not-an-agent';
-    const config = loadConfig({} as GlobalFlags);
-    assert.equal(config.agent, undefined);
+    assert.equal(config.domain, 'api.legacy.example.com');
+    assert.ok(!('agent' in config));
   });
 
   it('hints default on', () => {
