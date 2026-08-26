@@ -235,6 +235,7 @@ Full details: [PRIVACY.md](PRIVACY.md).
 | 4 | Rate limit or plan upgrade required |
 | 5 | Timeout |
 | 6 | Network error |
+| 7 | Pending (finished, but not yet complete upstream: re-check with `list`) |
 | 130 | Interrupted (Ctrl-C / SIGINT) |
 
 See [ERRORS.md](ERRORS.md) for the per-scenario reference.

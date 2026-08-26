@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { settledExitCode } from '../src/exit-code';
+import { ExitCode } from '../src/errors/codes';
+import { connectExitCode } from '../src/commands/cloud/connect';
 
 describe('settledExitCode', () => {
   afterEach(() => {
@@ -49,5 +51,28 @@ describe('main honors process.exitCode after a command completes', () => {
 
   it('exits with the flagged code instead of 0', () => {
     assert.equal(runConfigShow('1'), 1);
+  });
+
+  it('exits with the pending code when a connect left the CloudFormation stack still creating', () => {
+    assert.equal(runConfigShow(String(ExitCode.PENDING)), 7);
+  });
+});
+
+describe('cloud connect exit code', () => {
+  it('is SUCCESS when every leg connected', () => {
+    assert.equal(connectExitCode('connected', null), ExitCode.SUCCESS);
+    assert.equal(connectExitCode('connected', 'connected'), ExitCode.SUCCESS);
+    assert.equal(connectExitCode(null, 'connected'), ExitCode.SUCCESS);
+  });
+
+  it('is PENDING when the CloudFormation stack is still creating', () => {
+    assert.equal(connectExitCode(null, 'pending'), ExitCode.PENDING);
+    assert.equal(connectExitCode('connected', 'pending'), ExitCode.PENDING);
+  });
+
+  it('is GENERAL when a browser wait timed out, even if AWS is merely pending', () => {
+    assert.equal(connectExitCode('timeout', null), ExitCode.GENERAL);
+    assert.equal(connectExitCode('timeout', 'pending'), ExitCode.GENERAL);
+    assert.equal(connectExitCode('timeout', 'connected'), ExitCode.GENERAL);
   });
 });
