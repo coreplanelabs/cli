@@ -1,5 +1,4 @@
 import type { Config } from '../config/schema';
-import type { GlobalFlags } from '../types/flags';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
 import {
@@ -402,25 +401,6 @@ export function getArgArray(args: Record<string, unknown>, key: string): string[
   }
   if (typeof v === 'string') return v.split(',').map((s) => s.trim()).filter(Boolean);
   return undefined;
-}
-
-export function buildListQuery(flags: GlobalFlags): {
-  perPage?: number;
-  page?: number;
-  orderBy?: string;
-  order?: 'asc' | 'desc';
-} {
-  const q: {
-    perPage?: number;
-    page?: number;
-    orderBy?: string;
-    order?: 'asc' | 'desc';
-  } = {};
-  if (flags.perPage !== undefined) q.perPage = flags.perPage;
-  if (flags.page !== undefined) q.page = flags.page;
-  if (flags.orderBy !== undefined) q.orderBy = flags.orderBy;
-  if (flags.order !== undefined) q.order = flags.order;
-  return q;
 }
 
 export function parseJsonArg(raw: string | undefined, flag: string): unknown {

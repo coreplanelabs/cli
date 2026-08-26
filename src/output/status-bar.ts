@@ -28,7 +28,3 @@ export function showStatusBar(config: Config): void {
 
   process.stderr.write(dim(parts.join('  ')) + '\n');
 }
-
-export function resetStatusBar(): void {
-  shown = false;
-}

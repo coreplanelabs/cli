@@ -52,16 +52,3 @@ export class Spinner {
     process.stderr.write(`\r${frame} ${this.label}\x1B[K`);
   }
 }
-
-export async function withSpinner<T>(label: string, fn: () => Promise<T>): Promise<T> {
-  const spinner = new Spinner(label);
-  spinner.start();
-  try {
-    const result = await fn();
-    spinner.stop();
-    return result;
-  } catch (err) {
-    spinner.fail();
-    throw err;
-  }
-}

@@ -6,7 +6,7 @@ import type {
   ParsedSpec,
   SchemaObject,
 } from './types';
-import { schemaToTypescript, toIdentifier, toSafeName, type TypeGenOptions } from './type-utils';
+import { schemaToTypescript, type TypeGenOptions } from './type-utils';
 
 const CLIENT_OPTS: TypeGenOptions = { refPrefix: 'T.' };
 
@@ -142,5 +142,3 @@ function resolveSchema(schema: SchemaObject, schemas: Map<string, SchemaObject>)
   }
   return schema;
 }
-
-export { toIdentifier, toSafeName };
