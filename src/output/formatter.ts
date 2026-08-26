@@ -136,4 +136,4 @@ function formatObject(obj: Record<string, unknown>): void {
   outputKeyValue(pairs);
 }
 
-export { outputJson, outputTable, outputKeyValue };
+export { outputJson, outputTable };

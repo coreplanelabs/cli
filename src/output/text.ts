@@ -1,5 +1,3 @@
-export type TextValue = string | number | boolean | null | undefined;
-
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
 }
@@ -88,16 +86,5 @@ export function outputKeyValue(pairs: Array<[string, unknown]>): void {
     } else {
       process.stdout.write(`${key.padEnd(maxKey)}  ${formatted}\n`);
     }
-  }
-}
-
-export function outputPlain(text: string): void {
-  process.stdout.write(text);
-  if (!text.endsWith('\n')) process.stdout.write('\n');
-}
-
-export function outputList(items: string[]): void {
-  for (const item of items) {
-    process.stdout.write(item + '\n');
   }
 }

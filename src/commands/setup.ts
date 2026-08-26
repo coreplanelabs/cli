@@ -17,29 +17,6 @@ import {
   type WriteOutcome,
 } from '../agents/registry';
 
-// The registry (agent table + config writers) lives in src/agents/registry.ts;
-// re-exported here because this was its original home.
-export {
-  AGENTS,
-  MCP_SERVER_NAME,
-  MCP_SERVER_URL,
-  SKILL_DIRECTORY_NAME,
-  writeSkillFile,
-  upsertJsonEntry,
-  upsertJsoncEntry,
-  opencodeConfigFile,
-  upsertTomlSection,
-  upsertGooseExtension,
-  vscodeUserDirectory,
-  hasAgentFootprint,
-  detectedAgents,
-  detectedAgentIds,
-  SKILLS_SH_IDS,
-  type AgentSetup,
-  type WriteAction,
-  type WriteOutcome,
-} from '../agents/registry';
-
 const ACTION_LABEL: Record<WriteAction, string> = {
   created: 'installed',
   updated: 'updated',
