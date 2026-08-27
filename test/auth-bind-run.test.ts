@@ -52,7 +52,7 @@ describe('auth bind-run', () => {
   const originalStderrWrite = process.stderr.write.bind(process.stderr);
   let stdout = '';
   let stderr = '';
-  let bindCalls: { url: string; auth: string | undefined }[] = [];
+  let bindCalls: { url: string; auth: string | undefined; contentType: string | null; body: string }[] = [];
   let bindStatus = 200;
 
   before(() => {
@@ -84,7 +84,12 @@ describe('auth bind-run', () => {
       }
       if (url.includes('/v1/auth/onboarding_runs/')) {
         const headers = new Headers(init?.headers);
-        bindCalls.push({ url, auth: headers.get('authorization') ?? headers.get('x-api-key') ?? undefined });
+        bindCalls.push({
+          url,
+          auth: headers.get('authorization') ?? headers.get('x-api-key') ?? undefined,
+          contentType: headers.get('content-type'),
+          body: String(init?.body ?? ''),
+        });
         if (bindStatus === 401) {
           return Response.json(
             { success: false, error: { message: 'Unauthorized', detail: 'Session expired' }, result: null },
@@ -118,6 +123,17 @@ describe('auth bind-run', () => {
     assert.equal(bindCalls[0]!.auth, 'Bearer tok_access');
     assert.equal(existsSync(RUN_FILE), false);
     assert.deepEqual(JSON.parse(stdout), { bound: true, runId: ENV_RUN });
+  });
+
+  // The API edge rejects a body-less POST without a JSON content type with a
+  // bare 403 before the worker runs (nominal#1575), which a fetch mock cannot
+  // reproduce — so pin the wire shape the edge needs.
+  it('sends a JSON content type and an empty object body so the API edge lets it through', async () => {
+    writeCredentialsFile();
+    process.env.POLYLANE_ONBOARDING_RUN = ENV_RUN;
+    await run();
+    assert.equal(bindCalls[0]!.contentType, 'application/json');
+    assert.equal(bindCalls[0]!.body, '{}');
   });
 
   it('binds the file run id when the env var is unset', async () => {

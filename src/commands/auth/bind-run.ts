@@ -40,9 +40,13 @@ export async function bindOnboardingRun(
     process.stderr.write(`Not signed in; onboarding run ${runId} left unbound.\n`);
     return { bound: false, runId };
   }
+  // The route takes no input, but the API edge answers a body-less POST without
+  // a JSON content type with a bare 403 before the worker sees it (nominal#1575).
+  // `request` sets Content-Type only when a body is present, so send `{}`.
   const result = await requestJson<{ bound: boolean }>(config, {
     method: 'POST',
     url: `/v1/auth/onboarding_runs/${runId}/bind`,
+    body: {},
     ...(apiKey ? { headers: { 'x-api-key': apiKey }, noAuth: true } : {}),
   });
   const bound = result.bound === true;
