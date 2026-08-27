@@ -24,6 +24,7 @@ const NO_AUTH_COMMANDS = new Set([
   'auth logout',
   'auth status',
   'auth signup',
+  'auth bind-run',
   'config show',
   'config set',
   'telemetry status',

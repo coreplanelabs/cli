@@ -13,7 +13,7 @@ const ONBOARDING_RUN_ID_PATTERN =
 
 export const ONBOARDING_RUN_QUERY_PARAM = 'run';
 
-function sanitize(value: string | undefined | null): string | null {
+export function sanitizeOnboardingRunId(value: string | undefined | null): string | null {
   const trimmed = value?.trim();
   if (!trimmed || !ONBOARDING_RUN_ID_PATTERN.test(trimmed)) return null;
   return trimmed.toLowerCase();
@@ -33,7 +33,7 @@ export function resolveOnboardingRunId(): string | null {
   // and always resolves at runtime. That exclusion is the only guarantee — the
   // bracket access is not a fallback, since esbuild bakes indexed reads
   // identically to dotted ones when the key is in the define map.
-  return sanitize(process.env['POLYLANE_ONBOARDING_RUN']) ?? sanitize(readOnboardingRunFile());
+  return sanitizeOnboardingRunId(process.env['POLYLANE_ONBOARDING_RUN']) ?? sanitizeOnboardingRunId(readOnboardingRunFile());
 }
 
 // The onboarding run funnel join is one-shot: once an auth flow has carried the

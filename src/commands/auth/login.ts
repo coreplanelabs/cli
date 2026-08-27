@@ -5,7 +5,8 @@ import { promptPassword, promptSelect, outro } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
 import { oauthBrowserFlow, oauthDeviceCodeFlow, type BrowserFlowOptions } from '../../auth/oauth';
 import { emailSignup } from './signup';
-import { consumeOnboardingRunFile } from '../../auth/onboarding-run';
+import { consumeOnboardingRunFile, resolveOnboardingRunId } from '../../auth/onboarding-run';
+import { bindOnboardingRun } from './bind-run';
 import { writeCredentials } from '../../auth/credentials';
 import type { OAuthCredential } from '../../auth/types';
 import { writeConfigFile } from '../../config/loader';
@@ -126,6 +127,19 @@ async function apiKeyLogin(config: Config, key: string): Promise<void> {
     api_key: key,
     ...(wsId ? { workspace_id: wsId } : {}),
   });
+
+  // An API-key login never touches the console, so nothing upstream carried the
+  // installer's run id: bind it here with the key itself, not the resolver's
+  // pick (stored OAuth credentials would win there). Best effort — the sign-in
+  // already succeeded, and attribution must never fail it.
+  const runId = resolveOnboardingRunId();
+  if (runId) {
+    try {
+      await bindOnboardingRun(configWithKey, runId, key);
+    } catch {
+      // non-fatal
+    }
+  }
 
   outro(`API key saved to ~/.polylane/config.json`);
 }
