@@ -46,6 +46,7 @@ type ConnectableType =
   | 'honeycomb'
   | 'axiom'
   | 'betterstack'
+  | 'grafana'
   | 'devin'
   | 'cursor'
   | 'factory'
@@ -67,6 +68,7 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'honeycomb', label: 'Honeycomb', hint: 'configuration API key', category: 'observability' },
   { value: 'axiom', label: 'Axiom', hint: 'API token', category: 'observability' },
   { value: 'betterstack', label: 'Better Stack', hint: 'global, Uptime and Telemetry tokens', category: 'observability' },
+  { value: 'grafana', label: 'Grafana Cloud', hint: 'stack URL + service account token', category: 'observability' },
   { value: 'devin', label: 'Devin', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'factory', label: 'Factory', hint: 'API key · coding agent', category: 'code-agent' },
@@ -159,6 +161,27 @@ export async function connectAxiom(
     if (picked === BACK) return BACK;
     return api.integrationsConnect({ ...body, region: picked });
   }
+}
+
+const GRAFANA_STACK_URL_HINT = 'Use the https URL of your Grafana Cloud stack, e.g. https://mystack.grafana.net';
+
+// Accepts what people paste — a bare host, a trailing slash, a deep dashboard
+// path — and normalizes to the bare https origin, mirroring the API's own
+// normalization so the service-accounts link below points at the right host.
+// Returns null when the value cannot be a Grafana stack URL.
+export function normalizeGrafanaStackUrl(input: string): string | null {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return null;
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  let url: URL;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:') return null;
+  if (!url.hostname.includes('.')) return null;
+  return `https://${url.host}`;
 }
 
 const CODE_AGENTS = {
@@ -665,6 +688,59 @@ async function connectWithCredentials(
     ]);
     if (!ok) return BACK;
     body = { type: 'betterstack', workspaceId, apiToken, uptimeApiToken, telemetryApiToken };
+  } else if (type === 'grafana') {
+    let stackUrl = '';
+    let serviceAccountToken = '';
+    const ok = await runSteps([
+      async () => {
+        const fromFlag = getArgString(args, 'stackUrl');
+        if (fromFlag !== undefined) {
+          const normalized = normalizeGrafanaStackUrl(fromFlag);
+          if (normalized === null) {
+            throw new CLIError(`Invalid value for --stack-url: "${fromFlag}"`, ExitCode.USAGE, GRAFANA_STACK_URL_HINT);
+          }
+          stackUrl = normalized;
+          return SKIPPED;
+        }
+        if (!isInteractive(config.nonInteractive)) {
+          throw new CLIError('Missing required flag: --stack-url', ExitCode.USAGE, GRAFANA_STACK_URL_HINT);
+        }
+        const value = await promptTextOrBack(
+          { nonInteractive: config.nonInteractive },
+          'Grafana stack URL',
+          {
+            placeholder: 'https://mystack.grafana.net',
+            validate: (v: string) => (normalizeGrafanaStackUrl(v) === null ? GRAFANA_STACK_URL_HINT : undefined),
+          }
+        );
+        if (value === BACK) return BACK;
+        stackUrl = normalizeGrafanaStackUrl(value)!;
+        return;
+      },
+      secretStep(
+        config,
+        args,
+        'serviceAccountToken',
+        '--service-account-token',
+        () => ({
+          message: 'Grafana service account token',
+          instructions:
+            'In your Grafana stack, open Administration > Users and access > Service accounts. Create a service account with the Editor role (it needs to read dashboards, query datasources and check alerting), then add a token to it. The token starts with glsa_ and is shown only once.',
+          link: `${stackUrl}/org/serviceaccounts`,
+          linkLabel: 'Open Grafana service accounts',
+        }),
+        (v) => {
+          serviceAccountToken = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    // Cast instead of a plain literal: the client is generated from the live
+    // prod spec, which gains the grafana variant only when the matching API
+    // deploy lands. Same trust boundary as the honeycomb request-body spread;
+    // an API build that predates grafana rejects the type with a 400 instead
+    // of connecting silently, so nothing needs a post-connect assertion.
+    body = { type: 'grafana', workspaceId, stackUrl, serviceAccountToken } as unknown as ConnectBody;
   } else if (type === 'linear') {
     let apiKey = '';
     const ok = await runSteps([
@@ -774,7 +850,7 @@ async function connectType(
 
 export const integrationConnectCommand: Command = {
   name: 'integration connect',
-  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, Devin, Cursor, Factory, Conductor, Linear, MCP)',
+  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, Grafana Cloud, Devin, Cursor, Factory, Conductor, Linear, MCP)',
   operationId: 'integrations.connect',
   options: [
     {
@@ -794,6 +870,8 @@ export const integrationConnectCommand: Command = {
     { flag: '--management-api-key-id <id>', description: 'Management API key ID (Honeycomb)', type: 'string' },
     { flag: '--management-api-key-secret <secret>', description: 'Management API key secret (Honeycomb)', type: 'string' },
     { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token)', type: 'string' },
+    { flag: '--stack-url <url>', description: 'Grafana Cloud stack URL, e.g. https://mystack.grafana.net', type: 'string' },
+    { flag: '--service-account-token <token>', description: 'Service account token (Grafana only, glsa_...)', type: 'string' },
     { flag: '--uptime-api-token <token>', description: 'Uptime API token (Better Stack only)', type: 'string' },
     { flag: '--telemetry-api-token <token>', description: 'Telemetry API token (Better Stack only)', type: 'string' },
     { flag: '--url <url>', description: 'MCP server URL', type: 'string' },
@@ -816,6 +894,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type honeycomb --region us --api-key ... --management-api-key-id ... --management-api-key-secret ...',
     'polylane integration connect --type axiom --api-token ...',
     'polylane integration connect --type betterstack --api-token ... --uptime-api-token ... --telemetry-api-token ...',
+    'polylane integration connect --type grafana --stack-url https://mystack.grafana.net --service-account-token glsa_...',
     'polylane integration connect --type cursor --api-key crsr_...',
     'polylane integration connect --type linear --api-key lin_api_...',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP"',
