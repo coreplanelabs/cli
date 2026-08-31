@@ -50,9 +50,11 @@ describe('normalizeGrafanaStackUrl', () => {
     assert.equal(normalizeGrafanaStackUrl('https://127.0.0.1'), null);
     assert.equal(normalizeGrafanaStackUrl('https://127.0.0.1:3000'), null);
     assert.equal(normalizeGrafanaStackUrl('https://0.0.0.0'), null);
-    // The WHATWG URL parser canonicalizes hex / integer forms to dotted-quad.
+    // The WHATWG URL parser canonicalizes hex / octal / integer forms to dotted-quad.
     assert.equal(normalizeGrafanaStackUrl('https://0x7f000001'), null);
     assert.equal(normalizeGrafanaStackUrl('https://2130706433'), null);
+    assert.equal(normalizeGrafanaStackUrl('https://0177.0.0.1'), null);
+    assert.equal(normalizeGrafanaStackUrl('https://017700000001'), null);
   });
 
   it('rejects RFC1918 private ranges', () => {
