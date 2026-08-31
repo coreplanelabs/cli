@@ -45,4 +45,38 @@ describe('normalizeGrafanaStackUrl', () => {
     assert.equal(normalizeGrafanaStackUrl('https://'), null);
     assert.equal(normalizeGrafanaStackUrl('not a url'), null);
   });
+
+  it('rejects loopback and 0/8 hosts, including canonicalized IPv4 forms', () => {
+    assert.equal(normalizeGrafanaStackUrl('https://127.0.0.1'), null);
+    assert.equal(normalizeGrafanaStackUrl('https://127.0.0.1:3000'), null);
+    assert.equal(normalizeGrafanaStackUrl('https://0.0.0.0'), null);
+    // The WHATWG URL parser canonicalizes hex / integer forms to dotted-quad.
+    assert.equal(normalizeGrafanaStackUrl('https://0x7f000001'), null);
+    assert.equal(normalizeGrafanaStackUrl('https://2130706433'), null);
+  });
+
+  it('rejects RFC1918 private ranges', () => {
+    assert.equal(normalizeGrafanaStackUrl('https://10.0.0.5'), null);
+    assert.equal(normalizeGrafanaStackUrl('https://172.16.0.1'), null);
+    assert.equal(normalizeGrafanaStackUrl('https://172.31.255.255'), null);
+    assert.equal(normalizeGrafanaStackUrl('https://192.168.1.1'), null);
+  });
+
+  it('rejects link-local hosts, including the cloud metadata endpoint', () => {
+    assert.equal(normalizeGrafanaStackUrl('https://169.254.169.254'), null);
+    assert.equal(normalizeGrafanaStackUrl('https://169.254.0.1'), null);
+  });
+
+  it('rejects localhost names and bracketed IPv6 literals', () => {
+    assert.equal(normalizeGrafanaStackUrl('https://grafana.localhost'), null);
+    assert.equal(normalizeGrafanaStackUrl('https://[::1]'), null);
+    assert.equal(normalizeGrafanaStackUrl('https://[::ffff:127.0.0.1]'), null);
+  });
+
+  it('accepts public IPs that only look like private-range boundaries', () => {
+    assert.equal(normalizeGrafanaStackUrl('https://172.15.0.1'), 'https://172.15.0.1');
+    assert.equal(normalizeGrafanaStackUrl('https://172.32.0.1'), 'https://172.32.0.1');
+    assert.equal(normalizeGrafanaStackUrl('https://192.169.0.1'), 'https://192.169.0.1');
+    assert.equal(normalizeGrafanaStackUrl('https://169.253.0.1'), 'https://169.253.0.1');
+  });
 });

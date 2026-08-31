@@ -165,6 +165,30 @@ export async function connectAxiom(
 
 const GRAFANA_STACK_URL_HINT = 'Use the https URL of your Grafana Cloud stack, e.g. https://mystack.grafana.net';
 
+// SSRF defense-in-depth, ported from the API's grafana-client: the stack URL
+// drives outbound requests server-side, so hosts that can only point inside a
+// private network (loopback, link-local incl. the 169.254.169.254 metadata
+// endpoint, RFC1918) are rejected up front. The WHATWG URL parser
+// canonicalizes hex/octal/integer IPv4 forms to dotted-quad before this check
+// sees them.
+function isPrivateGrafanaHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  // Bracketed IPv6 literals only survive the dotted-hostname check when they
+  // embed an IPv4 address (e.g. [::ffff:127.0.0.1]); no Grafana stack is
+  // addressed that way.
+  if (host.startsWith('[')) return true;
+  const octets = host.split('.');
+  if (octets.length !== 4 || !octets.every((o) => /^\d{1,3}$/.test(o) && Number(o) <= 255)) return false;
+  const [a, b] = octets.map(Number);
+  if (a === 0 || a === 127) return true;
+  if (a === 10) return true;
+  if (a === 172 && b! >= 16 && b! <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 169 && b === 254) return true;
+  return false;
+}
+
 // Accepts what people paste — a bare host, a trailing slash, a deep dashboard
 // path — and normalizes to the bare https origin, mirroring the API's own
 // normalization so the service-accounts link below points at the right host.
@@ -181,6 +205,7 @@ export function normalizeGrafanaStackUrl(input: string): string | null {
   }
   if (url.protocol !== 'https:') return null;
   if (!url.hostname.includes('.')) return null;
+  if (isPrivateGrafanaHost(url.hostname)) return null;
   return `https://${url.host}`;
 }
 
@@ -735,11 +760,11 @@ async function connectWithCredentials(
       ),
     ]);
     if (!ok) return BACK;
-    // Cast instead of a plain literal: the client is generated from the live
-    // prod spec, which gains the grafana variant only when the matching API
-    // deploy lands. Same trust boundary as the honeycomb request-body spread;
-    // an API build that predates grafana rejects the type with a 400 instead
-    // of connecting silently, so nothing needs a post-connect assertion.
+    // grafana is not in the generated connect union yet: the client is built
+    // from the live prod spec, which gains the variant only when the matching
+    // API deploy lands. Same trust boundary as the honeycomb request-body
+    // spread; an API build that predates grafana rejects the type with a 400
+    // instead of connecting silently, so nothing needs a post-connect assertion.
     body = { type: 'grafana', workspaceId, stackUrl, serviceAccountToken } as unknown as ConnectBody;
   } else if (type === 'linear') {
     let apiKey = '';
