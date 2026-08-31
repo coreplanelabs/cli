@@ -10,12 +10,12 @@ import { isCLIError } from '../src/errors/base';
 describe('typeOptionsForCategory', () => {
   it('returns every option when no category is given', () => {
     const all = typeOptionsForCategory(undefined);
-    assert.equal(all.length, 15);
+    assert.equal(all.length, 16);
   });
 
   it('narrows to exactly the observability integrations', () => {
     const types = typeOptionsForCategory('observability').map((o) => o.value);
-    assert.deepEqual(types.sort(), ['axiom', 'betterstack', 'datadog', 'honeycomb', 'openstatus', 'sentry']);
+    assert.deepEqual(types.sort(), ['axiom', 'betterstack', 'datadog', 'grafana', 'honeycomb', 'openstatus', 'sentry']);
   });
 
   it('narrows to exactly the product analytics integrations', () => {
@@ -57,9 +57,9 @@ describe('typeOptionsForCategory', () => {
 
 describe('resolveTypeOptions', () => {
   it('lets --type win over the filter', () => {
-    assert.equal(resolveTypeOptions('observability', true).length, 15);
-    assert.equal(resolveTypeOptions('observability', false).length, 6);
-    assert.equal(resolveTypeOptions(undefined, false).length, 15);
+    assert.equal(resolveTypeOptions('observability', true).length, 16);
+    assert.equal(resolveTypeOptions('observability', false).length, 7);
+    assert.equal(resolveTypeOptions(undefined, false).length, 16);
   });
 
   it('rejects an unknown category even when --type is present', () => {

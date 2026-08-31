@@ -1,3 +1,4 @@
+import { authBindRunCommand } from './bind-run';
 import { authLoginCommand } from './login';
 import { authLogoutCommand } from './logout';
 import { authStatusCommand } from './status';
@@ -12,4 +13,5 @@ export const authCommands = [
   authRefreshCommand,
   authSignupCommand,
   authWhoamiCommand,
+  authBindRunCommand,
 ];

@@ -6,4 +6,5 @@ export enum ExitCode {
   QUOTA = 4,
   TIMEOUT = 5,
   NETWORK = 6,
+  PENDING = 7,
 }

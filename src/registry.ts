@@ -1,5 +1,4 @@
 import type { Command, OptionDef, PositionalDef } from './command';
-import { GLOBAL_OPTIONS } from './command';
 import { shouldUseColor } from './utils/env';
 import { tryResolveCredential } from './auth/resolver';
 import type { Config } from './config/schema';
@@ -187,17 +186,6 @@ function buildUsage(cmd: Command): string {
   return parts.join(' ');
 }
 
-function statusLine(config: Config | null): string | null {
-  if (!config) return null;
-  try {
-    const noop = Promise.resolve(null);
-    void noop;
-  } catch {
-    return null;
-  }
-  return null;
-}
-
 export async function buildStatusLine(config: Config): Promise<string> {
   const cred = await tryResolveCredential(config);
   if (!cred) return 'Not signed in.';
@@ -323,5 +311,3 @@ export function renderHelp(cmd: Command | null, noColor: boolean): string {
   if (cmd) return renderCommandHelp(cmd, noColor);
   return renderRootHelp(noColor, null);
 }
-
-export { GLOBAL_OPTIONS, statusLine };

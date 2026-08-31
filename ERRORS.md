@@ -23,6 +23,7 @@ Exit codes are part of the CLI contract — they change rarely. Branch on `$?` a
 | 4 | QUOTA | 429 (rate limit) or 426 (plan upgrade required) |
 | 5 | TIMEOUT | Request timed out |
 | 6 | NETWORK | DNS failure, connection refused, TLS error |
+| 7 | PENDING | Command finished but the requested state is not reached yet (e.g. `cloud connect --provider aws` while the CloudFormation stack is still creating); re-check with the matching `list` command |
 | 130 | — | Ctrl-C (SIGINT) |
 
 ## Error envelope
@@ -136,7 +137,15 @@ Some connect-style operations may return `{ accounts: [...], failures: [...] }` 
 
 ### Browser-opening operations
 
-Commands that generate an install / consent URL (`auth login`, `integration connect --type <browser-flow>`, `cloud connect --provider <browser-flow>`, …) always print the URL to stdout and, in interactive mode, also try to open the browser. They succeed whether or not the browser actually opens — **the exit code reflects URL generation, not the install completing upstream.** After a browser flow, re-query state with the relevant `list` / `show` command to confirm.
+Commands that generate an install / consent URL (`auth login`, `integration connect --type <browser-flow>`, `cloud connect --provider <browser-flow>`, …) always print the URL to stdout and, in interactive mode, also try to open the browser. They succeed whether or not the browser actually opens. When the command can wait for the upstream side to finish (`integration connect`, `cloud connect`), the exit code reflects that wait: `0` once the connection shows up, `1` when the wait timed out, `7` when `cloud connect --provider aws` ends while the CloudFormation stack is still creating (the account arrives later; `polylane cloud list` shows it). After a browser flow, re-query state with the relevant `list` / `show` command to confirm.
+
+### Pending (exit `7`)
+
+| Scenario | Exit | Typical message |
+|---|---|---|
+| `cloud connect --provider aws` ends before the CloudFormation stack finishes creating | 7 | `AWS is still connecting — the CloudFormation stack has not shown up yet.` with a hint to check `polylane cloud list` |
+
+`7` is not an error: the launch went through and nothing needs to be re-run unless the stack fails. Treat it as "not connected yet" and re-check with `polylane cloud list` before depending on the account.
 
 ### Streaming commands (`thread ask --stream`, `thread continue --stream`)
 

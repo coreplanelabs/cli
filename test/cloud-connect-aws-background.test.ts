@@ -117,5 +117,6 @@ describe('startAwsStackWait', () => {
     assert.match(output, /AWS is still connecting/);
     assert.match(output, /polylane cloud list/);
     assert.match(output, /failed or rolled back/);
+    assert.match(output, /Exiting 7 \(pending\)/);
   });
 });

@@ -47,6 +47,7 @@ type ConnectableType =
   | 'axiom'
   | 'betterstack'
   | 'openstatus'
+  | 'grafana'
   | 'mixpanel'
   | 'devin'
   | 'cursor'
@@ -70,6 +71,7 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'axiom', label: 'Axiom', hint: 'API token', category: 'observability' },
   { value: 'betterstack', label: 'Better Stack', hint: 'global, Uptime and Telemetry tokens', category: 'observability' },
   { value: 'openstatus', label: 'OpenStatus', hint: 'workspace API key', category: 'observability' },
+  { value: 'grafana', label: 'Grafana Cloud', hint: 'stack URL + service account token', category: 'observability' },
   { value: 'mixpanel', label: 'Mixpanel', hint: 'service account + project ID', category: 'product-analytics' },
   { value: 'devin', label: 'Devin', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent', category: 'code-agent' },
@@ -191,6 +193,52 @@ export async function connectAxiom(
     if (picked === BACK) return BACK;
     return api.integrationsConnect({ ...body, region: picked });
   }
+}
+
+const GRAFANA_STACK_URL_HINT = 'Use the https URL of your Grafana Cloud stack, e.g. https://mystack.grafana.net';
+
+// SSRF defense-in-depth, ported from the API's grafana-client: the stack URL
+// drives outbound requests server-side, so hosts that can only point inside a
+// private network (loopback, link-local incl. the 169.254.169.254 metadata
+// endpoint, RFC1918) are rejected up front. The WHATWG URL parser
+// canonicalizes hex/octal/integer IPv4 forms to dotted-quad before this check
+// sees them.
+function isPrivateGrafanaHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  // Bracketed IPv6 literals only survive the dotted-hostname check when they
+  // embed an IPv4 address (e.g. [::ffff:127.0.0.1]); no Grafana stack is
+  // addressed that way.
+  if (host.startsWith('[')) return true;
+  const octets = host.split('.');
+  if (octets.length !== 4 || !octets.every((o) => /^\d{1,3}$/.test(o) && Number(o) <= 255)) return false;
+  const [a, b] = octets.map(Number);
+  if (a === 0 || a === 127) return true;
+  if (a === 10) return true;
+  if (a === 172 && b! >= 16 && b! <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 169 && b === 254) return true;
+  return false;
+}
+
+// Accepts what people paste — a bare host, a trailing slash, a deep dashboard
+// path — and normalizes to the bare https origin, mirroring the API's own
+// normalization so the service-accounts link below points at the right host.
+// Returns null when the value cannot be a Grafana stack URL.
+export function normalizeGrafanaStackUrl(input: string): string | null {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return null;
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  let url: URL;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:') return null;
+  if (!url.hostname.includes('.')) return null;
+  if (isPrivateGrafanaHost(url.hostname)) return null;
+  return `https://${url.host}`;
 }
 
 const CODE_AGENTS = {
@@ -795,6 +843,59 @@ async function connectWithCredentials(
     ]);
     if (!ok) return BACK;
     body = { type: 'mixpanel', workspaceId, region, serviceAccountUsername, serviceAccountSecret, projectId };
+  } else if (type === 'grafana') {
+    let stackUrl = '';
+    let serviceAccountToken = '';
+    const ok = await runSteps([
+      async () => {
+        const fromFlag = getArgString(args, 'stackUrl');
+        if (fromFlag !== undefined) {
+          const normalized = normalizeGrafanaStackUrl(fromFlag);
+          if (normalized === null) {
+            throw new CLIError(`Invalid value for --stack-url: "${fromFlag}"`, ExitCode.USAGE, GRAFANA_STACK_URL_HINT);
+          }
+          stackUrl = normalized;
+          return SKIPPED;
+        }
+        if (!isInteractive(config.nonInteractive)) {
+          throw new CLIError('Missing required flag: --stack-url', ExitCode.USAGE, GRAFANA_STACK_URL_HINT);
+        }
+        const value = await promptTextOrBack(
+          { nonInteractive: config.nonInteractive },
+          'Grafana stack URL',
+          {
+            placeholder: 'https://mystack.grafana.net',
+            validate: (v: string) => (normalizeGrafanaStackUrl(v) === null ? GRAFANA_STACK_URL_HINT : undefined),
+          }
+        );
+        if (value === BACK) return BACK;
+        stackUrl = normalizeGrafanaStackUrl(value)!;
+        return;
+      },
+      secretStep(
+        config,
+        args,
+        'serviceAccountToken',
+        '--service-account-token',
+        () => ({
+          message: 'Grafana service account token',
+          instructions:
+            'In your Grafana stack, open Administration > Users and access > Service accounts. Create a service account with the Editor role (it needs to read dashboards, query datasources and check alerting), then add a token to it. The token starts with glsa_ and is shown only once.',
+          link: `${stackUrl}/org/serviceaccounts`,
+          linkLabel: 'Open Grafana service accounts',
+        }),
+        (v) => {
+          serviceAccountToken = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    // grafana is not in the generated connect union yet: the client is built
+    // from the live prod spec, which gains the variant only when the matching
+    // API deploy lands. Same trust boundary as the honeycomb request-body
+    // spread; an API build that predates grafana rejects the type with a 400
+    // instead of connecting silently, so nothing needs a post-connect assertion.
+    body = { type: 'grafana', workspaceId, stackUrl, serviceAccountToken } as unknown as ConnectBody;
   } else if (type === 'linear') {
     let apiKey = '';
     const ok = await runSteps([
@@ -904,7 +1005,7 @@ async function connectType(
 
 export const integrationConnectCommand: Command = {
   name: 'integration connect',
-  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, OpenStatus, Mixpanel, Devin, Cursor, Factory, Conductor, Linear, MCP)',
+  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, OpenStatus, Grafana Cloud, Mixpanel, Devin, Cursor, Factory, Conductor, Linear, MCP)',
   operationId: 'integrations.connect',
   options: [
     {
@@ -924,6 +1025,8 @@ export const integrationConnectCommand: Command = {
     { flag: '--management-api-key-id <id>', description: 'Management API key ID (Honeycomb)', type: 'string' },
     { flag: '--management-api-key-secret <secret>', description: 'Management API key secret (Honeycomb)', type: 'string' },
     { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token)', type: 'string' },
+    { flag: '--stack-url <url>', description: 'Grafana Cloud stack URL, e.g. https://mystack.grafana.net', type: 'string' },
+    { flag: '--service-account-token <token>', description: 'Service account token (Grafana only, glsa_...)', type: 'string' },
     { flag: '--uptime-api-token <token>', description: 'Uptime API token (Better Stack only)', type: 'string' },
     { flag: '--telemetry-api-token <token>', description: 'Telemetry API token (Better Stack only)', type: 'string' },
     { flag: '--service-account-username <username>', description: 'Service account username (Mixpanel only)', type: 'string' },
@@ -950,6 +1053,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type axiom --api-token ...',
     'polylane integration connect --type betterstack --api-token ... --uptime-api-token ... --telemetry-api-token ...',
     'polylane integration connect --type openstatus --api-key ...',
+    'polylane integration connect --type grafana --stack-url https://mystack.grafana.net --service-account-token glsa_...',
     'polylane integration connect --type mixpanel --region us --service-account-username ... --service-account-secret ... --project-id 1234567',
     'polylane integration connect --type cursor --api-key crsr_...',
     'polylane integration connect --type linear --api-key lin_api_...',

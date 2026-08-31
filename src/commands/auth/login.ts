@@ -5,7 +5,8 @@ import { promptPassword, promptSelect, outro } from '../../utils/prompt';
 import { isInteractive } from '../../utils/env';
 import { oauthBrowserFlow, oauthDeviceCodeFlow, type BrowserFlowOptions } from '../../auth/oauth';
 import { emailSignup } from './signup';
-import { consumeOnboardingRunFile } from '../../auth/onboarding-run';
+import { consumeOnboardingRunFile, resolveOnboardingRunId } from '../../auth/onboarding-run';
+import { bindOnboardingRun } from './bind-run';
 import { writeCredentials } from '../../auth/credentials';
 import type { OAuthCredential } from '../../auth/types';
 import { writeConfigFile } from '../../config/loader';
@@ -22,7 +23,7 @@ export interface WhoamiResult {
   username?: string;
 }
 
-interface WorkspaceItem {
+export interface WorkspaceItem {
   id: string;
   name: string;
   slug: string;
@@ -69,7 +70,14 @@ async function validateApiKey(config: Config, key: string): Promise<WhoamiResult
   }
 }
 
-export async function selectWorkspace(config: Config, user: WhoamiResult): Promise<string | undefined> {
+// `announce` renders the single-workspace outcome; the default is a plain
+// stderr line for the API-key / OAuth paths. The clack-driven signup flow
+// passes its own so the line keeps the prompt gutter alignment.
+export async function selectWorkspace(
+  config: Config,
+  user: WhoamiResult,
+  announce: (ws: WorkspaceItem) => void = (ws) => process.stderr.write(`Using workspace ${ws.name} (${ws.id})\n`)
+): Promise<string | undefined> {
   const spinner = new Spinner('Finding your workspaces…');
   spinner.start();
   try {
@@ -84,7 +92,7 @@ export async function selectWorkspace(config: Config, user: WhoamiResult): Promi
     }
     if (list.items.length === 1) {
       const ws = list.items[0]!;
-      process.stderr.write(`Using workspace ${ws.name} (${ws.id})\n`);
+      announce(ws);
       return ws.id;
     }
     if (!isInteractive(config.nonInteractive)) {
@@ -119,6 +127,19 @@ async function apiKeyLogin(config: Config, key: string): Promise<void> {
     api_key: key,
     ...(wsId ? { workspace_id: wsId } : {}),
   });
+
+  // An API-key login never touches the console, so nothing upstream carried the
+  // installer's run id: bind it here with the key itself, not the resolver's
+  // pick (stored OAuth credentials would win there). Best effort — the sign-in
+  // already succeeded, and attribution must never fail it.
+  const runId = resolveOnboardingRunId();
+  if (runId) {
+    try {
+      await bindOnboardingRun(configWithKey, runId, key);
+    } catch {
+      // non-fatal
+    }
+  }
 
   outro(`API key saved to ~/.polylane/config.json`);
 }

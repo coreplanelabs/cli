@@ -5,6 +5,7 @@ import { loadConfig } from './config/loader';
 import { handleError } from './errors/handler';
 import { CLIError, isCLIError } from './errors/base';
 import { ExitCode } from './errors/codes';
+import { settledExitCode } from './exit-code';
 import { registerAllCommands } from './commands';
 import {
   registry,
@@ -23,6 +24,7 @@ const NO_AUTH_COMMANDS = new Set([
   'auth logout',
   'auth status',
   'auth signup',
+  'auth bind-run',
   'config show',
   'config set',
   'telemetry status',
@@ -160,6 +162,10 @@ async function run(): Promise<void> {
       }
     }
     await command.execute(config, globalFlags, args);
+    // Commands that finish without throwing but still failed (a browser wait
+    // that timed out) flag it on process.exitCode; a hard exit(0) here used to
+    // discard it.
+    const exitCode = settledExitCode();
     if (!isTelemetryCommand) {
       await dispatch(
         config,
@@ -168,14 +174,14 @@ async function run(): Promise<void> {
           command: command.name,
           flags: flagNames,
           positionalArgCount: positional.length,
-          exitCode: ExitCode.SUCCESS,
+          exitCode,
           durationMs: Date.now() - started,
           credential,
           error: null,
         })
       );
     }
-    process.exit(0);
+    process.exit(exitCode);
   } catch (err) {
     const { exitCode, category, rawMessage } = classifyError(err);
     if (!isTelemetryCommand) {

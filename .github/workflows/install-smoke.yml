@@ -6,14 +6,22 @@
 # 15 minutes while all stubbed test suites stayed green, because only a real
 # download exercises that contract (RCA:
 # https://github.com/coreplanelabs/polylanedotcom/pull/176). release.yml calls
-# this right after publishing, so a release that breaks the installer alerts
-# within minutes instead of at polylanedotcom's daily install-bytes cron (the
-# backstop, which runs the same real-install legs).
+# this right after publishing, so a release that breaks the installer surfaces
+# within minutes as a red check on the release run, instead of only at
+# polylanedotcom's daily install-bytes cron.
 #
-# Note the trigger is workflow_call from release.yml, NOT `on: release` — the
-# release is created with the default GITHUB_TOKEN, and events caused by that
-# token never trigger other workflows. workflow_dispatch exists to smoke any
-# version on demand and to validate the Slack alert path (test_alert).
+# No Slack alerting here, deliberately. This repository is public/OSS, and
+# posting to #polylane-notifications requires the SLACK_REPORTER_TOKEN in the
+# 1Password "Prod" environment; giving this repo's CI service account access
+# to Prod would expose the whole prod secret set to a public repo. So a broken
+# release surfaces as a FAILED (red) install-smoke run on the release — visible
+# to whoever cut it — and the *paging* to Slack lives in polylanedotcom's
+# private install-bytes workflow, which runs the same real-install legs daily
+# and already holds Prod access. Detection here; paging in the private backstop.
+#
+# Trigger is workflow_call from release.yml, NOT `on: release` — the release is
+# created with the default GITHUB_TOKEN, and events caused by that token never
+# trigger other workflows. workflow_dispatch smokes any version on demand.
 name: install-smoke
 
 on:
@@ -31,20 +39,6 @@ on:
         required: false
         type: string
         default: ""
-      test_alert:
-        description: Post the failure alert even on success, to validate the alert path
-        type: boolean
-        default: false
-
-env:
-  # Nominal's prod 1Password environment; supplies SLACK_REPORTER_TOKEN for
-  # the failure alert — the same environment polylanedotcom's install-bytes
-  # workflow posts through. Requires this repo's OP service account to have
-  # access to that environment; validate with a test_alert dispatch.
-  SECRETS_ENVIRONMENT_ID: 4r6j7zk3wmoppaotpeds6xg63m
-  ONEPASSWORD_CLI_VERSION: 2.38.0-beta.01
-  # sha256 of the pinned op zip above; bump both together.
-  ONEPASSWORD_CLI_SHA256: ab5617d23cf99f5df5fef983c0d1c1f9b3421c28d0c5764863350365d4315857
 
 jobs:
   smoke:
@@ -61,7 +55,6 @@ jobs:
           node-version: 20.x
 
       - name: Fetch the production installer
-        id: fetch
         run: curl -fsSL --retry 3 --connect-timeout 10 -m 60 https://polylane.com/install -o /tmp/install.sh
 
       # Fresh HOME, no PATH or shell-config mutation, no telemetry, agent
@@ -70,7 +63,6 @@ jobs:
       # flow (download, verify, install, version check) ran against the real
       # release assets.
       - name: Real install (GitHub API digest verification path)
-        id: install
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -89,7 +81,6 @@ jobs:
       # from this release's checksums.txt asset. Guards both the installer's
       # fallback path and this release actually shipping the asset.
       - name: Real install with the GitHub API blocked (checksums.txt fallback)
-        id: fallback
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -105,49 +96,3 @@ jobs:
           printf '%s\n' "$OUT"
           printf '%s\n' "$OUT" | grep -qF "sha256 verified" || { echo "::error::fallback install: no 'sha256 verified' (checksums.txt missing from the release or fallback path broken)"; exit 1; }
           printf '%s\n' "$OUT" | grep -qF "installed $TH/.polylane/bin/polylane" || { echo "::error::fallback install: binary was not installed"; exit 1; }
-
-      - name: Install 1Password CLI (beta — Environments support)
-        if: failure() || inputs.test_alert
-        run: |
-          set -euo pipefail
-          curl -sSfLo /tmp/op.zip --retry 3 --connect-timeout 10 \
-            "https://cache.agilebits.com/dist/1P/op2/pkg/v${ONEPASSWORD_CLI_VERSION}/op_linux_amd64_v${ONEPASSWORD_CLI_VERSION}.zip"
-          # Pinned checksum: this binary receives a service-account token, so
-          # it is never installed unverified. Version bumps update both envs.
-          echo "${ONEPASSWORD_CLI_SHA256}  /tmp/op.zip" | sha256sum -c -
-          unzip -oq /tmp/op.zip -d /tmp/op-cli
-          sudo install -m 0755 /tmp/op-cli/op /usr/local/bin/op
-
-      - name: Alert the internal channel
-        if: failure() || inputs.test_alert
-        env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          TEST_ALERT: ${{ inputs.test_alert }}
-          VERSION_LABEL: ${{ inputs.version || 'latest' }}
-          FETCH_OUTCOME: ${{ steps.fetch.outcome }}
-          INSTALL_OUTCOME: ${{ steps.install.outcome }}
-          FALLBACK_OUTCOME: ${{ steps.fallback.outcome }}
-        run: |
-          set -euo pipefail
-          # Real failures before the test flag; the test all-clear requires
-          # the final smoke step's success so a setup failure (outcomes
-          # "skipped", not "failure") can't post it.
-          if [ "$FETCH_OUTCOME" = "failure" ]; then
-            text=":rotating_light: cli install-smoke (${VERSION_LABEL}): fetching polylane.com/install failed — the installer endpoint itself is unreachable. Check the polylane.com deployment. Run: ${RUN_URL}"
-          elif [ "$INSTALL_OUTCOME" = "failure" ]; then
-            text=":rotating_light: cli install-smoke: release ${VERSION_LABEL} FAILED a real install through polylane.com/install. The release likely broke the release<->installer contract (asset or digest shape; last time: https://github.com/coreplanelabs/polylanedotcom/pull/176). Fastest mitigations: fix/re-upload the offending asset on the release, or cut a corrected release. The run log carries the full installer output. Run: ${RUN_URL}"
-          elif [ "$FALLBACK_OUTCOME" = "failure" ]; then
-            text=":rotating_light: cli install-smoke: release ${VERSION_LABEL} installs via the GitHub API digest but FAILED the API-blocked leg — checksums.txt is missing from the release or doesn't match polylane.mjs, so rate-limited users can't install. Check: curl -fsSL https://github.com/coreplanelabs/cli/releases/download/v${VERSION_LABEL#v}/checksums.txt. Run: ${RUN_URL}"
-          elif [ "$TEST_ALERT" = "true" ] && [ "$FALLBACK_OUTCOME" = "success" ]; then
-            text=":white_check_mark: cli install-smoke alert-path test: deliberate post to verify Slack delivery. Real install of ${VERSION_LABEL} through polylane.com/install passed on both the API-digest and checksums.txt paths; no action needed. Run: ${RUN_URL}"
-          else
-            text=":rotating_light: cli install-smoke (${VERSION_LABEL}): a setup step failed before the install checks ran, so the release was not smoke-tested. See the run log: ${RUN_URL}"
-          fi
-          SMOKE_ALERT_PAYLOAD=$(jq -cn --arg text "$text" '{channel: "polylane-notifications", text: $text}')
-          export SMOKE_ALERT_PAYLOAD
-          # --no-masking: see polylanedotcom's install-bytes.yml — op run
-          # otherwise conceals response substrings that coincide with env
-          # values, breaking the ok-check while the post itself succeeds.
-          response=$(op run --no-masking --environment "$SECRETS_ENVIRONMENT_ID" -- sh -c 'curl -sS -X POST https://slack.com/api/chat.postMessage -H "Authorization: Bearer $SLACK_REPORTER_TOKEN" -H "content-type: application/json" -d "$SMOKE_ALERT_PAYLOAD"')
-          echo "$response" | grep -q '"ok":true' || { echo "slack post failed: $response"; exit 1; }

@@ -18,10 +18,10 @@ import {
   detectedAgents,
   detectedAgentIds,
   SKILLS_SH_IDS,
-  setupCommand,
   MCP_SERVER_NAME,
   MCP_SERVER_URL,
-} from '../src/commands/setup';
+} from '../src/agents/registry';
+import { setupCommand } from '../src/commands/setup';
 import { SKILL_MD } from '../src/generated/skill';
 
 let tempDir: string;

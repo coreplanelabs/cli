@@ -69,8 +69,28 @@ const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> 
 ];
 
 // Same region list the console offers; the flag accepts any region so accounts
-// in regions not listed here are not locked out.
+// in regions not listed here are not locked out. The API takes a list, or null
+// for every region enabled on the account (including regions enabled later).
+const AWS_ALL_REGIONS = 'all';
+
+export function parseAwsRegions(value: string): string[] | null {
+  const regions = value
+    .split(',')
+    .map((r) => r.trim())
+    .filter((r) => r.length > 0);
+  const hint = 'Pass one or more AWS regions (e.g. --region us-east-1,eu-west-1) or --region all';
+  if (regions.length === 0) {
+    throw new CLIError(`Invalid value for --region: "${value}"`, ExitCode.USAGE, hint);
+  }
+  const all = regions.some((r) => r.toLowerCase() === AWS_ALL_REGIONS);
+  if (all && regions.length > 1) {
+    throw new CLIError(`Invalid value for --region: "${value}" mixes "all" with specific regions`, ExitCode.USAGE, hint);
+  }
+  return all ? null : regions;
+}
+
 const AWS_REGIONS = [
+  { value: AWS_ALL_REGIONS, label: 'All regions (every region enabled on the account, now and later)' },
   { value: 'us-east-1', label: 'us-east-1 (N. Virginia)' },
   { value: 'us-east-2', label: 'us-east-2 (Ohio)' },
   { value: 'us-west-1', label: 'us-west-1 (N. California)' },
@@ -88,11 +108,22 @@ const AWS_REGIONS = [
 ];
 
 // A completed handoff is only counted as connected when the account actually
-// showed up — a timed-out wait must not look like a success to the caller's
-// exit code. 'pending' is the background AWS path only: the stack launch went
-// through and polling continues invisibly, so the command exits clean after
+// showed up — neither a timed-out wait nor a stack that is still creating may
+// look like a success to the caller's exit code. 'pending' is the background
+// AWS path only: the stack launch went through but the account has not
+// arrived by the time the session ends, so the command exits PENDING after
 // telling the user how to check.
-export type ConnectOutcome = 'connected' | 'timeout' | 'pending';
+export type HandoffOutcome = 'connected' | 'timeout';
+export type ConnectOutcome = HandoffOutcome | 'pending';
+
+export function connectExitCode(
+  outcome: HandoffOutcome | null,
+  awsOutcome: Extract<ConnectOutcome, 'connected' | 'pending'> | null
+): ExitCode {
+  if (outcome === 'timeout') return ExitCode.GENERAL;
+  if (awsOutcome === 'pending') return ExitCode.PENDING;
+  return ExitCode.SUCCESS;
+}
 
 export interface AccountBaseline {
   existing: CloudAccount[];
@@ -133,7 +164,7 @@ async function confirmBrowserConnect(
   check: (() => Promise<CloudAccount[] | null>) | null,
   label: string,
   opts: { startHint?: string; timeoutMs?: number; intervalMs?: number } = {}
-): Promise<ConnectOutcome> {
+): Promise<HandoffOutcome> {
   if (!check) {
     if (!config.quiet && config.output !== 'json') {
       process.stderr.write('\nAfter finishing in the browser, check with `polylane cloud list`.\n');
@@ -165,9 +196,10 @@ const AWS_SETTLE_TIMEOUT_MS = 2 * 60_000;
 const AWS_CHECK_HINT = 'Check with `polylane cloud list`.';
 const AWS_STILL_CONNECTING =
   'AWS is still connecting — the CloudFormation stack has not shown up yet.\n' +
-  'Check later with `polylane cloud list`. If the stack failed or rolled back,\n' +
-  'your AWS CloudFormation console shows the reason; fix it and re-run\n' +
-  '`polylane cloud connect --provider aws`.';
+  'Check later with `polylane cloud list`; the account appears there once the\n' +
+  'stack finishes creating. If the stack failed or rolled back, your AWS\n' +
+  'CloudFormation console shows the reason; fix it and re-run\n' +
+  '`polylane cloud connect --provider aws`. Exiting 7 (pending) until then.';
 
 export interface AwsStackWait {
   pending: () => boolean;
@@ -315,7 +347,7 @@ async function browserConnect(
   label: string,
   noBrowser: boolean,
   reconnect: boolean
-): Promise<ConnectOutcome> {
+): Promise<HandoffOutcome> {
   const baseline = config.dryRun ? null : await accountBaseline(api, workspaceId, provider);
   if (baseline && !reconnect && baseline.existing.length > 0) {
     printAlreadyConnected(config, name, baseline.existing);
@@ -406,7 +438,7 @@ async function connectProvider(
   provider: Provider,
   noBrowser: boolean,
   background: boolean
-): Promise<typeof BACK | ConnectOutcome | AwsStackWait> {
+): Promise<typeof BACK | HandoffOutcome | AwsStackWait> {
   const ctx = { nonInteractive: config.nonInteractive };
   const reconnect = getArgBoolean(args, 'reconnect') === true;
 
@@ -518,14 +550,14 @@ async function connectProvider(
       return 'connected';
     }
     let account = '';
-    let region = '';
+    let regions: string[] | null = null;
     let subscribeToAlarms = getArgBoolean(args, 'subscribeAlarms') === true;
     const ok = await runSteps([
       textStep(config, args, 'account', 'AWS account ID (12 digits)', '--account', (v) => {
         account = v;
       }),
-      choiceStep(config, args, 'region', '--region', 'AWS region', AWS_REGIONS, (v) => {
-        region = v;
+      choiceStep(config, args, 'region', '--region', 'AWS regions to scan', AWS_REGIONS, (v) => {
+        regions = parseAwsRegions(v);
       }),
       async () => {
         if (
@@ -551,7 +583,7 @@ async function connectProvider(
       workspaceId,
       provider: 'aws',
       account,
-      region,
+      regions,
       ...(createMonitoringAlarms ? { createMonitoringAlarms } : {}),
       ...(subscribeToAlarms ? { subscribeToAlarms } : {}),
     };
@@ -783,7 +815,7 @@ export const cloudConnectCommand: Command = {
     },
     // AWS
     { flag: '--account <id>', description: 'AWS 12-digit account ID', type: 'string' },
-    { flag: '--region <region>', description: 'AWS region (e.g. us-east-1)', type: 'string' },
+    { flag: '--region <regions>', description: 'AWS regions to scan, comma-separated (e.g. us-east-1,eu-west-1), or "all" for every enabled region', type: 'string' },
     { flag: '--create-alarms', description: 'AWS: create monitoring alarms', type: 'boolean' },
     { flag: '--subscribe-alarms', description: 'AWS: subscribe to existing CloudWatch alarms', type: 'boolean' },
     // Cloudflare / Fly / Railway / PlanetScale / Convex / Turso
@@ -811,7 +843,8 @@ export const cloudConnectCommand: Command = {
     'polylane cloud connect --provider vercel',
     'polylane cloud connect --provider vercel --reconnect',
     'polylane cloud connect --provider cloudflare --token <token>',
-    'polylane cloud connect --provider aws --account 123456789012 --region us-east-1 --subscribe-alarms',
+    'polylane cloud connect --provider aws --account 123456789012 --region us-east-1,eu-west-1 --subscribe-alarms',
+    'polylane cloud connect --provider aws --account 123456789012 --region all',
     'polylane cloud connect --provider render --api-key <key>',
     'polylane cloud connect --provider railway --token <token>',
     'polylane cloud connect --provider supabase',
@@ -870,12 +903,12 @@ export const cloudConnectCommand: Command = {
         awsWait = outcome;
         continue;
       }
-      if (awsWait) await awsWait.settle();
-      if (outcome === 'timeout') process.exitCode = ExitCode.GENERAL;
+      const awsOutcome = awsWait ? await awsWait.settle() : null;
+      process.exitCode = connectExitCode(outcome, awsOutcome);
       return;
     }
     if (awsWait) {
-      await awsWait.settle();
+      process.exitCode = connectExitCode(null, await awsWait.settle());
       return;
     }
     cancel('Nothing connected.');
