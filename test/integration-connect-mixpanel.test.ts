@@ -4,6 +4,7 @@ import {
   MIXPANEL_REGIONS,
   mixpanelServiceAccountsUrl,
   parseMixpanelProjectId,
+  parseMixpanelRegion,
 } from '../src/commands/integration/connect';
 import { isCLIError, CLIError } from '../src/errors/base';
 import { ExitCode } from '../src/errors/codes';
@@ -37,12 +38,9 @@ describe('parseMixpanelProjectId', () => {
     '   ',
     'Infinity',
     'NaN',
-    '9007199254740992',
-    '9007199254740993',
-    '12345678901234567890',
   ];
   for (const input of rejected) {
-    it(`rejects "${input}" with a usage error`, () => {
+    it(`rejects "${input}" with the positive-integer usage error`, () => {
       try {
         parseMixpanelProjectId(input, '--project-id');
         assert.fail('expected a CLIError');
@@ -51,6 +49,48 @@ describe('parseMixpanelProjectId', () => {
         assert.equal((err as CLIError).exitCode, ExitCode.USAGE);
         assert.match((err as Error).message, /Invalid value for --project-id/);
         assert.ok((err as CLIError).hint?.includes('mixpanel.com/project/<id>'));
+        assert.match((err as CLIError).hint ?? '', /Pass the numeric project ID/);
+        assert.ok(!((err as CLIError).hint ?? '').includes('maximum safe integer'));
+      }
+    });
+  }
+
+  // These ARE positive integers, so the rejection must name the real reason
+  // (past Number.MAX_SAFE_INTEGER) instead of "a positive integer".
+  const tooLarge = ['9007199254740992', '9007199254740993', '12345678901234567890'];
+  for (const input of tooLarge) {
+    it(`rejects "${input}" naming the too-large reason`, () => {
+      try {
+        parseMixpanelProjectId(input, '--project-id');
+        assert.fail('expected a CLIError');
+      } catch (err) {
+        assert.ok(isCLIError(err));
+        assert.equal((err as CLIError).exitCode, ExitCode.USAGE);
+        assert.match((err as Error).message, /Invalid value for --project-id/);
+        assert.ok((err as CLIError).hint?.includes('mixpanel.com/project/<id>'));
+        assert.match((err as CLIError).hint ?? '', /maximum safe integer \(9007199254740991\)/);
+      }
+    });
+  }
+});
+
+describe('parseMixpanelRegion', () => {
+  for (const region of ['us', 'eu', 'in'] as const) {
+    it(`accepts "${region}"`, () => {
+      assert.equal(parseMixpanelRegion(region), region);
+    });
+  }
+
+  for (const input of ['xx', 'europe', '', 'US', ' us ']) {
+    it(`rejects "${input}" with a usage error listing the regions`, () => {
+      try {
+        parseMixpanelRegion(input);
+        assert.fail('expected a CLIError');
+      } catch (err) {
+        assert.ok(isCLIError(err));
+        assert.equal((err as CLIError).exitCode, ExitCode.USAGE);
+        assert.match((err as Error).message, /Invalid value for --region/);
+        assert.equal((err as CLIError).hint, 'Use one of: us, eu, in');
       }
     });
   }

@@ -691,7 +691,13 @@ async function connectProvider(
         if (railwayWorkspaceFlag !== undefined || !isInteractive(config.nonInteractive)) return SKIPPED;
         const picked = await promptTextOrBack(
           { nonInteractive: config.nonInteractive },
-          'Railway workspace ID to connect (leave empty to connect every workspace the token can reach)'
+          'Railway workspace ID to connect (leave empty to connect every workspace the token can reach)',
+          // clack's text prompt resolves to undefined on an empty submit unless
+          // a defaultValue is given, and empty is the documented "connect every
+          // workspace" answer here — make it an actual empty string. The
+          // placeholder doubles as the submitted-frame rendering of that empty
+          // answer (clack falls back to it, printing "undefined" otherwise).
+          { defaultValue: '', placeholder: 'connect every workspace' }
         );
         if (picked === BACK) return BACK;
         railwayWorkspaceId = picked.trim() === '' ? undefined : picked.trim();

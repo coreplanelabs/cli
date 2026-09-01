@@ -137,9 +137,35 @@ export const MIXPANEL_REGIONS = [
   { value: 'in', label: 'India (in.mixpanel.com)' },
 ] as const;
 
+export type MixpanelRegion = (typeof MIXPANEL_REGIONS)[number]['value'];
+
+// The API only accepts these three data-residency values, so a typo'd
+// --region must error instead of going on the wire. The wizard's region step
+// parses the flag with this, and the unit tests pin the rejection, so the
+// strictness cannot be dropped unnoticed.
+export function parseMixpanelRegion(value: string): MixpanelRegion {
+  const match = MIXPANEL_REGIONS.find((r) => r.value === value);
+  if (match === undefined) {
+    throw new CLIError(
+      `Invalid value for --region: "${value}"`,
+      ExitCode.USAGE,
+      `Use one of: ${MIXPANEL_REGIONS.map((r) => r.value).join(', ')}`
+    );
+  }
+  return match.value;
+}
+
 export function mixpanelServiceAccountsUrl(region: 'us' | 'eu' | 'in'): string {
   const host = region === 'us' ? 'mixpanel.com' : `${region}.mixpanel.com`;
   return `https://${host}/settings/org#serviceaccounts`;
+}
+
+// A digits-only value past Number.MAX_SAFE_INTEGER is a positive integer, so
+// rejecting it as "not a positive integer" would name the wrong reason — this
+// distinguishes the too-large case so both rejection surfaces can say why.
+function isTooLargeMixpanelProjectId(value: string): boolean {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return /^\d+$/.test(trimmed) && Number(trimmed) > Number.MAX_SAFE_INTEGER;
 }
 
 // The console discovers the accessible projects after validating the service
@@ -156,7 +182,9 @@ export function parseMixpanelProjectId(value: string, flag: string): number {
     throw new CLIError(
       `Invalid value for ${flag}: "${value}"`,
       ExitCode.USAGE,
-      'Pass the numeric project ID from your Mixpanel project URL (mixpanel.com/project/<id>) or from Project Settings > Overview.'
+      isTooLargeMixpanelProjectId(value)
+        ? `The ID exceeds the maximum safe integer (${Number.MAX_SAFE_INTEGER}), so it would be silently rounded to a different project; it is refused instead. Copy the ID exactly from your Mixpanel project URL (mixpanel.com/project/<id>).`
+        : 'Pass the numeric project ID from your Mixpanel project URL (mixpanel.com/project/<id>) or from Project Settings > Overview.'
     );
   }
   return parsed;
@@ -167,7 +195,9 @@ function validateMixpanelProjectId(value: string): string | undefined {
     parseMixpanelProjectId(value, '--project-id');
     return undefined;
   } catch {
-    return 'Enter the numeric project ID (a positive integer)';
+    return isTooLargeMixpanelProjectId(value)
+      ? `That ID is too large: it exceeds the maximum safe integer (${Number.MAX_SAFE_INTEGER})`
+      : 'Enter the numeric project ID (a positive integer)';
   }
 }
 
@@ -788,18 +818,27 @@ async function connectWithCredentials(
     let serviceAccountSecret = '';
     let projectId = 0;
     const ok = await runSteps([
-      choiceStep<'us' | 'eu' | 'in'>(
-        config,
-        args,
-        'region',
-        '--region',
-        'Mixpanel data residency region: the one in your Mixpanel URL',
-        [...MIXPANEL_REGIONS],
-        (v) => {
-          region = v;
-        },
-        { strict: true }
-      ),
+      // Shaped like choiceStep with { strict: true }, but the flag goes
+      // through the exported parseMixpanelRegion so the strictness is pinned
+      // by a unit test (the select prompt can only produce listed values).
+      async () => {
+        const fromFlag = getArgString(args, 'region');
+        if (fromFlag !== undefined) {
+          region = parseMixpanelRegion(fromFlag);
+          return SKIPPED;
+        }
+        if (!isInteractive(config.nonInteractive)) {
+          throw new CLIError('Missing required flag: --region', ExitCode.USAGE);
+        }
+        const value = await promptSelectOrBack<MixpanelRegion>(
+          ctx,
+          'Mixpanel data residency region: the one in your Mixpanel URL',
+          [...MIXPANEL_REGIONS]
+        );
+        if (value === BACK) return BACK;
+        region = value;
+        return;
+      },
       async () => {
         // Same emptiness guard as textStep: an empty --service-account-username
         // falls through to the prompt (or the missing-flag error) instead of
@@ -820,7 +859,11 @@ async function connectWithCredentials(
           'In Mixpanel, go to Organization Settings > Service Accounts and create a service account. Give it the Admin role on the project so agents can also create annotations; the Consumer role works for read-only queries. The secret is shown only once.',
           'Mixpanel service account'
         );
-        const value = await promptTextOrBack(ctx, 'Service account username');
+        const value = await promptTextOrBack(ctx, 'Service account username', {
+          // The spec requires minLength 1; without a validate an empty submit
+          // resolves to undefined and JSON.stringify would drop the field.
+          validate: (v: string) => (v && v.trim().length > 0 ? undefined : 'Required'),
+        });
         if (value === BACK) return BACK;
         serviceAccountUsername = value;
         return;
