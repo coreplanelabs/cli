@@ -34,7 +34,7 @@ export const workspaceCreateCommand: Command = {
       'By creating a workspace you accept the Polylane Terms of Service: https://polylane.com/terms/\n',
     );
 
-    const body: CreateWorkspaceBody = { name };
+    const body: CreateWorkspaceBody = { name, acceptTerms: true };
     if (description !== undefined) body.description = description;
     if (slug !== undefined) body.slug = slug;
 
