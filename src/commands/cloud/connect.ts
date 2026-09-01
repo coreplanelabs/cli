@@ -52,7 +52,7 @@ type Provider =
   | 'turso'
   | 'kubernetes';
 
-const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> = [
+export const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> = [
   { value: 'aws', label: 'AWS', hint: 'deploys a read-only CloudFormation stack (browser)' },
   { value: 'cloudflare', label: 'Cloudflare', hint: 'read-only API token' },
   { value: 'vercel', label: 'Vercel', hint: 'install the Vercel integration (browser)' },
@@ -269,6 +269,18 @@ function printConnectSuccess(config: Config, result: ConnectResult): void {
   for (const failure of result.failures) {
     process.stderr.write(`Couldn't connect ${failure.account}: ${failure.message}\n`);
   }
+}
+
+// Explicitly typed literals (no conditional spread) so a misspelled
+// railwayWorkspaceId is a TS2561 instead of a silently dropped narrowing.
+export function buildRailwayConnectBody(
+  workspaceId: string,
+  token: string,
+  railwayWorkspaceId?: string
+): Extract<ConnectBody, { provider: 'railway' }> {
+  return railwayWorkspaceId === undefined
+    ? { workspaceId, provider: 'railway', token }
+    : { workspaceId, provider: 'railway', token, railwayWorkspaceId };
 }
 
 const TURSO_ORGANIZATION_HINT =
@@ -646,10 +658,18 @@ async function connectProvider(
     if (!ok) return BACK;
     body = { workspaceId, provider: 'render', apiKey };
   } else if (provider === 'railway') {
-    // The console connects Railway via OAuth, but that flow is console-only
-    // (hidden generate route + console callback), so the CLI takes the token
-    // path the same API accepts.
+    // The console connects Railway via OAuth; the CLI takes the token path
+    // the same API accepts, mirroring the Fly branch.
+    const railwayWorkspaceFlag = getArgString(args, 'railwayWorkspace');
+    if (railwayWorkspaceFlag !== undefined && railwayWorkspaceFlag.trim().length === 0) {
+      throw new CLIError(
+        'Invalid value for --railway-workspace: ""',
+        ExitCode.USAGE,
+        'Pass the Railway workspace ID to connect only that workspace, or omit the flag to connect every workspace the token can reach.'
+      );
+    }
     let token = '';
+    let railwayWorkspaceId = railwayWorkspaceFlag?.trim();
     const ok = await runSteps([
       secretStep(
         config,
@@ -659,7 +679,7 @@ async function connectProvider(
         {
           message: 'Railway token',
           instructions:
-            'In Railway, open Account Settings > Tokens and create a token. Select your workspace to scope the token to it, or leave it unscoped for an account token that covers every workspace you can access. Railway tokens have no permission options. Polylane connects every workspace the token can reach (narrow it with --railway-workspace).',
+            'In Railway, open Account Settings > Tokens and create a token. Select your workspace to scope the token to it, or leave it unscoped for an account token that covers every workspace you can access. Railway tokens have no permission options. Polylane connects every workspace the token can reach; the next step (or --railway-workspace) narrows it to one.',
           link: 'https://railway.com/account/tokens',
           linkLabel: 'Create Railway token',
         },
@@ -667,10 +687,19 @@ async function connectProvider(
           token = v;
         }
       ),
+      async () => {
+        if (railwayWorkspaceFlag !== undefined || !isInteractive(config.nonInteractive)) return SKIPPED;
+        const picked = await promptTextOrBack(
+          { nonInteractive: config.nonInteractive },
+          'Railway workspace ID to connect (leave empty to connect every workspace the token can reach)'
+        );
+        if (picked === BACK) return BACK;
+        railwayWorkspaceId = picked.trim() === '' ? undefined : picked.trim();
+        return;
+      },
     ]);
     if (!ok) return BACK;
-    const railwayWorkspaceId = getArgString(args, 'railwayWorkspace');
-    body = { workspaceId, provider: 'railway', token, ...(railwayWorkspaceId ? { railwayWorkspaceId } : {}) };
+    body = buildRailwayConnectBody(workspaceId, token, railwayWorkspaceId);
   } else if (provider === 'convex') {
     let token = '';
     const ok = await runSteps([

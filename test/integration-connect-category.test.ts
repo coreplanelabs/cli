@@ -33,6 +33,18 @@ describe('typeOptionsForCategory', () => {
     assert.deepEqual(types, ['linear']);
   });
 
+  it('describes the openstatus and mixpanel entries fully', () => {
+    const all = typeOptionsForCategory(undefined);
+    assert.deepEqual(
+      all.find((o) => o.value === 'openstatus'),
+      { value: 'openstatus', label: 'OpenStatus', hint: 'workspace API key', category: 'observability' }
+    );
+    assert.deepEqual(
+      all.find((o) => o.value === 'mixpanel'),
+      { value: 'mixpanel', label: 'Mixpanel', hint: 'service account + project ID', category: 'product-analytics' }
+    );
+  });
+
   it('covers every option with a known category', () => {
     for (const category of CONNECT_CATEGORIES) {
       assert.ok(typeOptionsForCategory(category).length > 0, `empty category: ${category}`);

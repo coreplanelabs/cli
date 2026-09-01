@@ -131,23 +131,28 @@ function datadogConsoleUrl(site: string): string {
 
 // Same region list the console offers, strict because the API only accepts
 // these three data-residency values.
-const MIXPANEL_REGIONS = [
+export const MIXPANEL_REGIONS = [
   { value: 'us', label: 'US (mixpanel.com)' },
   { value: 'eu', label: 'EU (eu.mixpanel.com)' },
   { value: 'in', label: 'India (in.mixpanel.com)' },
 ] as const;
 
-function mixpanelServiceAccountsUrl(region: 'us' | 'eu' | 'in'): string {
+export function mixpanelServiceAccountsUrl(region: 'us' | 'eu' | 'in'): string {
   const host = region === 'us' ? 'mixpanel.com' : `${region}.mixpanel.com`;
   return `https://${host}/settings/org#serviceaccounts`;
 }
 
 // The console discovers the accessible projects after validating the service
 // account, but that route is console-only, so the CLI asks for the numeric
-// project ID directly. One integration per project.
-function parseMixpanelProjectId(value: string, flag: string): number {
-  const parsed = Number(value.trim());
-  if (!Number.isInteger(parsed) || parsed <= 0) {
+// project ID directly. One integration per project. Only decimal digits are
+// accepted (no 1e3 / 0x10 / 1.0), the ID must be >= 1, and anything past
+// Number.MAX_SAFE_INTEGER is refused instead of silently rounded to a
+// different project. The interactive prompt validates with this same function
+// so it can never accept a value the re-parse would throw on.
+export function parseMixpanelProjectId(value: string, flag: string): number {
+  const trimmed = value.trim();
+  const parsed = /^\d+$/.test(trimmed) ? Number(trimmed) : NaN;
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
     throw new CLIError(
       `Invalid value for ${flag}: "${value}"`,
       ExitCode.USAGE,
@@ -155,6 +160,15 @@ function parseMixpanelProjectId(value: string, flag: string): number {
     );
   }
   return parsed;
+}
+
+function validateMixpanelProjectId(value: string): string | undefined {
+  try {
+    parseMixpanelProjectId(value, '--project-id');
+    return undefined;
+  } catch {
+    return 'Enter the numeric project ID (a positive integer)';
+  }
 }
 
 // The backend detects the Axiom edge deployment region from the API token and
@@ -787,17 +801,23 @@ async function connectWithCredentials(
         { strict: true }
       ),
       async () => {
+        // Same emptiness guard as textStep: an empty --service-account-username
+        // falls through to the prompt (or the missing-flag error) instead of
+        // going on the wire against the spec's minLength: 1.
         const fromFlag = getArgString(args, 'serviceAccountUsername');
-        if (fromFlag !== undefined) {
+        if (fromFlag !== undefined && fromFlag.length > 0) {
           serviceAccountUsername = fromFlag;
           return SKIPPED;
         }
         if (!isInteractive(config.nonInteractive)) {
-          throw new CLIError('Missing required flag: --service-account-username', ExitCode.USAGE);
+          throw new CLIError(
+            'Missing required flag: --service-account-username',
+            ExitCode.USAGE,
+            `Create a service account in Mixpanel under Organization Settings > Service Accounts: ${mixpanelServiceAccountsUrl(region)}`
+          );
         }
         note(
-          'In Mixpanel, go to Organization Settings > Service Accounts and create a service account. Give it the Admin role on the project so agents can also create annotations; the Consumer role works for read-only queries. The secret is shown only once.\n\nOpen Mixpanel service accounts:\n  ' +
-            mixpanelServiceAccountsUrl(region),
+          'In Mixpanel, go to Organization Settings > Service Accounts and create a service account. Give it the Admin role on the project so agents can also create annotations; the Consumer role works for read-only queries. The secret is shown only once.',
           'Mixpanel service account'
         );
         const value = await promptTextOrBack(ctx, 'Service account username');
@@ -834,7 +854,7 @@ async function connectWithCredentials(
           );
         }
         const value = await promptTextOrBack(ctx, 'Mixpanel project ID (the number in your project URL: mixpanel.com/project/<id>)', {
-          validate: (v) => (/^\d+$/.test(v.trim()) ? undefined : 'Enter the numeric project ID'),
+          validate: validateMixpanelProjectId,
         });
         if (value === BACK) return BACK;
         projectId = parseMixpanelProjectId(value, '--project-id');
@@ -890,12 +910,7 @@ async function connectWithCredentials(
       ),
     ]);
     if (!ok) return BACK;
-    // grafana is not in the generated connect union yet: the client is built
-    // from the live prod spec, which gains the variant only when the matching
-    // API deploy lands. Same trust boundary as the honeycomb request-body
-    // spread; an API build that predates grafana rejects the type with a 400
-    // instead of connecting silently, so nothing needs a post-connect assertion.
-    body = { type: 'grafana', workspaceId, stackUrl, serviceAccountToken } as unknown as ConnectBody;
+    body = { type: 'grafana', workspaceId, stackUrl, serviceAccountToken };
   } else if (type === 'linear') {
     let apiKey = '';
     const ok = await runSteps([
