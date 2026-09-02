@@ -43,6 +43,7 @@ type Provider =
   | 'vercel'
   | 'fly'
   | 'render'
+  | 'railway'
   | 'planetscale'
   | 'supabase'
   | 'modal'
@@ -51,12 +52,13 @@ type Provider =
   | 'turso'
   | 'kubernetes';
 
-const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> = [
+export const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> = [
   { value: 'aws', label: 'AWS', hint: 'deploys a read-only CloudFormation stack (browser)' },
   { value: 'cloudflare', label: 'Cloudflare', hint: 'read-only API token' },
   { value: 'vercel', label: 'Vercel', hint: 'install the Vercel integration (browser)' },
   { value: 'fly', label: 'Fly.io', hint: 'API token' },
   { value: 'render', label: 'Render', hint: 'API key' },
+  { value: 'railway', label: 'Railway', hint: 'workspace or account token' },
   { value: 'planetscale', label: 'PlanetScale', hint: 'authorize in the browser, or a service token' },
   { value: 'supabase', label: 'Supabase', hint: 'authorize in the browser' },
   { value: 'modal', label: 'Modal', hint: 'token ID + secret' },
@@ -267,6 +269,18 @@ function printConnectSuccess(config: Config, result: ConnectResult): void {
   for (const failure of result.failures) {
     process.stderr.write(`Couldn't connect ${failure.account}: ${failure.message}\n`);
   }
+}
+
+// Explicitly typed literals (no conditional spread) so a misspelled
+// railwayWorkspaceId is a TS2561 instead of a silently dropped narrowing.
+export function buildRailwayConnectBody(
+  workspaceId: string,
+  token: string,
+  railwayWorkspaceId?: string
+): Extract<ConnectBody, { provider: 'railway' }> {
+  return railwayWorkspaceId === undefined
+    ? { workspaceId, provider: 'railway', token }
+    : { workspaceId, provider: 'railway', token, railwayWorkspaceId };
 }
 
 const TURSO_ORGANIZATION_HINT =
@@ -643,6 +657,55 @@ async function connectProvider(
     ]);
     if (!ok) return BACK;
     body = { workspaceId, provider: 'render', apiKey };
+  } else if (provider === 'railway') {
+    // The console connects Railway via OAuth; the CLI takes the token path
+    // the same API accepts, mirroring the Fly branch.
+    const railwayWorkspaceFlag = getArgString(args, 'railwayWorkspace');
+    if (railwayWorkspaceFlag !== undefined && railwayWorkspaceFlag.trim().length === 0) {
+      throw new CLIError(
+        'Invalid value for --railway-workspace: ""',
+        ExitCode.USAGE,
+        'Pass the Railway workspace ID to connect only that workspace, or omit the flag to connect every workspace the token can reach.'
+      );
+    }
+    let token = '';
+    let railwayWorkspaceId = railwayWorkspaceFlag?.trim();
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'token',
+        '--token',
+        {
+          message: 'Railway token',
+          instructions:
+            'In Railway, open Account Settings > Tokens and create a token. Select your workspace to scope the token to it, or leave it unscoped for an account token that covers every workspace you can access. Railway tokens have no permission options. Polylane connects every workspace the token can reach; the next step (or --railway-workspace) narrows it to one.',
+          link: 'https://railway.com/account/tokens',
+          linkLabel: 'Create Railway token',
+        },
+        (v) => {
+          token = v;
+        }
+      ),
+      async () => {
+        if (railwayWorkspaceFlag !== undefined || !isInteractive(config.nonInteractive)) return SKIPPED;
+        const picked = await promptTextOrBack(
+          { nonInteractive: config.nonInteractive },
+          'Railway workspace ID to connect (leave empty to connect every workspace the token can reach)',
+          // clack's text prompt resolves to undefined on an empty submit unless
+          // a defaultValue is given, and empty is the documented "connect every
+          // workspace" answer here — make it an actual empty string. The
+          // placeholder doubles as the submitted-frame rendering of that empty
+          // answer (clack falls back to it, printing "undefined" otherwise).
+          { defaultValue: '', placeholder: 'connect every workspace' }
+        );
+        if (picked === BACK) return BACK;
+        railwayWorkspaceId = picked.trim() === '' ? undefined : picked.trim();
+        return;
+      },
+    ]);
+    if (!ok) return BACK;
+    body = buildRailwayConnectBody(workspaceId, token, railwayWorkspaceId);
   } else if (provider === 'convex') {
     let token = '';
     const ok = await runSteps([
@@ -777,7 +840,7 @@ async function connectProvider(
 
 export const cloudConnectCommand: Command = {
   name: 'cloud connect',
-  description: 'Connect a cloud account (AWS, Cloudflare, Vercel, Fly.io, Render, PlanetScale, Supabase, Modal, Convex, ClickHouse, Turso, Kubernetes)',
+  description: 'Connect a cloud account (AWS, Cloudflare, Vercel, Fly.io, Render, Railway, PlanetScale, Supabase, Modal, Convex, ClickHouse, Turso, Kubernetes)',
   operationId: 'cloud_accounts.connect',
   options: [
     {
@@ -790,8 +853,9 @@ export const cloudConnectCommand: Command = {
     { flag: '--region <regions>', description: 'AWS regions to scan, comma-separated (e.g. us-east-1,eu-west-1), or "all" for every enabled region', type: 'string' },
     { flag: '--create-alarms', description: 'AWS: create monitoring alarms', type: 'boolean' },
     { flag: '--subscribe-alarms', description: 'AWS: subscribe to existing CloudWatch alarms', type: 'boolean' },
-    // Cloudflare / Fly / PlanetScale / Convex / Turso
-    { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, PlanetScale service token, Convex team access token, or Turso platform API token', type: 'string' },
+    // Cloudflare / Fly / Railway / PlanetScale / Convex / Turso
+    { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, Railway token, PlanetScale service token, Convex team access token, or Turso platform API token', type: 'string' },
+    { flag: '--railway-workspace <id>', description: 'Railway: connect only this Railway workspace ID (default: every workspace the token can reach)', type: 'string' },
     // Retired in 0.2.16: Cloudflare now always connects read-only, which is
     // what anyone passing this flag was asking for. Accepted and ignored for
     // one release so existing scripts do not start exiting 2 on an unknown
@@ -817,6 +881,7 @@ export const cloudConnectCommand: Command = {
     'polylane cloud connect --provider aws --account 123456789012 --region us-east-1,eu-west-1 --subscribe-alarms',
     'polylane cloud connect --provider aws --account 123456789012 --region all',
     'polylane cloud connect --provider render --api-key <key>',
+    'polylane cloud connect --provider railway --token <token>',
     'polylane cloud connect --provider supabase',
     'polylane cloud connect --provider planetscale --token-id <id> --token <token> --organization <org>',
     'polylane cloud connect --provider modal --token-id ak-... --token-secret as-...',
