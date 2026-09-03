@@ -150,6 +150,8 @@ polylane automation list
 
 `integration connect` and `cloud connect` dispatch on `--type` / `--provider`. Some options open a browser for an install URL; others take API credentials directly. Use `--help` on each to see the required flags and optional `--no-browser`. Browser flows wait in the terminal until the connection appears (interactive TTY only); with `--output json` or in non-interactive runs they print the URL and exit, so poll `integration list` / `cloud list` to confirm.
 
+`integration connect --type github` asks one question before opening GitHub: review pull requests for production impact on the repositories this connection brings in (default yes). Pass `--no-pr-reviews` to opt out, or `--pr-reviews` to answer yes, without the prompt; non-interactive runs without either flag keep the default. Each repository can be changed later in the console.
+
 ### Investigating an issue
 
 ```bash

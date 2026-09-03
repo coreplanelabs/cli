@@ -1,4 +1,5 @@
 import * as p from '@clack/prompts';
+import { createInterface } from 'node:readline';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
 import { isInteractive } from './env';
@@ -119,6 +120,34 @@ export async function promptConfirmOrBack(
     initialValue: defaultValue,
   });
   return p.isCancel(result) ? BACK : result;
+}
+
+// The installer's own question shape: `<question> [Y/n] `, Enter keeps the default, and only an
+// answer starting with n (or y, for a default-no question) flips it. Questions the CLI asks while
+// running inside install.sh use this so they read like the script's neighbouring lines.
+export function parseYesNo(answer: string, defaultYes: boolean): boolean {
+  const first = answer.trim().charAt(0).toLowerCase();
+  if (first === 'n') return false;
+  if (first === 'y') return true;
+  return defaultYes;
+}
+
+export async function promptYesNoOrBack(
+  ctx: PromptContext,
+  message: string,
+  defaultYes = true
+): Promise<boolean | typeof BACK> {
+  ensureInteractive(ctx, message);
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await new Promise<string | null>((resolve) => {
+      rl.once('close', () => resolve(null));
+      rl.question(`${message} ${defaultYes ? '[Y/n]' : '[y/N]'} `, resolve);
+    });
+    return answer === null ? BACK : parseYesNo(answer, defaultYes);
+  } finally {
+    rl.close();
+  }
 }
 
 export function intro(message: string): void {
