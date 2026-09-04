@@ -33,6 +33,7 @@ import {
   promptSelectOrBack,
   promptPasswordOrBack,
   promptTextOrBack,
+  promptYesNoOrBack,
 } from '../../utils/prompt';
 import { printSlackChannelsLater, runSlackChannelStep } from './slack-channels';
 
@@ -101,6 +102,49 @@ export function shouldOfferCodeAgent(
   interactive: boolean
 ): boolean {
   return category === 'code-agent' && !typeFromFlag && interactive;
+}
+
+// The one question the GitHub connect asks: review pull requests for production impact on
+// the repositories this connection brings in. A flag answers it without the prompt; an
+// interactive run asks (default yes); a non-interactive run without a flag sends nothing, so
+// the server keeps its default and records no answer.
+export type PrReviewsChoice = 'on' | 'off';
+
+export function prReviewsChoiceFromFlags(
+  args: Record<string, unknown>,
+  interactive: boolean
+): PrReviewsChoice | 'ask' | undefined {
+  if (getArgBoolean(args, 'noPrReviews') === true) return 'off';
+  if (getArgBoolean(args, 'prReviews') === true) return 'on';
+  return interactive ? 'ask' : undefined;
+}
+
+// The flags only mean something for GitHub; on any other type they are ignored with a warning
+// rather than an error, because the type may have been picked interactively after the flag.
+export function prReviewsFlagsGiven(args: Record<string, unknown>): boolean {
+  return getArgBoolean(args, 'noPrReviews') === true || getArgBoolean(args, 'prReviews') === true;
+}
+
+// The console's /cli/connect page carries the answer across the GitHub install round-trip
+// and hands it to the API, which records it on the integration before the repository sync.
+export function githubConnectUrl(config: Config, workspaceId: string, prReviews: PrReviewsChoice | undefined): string {
+  const url = cliConnectUrl(config, 'github', workspaceId);
+  return prReviews ? `${url}&pr_reviews=${prReviews}` : url;
+}
+
+// Asked in the installer's own `[Y/n]` shape, not a clack confirm: inside install.sh this line sits
+// between the script's "Connect GitHub? [Y/n]" and "Connect Slack? [Y/n]" and must read like them.
+async function askPrReviews(config: Config): Promise<PrReviewsChoice | typeof BACK> {
+  process.stdout.write(
+    'Polylane comments a pass or fail production-impact verdict on every pull request in the repositories you connect; change it per repository any time in the console.\n'
+  );
+  const keep = await promptYesNoOrBack(
+    { nonInteractive: config.nonInteractive },
+    'Review pull requests for production impact?',
+    true
+  );
+  if (keep === BACK) return BACK;
+  return keep ? 'on' : 'off';
 }
 
 // The category is validated even when --type wins, so a typo always errors
@@ -1041,7 +1085,20 @@ async function connectType(
       return 'connected';
     }
     const check = canWaitForBrowser(config) && baseline ? baseline.check : null;
-    await openOrPrintInstallUrl(config, cliConnectUrl(config, type, workspaceId), labels[type], noBrowser);
+    let url = cliConnectUrl(config, type, workspaceId);
+    if (type !== 'github' && prReviewsFlagsGiven(args) && config.output !== 'json') {
+      process.stderr.write('--pr-reviews / --no-pr-reviews only apply to --type github; ignored.\n');
+    }
+    if (type === 'github') {
+      let prReviews = prReviewsChoiceFromFlags(args, canWaitForBrowser(config));
+      if (prReviews === 'ask') {
+        const answer = await askPrReviews(config);
+        if (answer === BACK) return BACK;
+        prReviews = answer;
+      }
+      url = githubConnectUrl(config, workspaceId, prReviews);
+    }
+    await openOrPrintInstallUrl(config, url, labels[type], noBrowser);
     const outcome = await confirmBrowserConnect(config, check, names[type]);
     // The channel step needs the new integration's id; the browser wait already spotted the row,
     // so one more check() returns it without another wait.
@@ -1099,10 +1156,21 @@ export const integrationConnectCommand: Command = {
     { flag: '--scope <scope>', description: 'MCP OAuth scope', type: 'string' },
     { flag: '--no-browser', description: 'GitHub / Slack / Sentry / MCP OAuth: print the URL instead of opening it', type: 'boolean' },
     { flag: '--reconnect', description: 'GitHub / Slack / Sentry: run the connect flow even when the integration is already connected', type: 'boolean' },
+    {
+      flag: '--pr-reviews',
+      description: 'GitHub: review pull requests for production impact on the repositories this connection brings in (the default), without the prompt',
+      type: 'boolean',
+    },
+    {
+      flag: '--no-pr-reviews',
+      description: 'GitHub: do not review pull requests on the repositories this connection brings in; each repository can be changed later in the console',
+      type: 'boolean',
+    },
   ],
   examples: [
     'polylane integration connect',
     'polylane integration connect --type github',
+    'polylane integration connect --type github --no-pr-reviews',
     'polylane integration connect --type github --reconnect',
     'polylane integration connect --category observability',
     'polylane integration connect --category code-agent',
