@@ -49,6 +49,7 @@ type ConnectableType =
   | 'betterstack'
   | 'openstatus'
   | 'grafana'
+  | 'logfire'
   | 'mixpanel'
   | 'devin'
   | 'cursor'
@@ -73,6 +74,7 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'betterstack', label: 'Better Stack', hint: 'global, Uptime and Telemetry tokens', category: 'observability' },
   { value: 'openstatus', label: 'OpenStatus', hint: 'workspace API key', category: 'observability' },
   { value: 'grafana', label: 'Grafana Cloud', hint: 'stack URL + service account token', category: 'observability' },
+  { value: 'logfire', label: 'Logfire', hint: 'project + organization API keys', category: 'observability' },
   { value: 'mixpanel', label: 'Mixpanel', hint: 'service account + project ID', category: 'product-analytics' },
   { value: 'devin', label: 'Devin', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent', category: 'code-agent' },
@@ -618,6 +620,21 @@ export function assertHoneycombManagementKeyStored(
   );
 }
 
+const LOGFIRE_KEY_PAIR_HINT = 'Pass both --api-key (the project key) and --organization-api-key (the organization key).';
+
+// Logfire issues the query scope on a project key and the notification-channel
+// scope on an organization key, so a connect needs both. Both are trimmed here
+// so the flag and prompt paths behave identically on pasted values.
+export function logfireKeyFields(apiKey: string, organizationApiKey: string): { apiKey: string; organizationApiKey: string } {
+  const projectKey = apiKey.trim();
+  const organizationKey = organizationApiKey.trim();
+  if (!projectKey || !organizationKey) {
+    const missing = !projectKey ? '--api-key' : '--organization-api-key';
+    throw new CLIError(`Missing required flag: ${missing}`, ExitCode.USAGE, LOGFIRE_KEY_PAIR_HINT);
+  }
+  return { apiKey: projectKey, organizationApiKey: organizationKey };
+}
+
 // --- Credential-based connects: each wizard step can go back to the previous
 // one, and backing out of the first returns BACK to re-open type selection ---
 async function connectWithCredentials(
@@ -998,6 +1015,45 @@ async function connectWithCredentials(
     ]);
     if (!ok) return BACK;
     body = { type: 'grafana', workspaceId, stackUrl, serviceAccountToken };
+  } else if (type === 'logfire') {
+    let apiKey = '';
+    let organizationApiKey = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: 'Logfire project API key',
+          instructions:
+            'In Logfire, open your project, then Project settings > API keys > New API key. Check Read-only access, keep Key type as Project, then Create API key. Agents use it to query the traces and metrics of this project. The key starts with pylf_ and the region (US or EU) is read from its prefix.',
+          link: 'https://logfire.pydantic.dev',
+          linkLabel: 'Open Logfire',
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+      secretStep(
+        config,
+        args,
+        'organizationApiKey',
+        '--organization-api-key',
+        {
+          message: 'Logfire organization API key',
+          instructions:
+            'From Project settings choose Go to org settings, then API keys > New API key. Check Read-only access and Manage project and org, set Key type to Organization, then Create API key. Polylane uses it to add its notification channel to the alerts of this project, so it hears about a problem the moment an alert fires. The same organization key works for every project in the organization.',
+          link: 'https://logfire.pydantic.dev',
+          linkLabel: 'Open Logfire',
+        },
+        (v) => {
+          organizationApiKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'logfire', workspaceId, ...logfireKeyFields(apiKey, organizationApiKey) };
   } else if (type === 'linear') {
     let apiKey = '';
     const ok = await runSteps([
@@ -1120,7 +1176,7 @@ async function connectType(
 
 export const integrationConnectCommand: Command = {
   name: 'integration connect',
-  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, OpenStatus, Grafana Cloud, Mixpanel, Devin, Cursor, Factory, Conductor, Linear, MCP)',
+  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, OpenStatus, Grafana Cloud, Logfire, Mixpanel, Devin, Cursor, Factory, Conductor, Linear, MCP)',
   operationId: 'integrations.connect',
   options: [
     {
@@ -1135,8 +1191,9 @@ export const integrationConnectCommand: Command = {
     },
     { flag: '--site <site>', description: 'Datadog site (e.g. us5.datadoghq.com)', type: 'string' },
     { flag: '--region <region>', description: 'Honeycomb (us|eu), Axiom (us-east-1|eu-central-1; detected from the token if omitted) or Mixpanel (us|eu|in)', type: 'string' },
-    { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / OpenStatus / Devin / Cursor / Factory / Conductor / Linear)', type: 'string' },
+    { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / OpenStatus / Logfire project key / Devin / Cursor / Factory / Conductor / Linear)', type: 'string' },
     { flag: '--app-key <key>', description: 'App key (Datadog only)', type: 'string' },
+    { flag: '--organization-api-key <key>', description: 'Organization API key (Logfire only, pylf_...)', type: 'string' },
     { flag: '--management-api-key-id <id>', description: 'Management API key ID (Honeycomb)', type: 'string' },
     { flag: '--management-api-key-secret <secret>', description: 'Management API key secret (Honeycomb)', type: 'string' },
     { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token)', type: 'string' },
@@ -1180,6 +1237,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type betterstack --api-token ... --uptime-api-token ... --telemetry-api-token ...',
     'polylane integration connect --type openstatus --api-key ...',
     'polylane integration connect --type grafana --stack-url https://mystack.grafana.net --service-account-token glsa_...',
+    'polylane integration connect --type logfire --api-key pylf_... --organization-api-key pylf_...',
     'polylane integration connect --type mixpanel --region us --service-account-username ... --service-account-secret ... --project-id 1234567',
     'polylane integration connect --type cursor --api-key crsr_...',
     'polylane integration connect --type linear --api-key lin_api_...',
