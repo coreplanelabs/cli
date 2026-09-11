@@ -13,13 +13,20 @@ const CLIENT_OPTS: TypeGenOptions = { refPrefix: 'T.' };
 // The automations feature is retired; drop its endpoints and schemas from the
 // generated client even while the API still serves them.
 const EXCLUDED_PATH = /\/automations(\/|$)/;
-const EXCLUDED_SCHEMA = /Automation/;
+const EXCLUDED_SCHEMAS = new Set([
+  'Automation',
+  'AutomationExecution',
+  'AutomationNotification',
+  'AutomationActionExecution',
+  'TriggerAutomationBody',
+  'CreateAutomationFromTemplateBody',
+]);
 
 export function parseSpec(spec: OpenAPISpec): ParsedSpec {
   const schemas = new Map<string, SchemaObject>();
   if (spec.components?.schemas) {
     for (const [name, schema] of Object.entries(spec.components.schemas)) {
-      if (EXCLUDED_SCHEMA.test(name)) continue;
+      if (EXCLUDED_SCHEMAS.has(name)) continue;
       schemas.set(name, schema);
     }
   }
