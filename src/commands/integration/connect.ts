@@ -74,7 +74,7 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'betterstack', label: 'Better Stack', hint: 'global, Uptime and Telemetry tokens', category: 'observability' },
   { value: 'openstatus', label: 'OpenStatus', hint: 'workspace API key', category: 'observability' },
   { value: 'grafana', label: 'Grafana Cloud', hint: 'stack URL + service account token', category: 'observability' },
-  { value: 'logfire', label: 'Logfire', hint: 'project + organization API keys', category: 'observability' },
+  { value: 'logfire', label: 'Logfire', hint: 'project + organization keys', category: 'observability' },
   { value: 'mixpanel', label: 'Mixpanel', hint: 'service account + project ID', category: 'product-analytics' },
   { value: 'devin', label: 'Devin', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent', category: 'code-agent' },
@@ -1027,7 +1027,7 @@ async function connectWithCredentials(
         {
           message: 'Logfire project API key',
           instructions:
-            'In Logfire, open your project, then Project settings > API keys > New API key. Check Read-only access, keep Key type as Project, then Create API key. Agents use it to query the traces and metrics of this project. The key starts with pylf_ and the region (US or EU) is read from its prefix.',
+            'In Logfire, open your project, then Project settings > Security & access > New API key. Check both Read-only access and Manage project and org, keep Key type as Project, then Create API key. Agents use it to query the traces and metrics of this project. The key starts with pylf_ and the region (US or EU) is read from its prefix.',
           link: 'https://logfire.pydantic.dev',
           linkLabel: 'Open Logfire',
         },
@@ -1043,7 +1043,7 @@ async function connectWithCredentials(
         {
           message: 'Logfire organization API key',
           instructions:
-            'From Project settings choose Go to org settings, then API keys > New API key. Check Read-only access and Manage project and org, set Key type to Organization, then Create API key. Polylane uses it to add its notification channel to the alerts of this project, so it hears about a problem the moment an alert fires. The same organization key works for every project in the organization.',
+            'From Project settings choose Go to org settings, then Security & access > New API key. Check Read-only access and Manage project and org, set Key type to Organization, then Create API key. Polylane uses it to add its notification channel to the alerts of this project, so it hears about a problem the moment an alert fires. The same organization key works for every project in the organization.',
           link: 'https://logfire.pydantic.dev',
           linkLabel: 'Open Logfire',
         },
