@@ -1,6 +1,6 @@
 {
   "name": "@coreplane/polylane",
-  "version": "0.2.31",
+  "version": "0.2.32",
   "description": "Agent-focused CLI for the Polylane platform",
   "keywords": [
     "polylane",
