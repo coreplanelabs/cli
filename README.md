@@ -1,7 +1,7 @@
 # polylane
 
 <p><strong>Agent-focused CLI for the <a href="https://polylane.com">Polylane</a> platform.</strong><br>
-Investigate production issues, explore cloud infrastructure, search code, run automations, and drive threads — from any agent or terminal.</p>
+Investigate production issues, explore cloud infrastructure, search code, and drive threads — from any agent or terminal.</p>
 
 <p>Your coding agent writes the code. It can't see production. Polylane is the missing sense.</p>
 

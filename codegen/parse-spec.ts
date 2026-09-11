@@ -10,10 +10,16 @@ import { schemaToTypescript, type TypeGenOptions } from './type-utils';
 
 const CLIENT_OPTS: TypeGenOptions = { refPrefix: 'T.' };
 
+// The automations feature is retired; drop its endpoints and schemas from the
+// generated client even while the API still serves them.
+const EXCLUDED_PATH = /\/automations(\/|$)/;
+const EXCLUDED_SCHEMA = /Automation/;
+
 export function parseSpec(spec: OpenAPISpec): ParsedSpec {
   const schemas = new Map<string, SchemaObject>();
   if (spec.components?.schemas) {
     for (const [name, schema] of Object.entries(spec.components.schemas)) {
+      if (EXCLUDED_SCHEMA.test(name)) continue;
       schemas.set(name, schema);
     }
   }
@@ -22,7 +28,7 @@ export function parseSpec(spec: OpenAPISpec): ParsedSpec {
   const methods: Array<keyof typeof HTTP_METHOD_MAP> = ['get', 'post', 'put', 'patch', 'delete'];
 
   for (const [path, pathItem] of Object.entries(spec.paths)) {
-    if (!pathItem) continue;
+    if (!pathItem || EXCLUDED_PATH.test(path)) continue;
     for (const method of methods) {
       const op = pathItem[method];
       if (!op) continue;

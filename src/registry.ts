@@ -26,7 +26,6 @@ const RESOURCE_ORDER: Record<string, ResourceGroup> = {
   thread: { name: 'thread', description: 'Conversation threads', order: 60 },
   artifact: { name: 'artifact', description: 'Per-thread artifacts (reports, diagrams, PRs)', order: 61 },
   skill: { name: 'skill', description: 'Reusable agent skills (catalog, install, docs)', order: 63 },
-  automation: { name: 'automation', description: 'Automations and executions', order: 65 },
   autofix: { name: 'autofix', description: 'Automated code fixes (read-only)', order: 66 },
   integration: { name: 'integration', description: 'Integrations (code hosts, chat, observability, issue tracking, coding agents, MCP)', order: 68 },
   cloud: { name: 'cloud', description: 'Cloud accounts (aws, cloudflare, vercel, clickhouse, turso, ...)', order: 69 },

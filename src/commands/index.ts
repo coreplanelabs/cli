@@ -12,7 +12,6 @@ import { serviceCommands } from './service';
 import { repoCommands } from './repo';
 import { memoryCommands } from './memory';
 import { threadCommands } from './thread';
-import { automationCommands } from './automation';
 import { integrationCommands } from './integration';
 import { cloudCommands } from './cloud';
 import { workspaceCommands } from './workspace';
@@ -38,7 +37,6 @@ export function registerAllCommands(): void {
     ...memoryCommands,
     ...threadCommands,
     ...skillCommands,
-    ...automationCommands,
     ...integrationCommands,
     ...cloudCommands,
     ...workspaceCommands,

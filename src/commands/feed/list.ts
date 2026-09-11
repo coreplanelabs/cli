@@ -15,9 +15,9 @@ import { ExitCode } from '../../errors/codes';
 
 type Category = NonNullable<NonNullable<Parameters<PolylaneAPI['feedList']>[1]>['category']>;
 
-const CATEGORY_COVERAGE: Record<Category, true> = {
+// Retired category; the Exclude keeps this compiling until the API drops it too.
+const CATEGORY_COVERAGE: Record<Exclude<Category, 'automation'>, true> = {
   autofix: true,
-  automation: true,
   change: true,
   release: true,
   issue: true,
@@ -43,7 +43,7 @@ const FIELDS = [
 
 export const feedListCommand: Command = {
   name: 'feed list',
-  description: 'Workspace agent activity feed (autofixes, automations, changes, releases, issues…)',
+  description: 'Workspace agent activity feed (autofixes, changes, releases, issues…)',
   operationId: 'feed.list',
   options: [
     { flag: '--category <c>', description: VALID_CATEGORIES.join(' | '), type: 'string' },
