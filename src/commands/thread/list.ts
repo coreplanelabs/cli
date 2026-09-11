@@ -8,7 +8,7 @@ import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 
 const FIELDS = ['id', 'name', 'type', 'created'];
-const VALID_TYPES = ['chat', 'hypothesis', 'automation', 'autofix', 'investigation', 'pr_review'] as const;
+const VALID_TYPES = ['chat', 'hypothesis', 'autofix', 'investigation', 'pr_review'] as const;
 type ThreadType = (typeof VALID_TYPES)[number];
 
 export const threadListCommand: Command = {
@@ -16,7 +16,7 @@ export const threadListCommand: Command = {
   description: 'List conversation threads',
   operationId: 'threads.list',
   options: [
-    { flag: '--type <t>', description: 'Filter by thread type (chat | hypothesis | automation | autofix | investigation | pr_review; comma-separated)', type: 'string' },
+    { flag: '--type <t>', description: 'Filter by thread type (chat | hypothesis | autofix | investigation | pr_review; comma-separated)', type: 'string' },
     { flag: '--labels <a,b,c>', description: 'Filter by labels (comma-separated)', type: 'string' },
     { flag: '--limit <n>', description: 'Max items (default 20)', type: 'number' },
     { flag: '--full', description: 'Return full objects', type: 'boolean' },

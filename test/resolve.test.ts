@@ -48,7 +48,6 @@ describe('command resolution', () => {
       'artifact',
       'auth',
       'autofix',
-      'automation',
       'cloud',
       'config',
       'feed',
