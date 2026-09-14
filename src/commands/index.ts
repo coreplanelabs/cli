@@ -17,7 +17,6 @@ import { cloudCommands } from './cloud';
 import { workspaceCommands } from './workspace';
 import { apiCommands } from './api';
 import { telemetryCommands } from './telemetry';
-import { skillCommands } from './skill';
 import { noteCommands } from './note';
 import { autofixCommands } from './autofix';
 import { artifactCommands } from './artifact';
@@ -36,7 +35,6 @@ export function registerAllCommands(): void {
     ...repoCommands,
     ...memoryCommands,
     ...threadCommands,
-    ...skillCommands,
     ...integrationCommands,
     ...cloudCommands,
     ...workspaceCommands,
