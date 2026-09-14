@@ -27,6 +27,13 @@ export function mapApiError(status: number, error: ApiErrorPayload | null): ApiE
   switch (status) {
     case 400:
       return new ApiError(status, detail || 'Bad request', ExitCode.USAGE);
+    case 402:
+      return new ApiError(
+        status,
+        detail || 'Plan limit reached',
+        ExitCode.QUOTA,
+        'Upgrade your plan: polylane subscription upgrade'
+      );
     case 401:
       return new ApiError(
         status,

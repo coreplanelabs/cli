@@ -19,6 +19,7 @@ import {
   type WizardStep,
 } from '../helpers';
 import { buildCloudflareTokenUrl } from './cloudflare-token-url';
+import { ensureCloudAccountCapacity } from '../../billing/cloud-capacity';
 import type { CloudAccount } from '../../generated/types';
 import { isApiError } from '../../errors/api';
 import { CLIError } from '../../errors/base';
@@ -894,6 +895,21 @@ export const cloudConnectCommand: Command = {
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const noBrowser = getArgBoolean(args, 'noBrowser') === true;
+    // One more account has to fit the plan. At the limit the gate offers the
+    // upgrade and, once it lands, the connect continues; a decline ends the
+    // command with QUOTA so a driving script knows nothing failed. A
+    // reconnect replaces an account and needs no room.
+    if (getArgBoolean(args, 'reconnect') !== true) {
+      const gate = await ensureCloudAccountCapacity(config, workspaceId, { noBrowser });
+      if (gate === 'declined') {
+        process.exitCode = ExitCode.QUOTA;
+        return;
+      }
+      if (gate === 'pending') {
+        process.exitCode = ExitCode.PENDING;
+        return;
+      }
+    }
     const api = new PolylaneAPI(config);
     const providerFromFlag = getArgString(args, 'provider') !== undefined;
     const interactivePicker = !providerFromFlag && isInteractive(config.nonInteractive);

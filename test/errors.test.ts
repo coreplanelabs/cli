@@ -53,6 +53,13 @@ describe('mapApiError', () => {
     assert.equal(err.status, 422);
   });
 
+  it('maps 402 -> QUOTA with the upgrade hint', () => {
+    const err = mapApiError(402, { message: 'Plan quota exceeded', detail: 'Plan limit exceeded: maxCloudAccounts. The free plan allows 2.' });
+    assert.equal(err.exitCode, ExitCode.QUOTA);
+    assert.match(err.message, /allows 2/);
+    assert.match(err.hint ?? '', /polylane subscription upgrade/);
+  });
+
   it('maps 426 -> QUOTA', () => {
     const err = mapApiError(426, { message: 'Upgrade Required' });
     assert.equal(err.exitCode, ExitCode.QUOTA);

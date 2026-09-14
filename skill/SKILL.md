@@ -144,6 +144,17 @@ polylane service list                             # cloud infra discovered from 
 
 `integration connect` and `cloud connect` dispatch on `--type` / `--provider`. Some options open a browser for an install URL; others take API credentials directly. Use `--help` on each to see the required flags and optional `--no-browser`. Browser flows wait in the terminal until the connection appears (interactive TTY only); with `--output json` or in non-interactive runs they print the URL and exit, so poll `integration list` / `cloud list` to confirm.
 
+Plans cap how many cloud accounts a workspace can connect; the numbers come from the API, never from the CLI. `cloud connect` checks first: with room it connects; at the limit it names the plan and the count (`Your Free plan includes 2 cloud accounts; 2 connected.`), offers the cheapest plan that raises it, and on yes opens Stripe Checkout and waits, then carries on with the connect once the plan lands. A no, a Stripe cancel, or no answer in time exits `4` with `Upgrade any time: polylane subscription upgrade` and leaves the connected accounts as they are. Non-interactive runs at the limit exit `4` with the same line as an error. The API answers a connect over the limit with `402` (exit `4`) either way.
+
+```bash
+polylane subscription plans                       # catalog: prices and limits, no sign-in needed
+polylane subscription show                        # this workspace: plan, cloud accounts used of allowed, credits
+polylane subscription upgrade --plan starter      # Stripe Checkout in the browser; waits for the plan to land
+polylane subscription manage                      # billing portal: invoices, payment method, change or cancel
+```
+
+`subscription upgrade` prints the checkout URL, opens it, and waits (TTY only) for either the browser to return to the CLI's local listener or the plan to change. Exit `0` once upgraded, `1` on a Stripe cancel or a timeout, `7` when the payment went through but the plan has not flipped yet (re-check with `subscription show`). With `--output json` or without a TTY it prints `{ "url": … }` and exits.
+
 `integration connect --type github` asks one question before opening GitHub: review pull requests for production impact on the repositories this connection brings in (default yes). Pass `--no-pr-reviews` to opt out, or `--pr-reviews` to answer yes, without the prompt; non-interactive runs without either flag keep the default. Each repository can be changed later in the console.
 
 ### Investigating an issue
