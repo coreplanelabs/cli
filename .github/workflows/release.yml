@@ -22,7 +22,7 @@ jobs:
   release:
     name: Publish to npm + GitHub Release
     needs: checks
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     permissions:
       contents: write
       id-token: write
@@ -129,7 +129,7 @@ jobs:
   update-homebrew:
     name: Bump Homebrew formula
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - name: Check for tap token
         id: gate

@@ -43,7 +43,7 @@ permissions: {}
 
 jobs:
   approve:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     if: >-
       (
         (github.event.review.user.login == 'claude[bot]' && github.event.review.user.id == 209825114) ||

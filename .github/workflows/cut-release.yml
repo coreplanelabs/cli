@@ -42,7 +42,7 @@ permissions:
 jobs:
   cut:
     name: Bump, verify, tag, push
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       # Dry runs never push, so they skip the 1Password/App-token steps and
       # check out with the default read-only GITHUB_TOKEN.
