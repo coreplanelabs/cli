@@ -12,7 +12,7 @@ env:
   NPM_TARBALL_BASENAME: 'polylane'   # tarball filename after /-/ on the registry
 
 jobs:
-  # Run the full matrix (typecheck + lint + test + build on Node 18/20/22)
+  # Run the full matrix (typecheck + lint + test + build on Node 20/22/24)
   # before anything else. If this fails, nothing below runs — no npm publish,
   # no Homebrew bump, no GitHub release.
   checks:
@@ -31,7 +31,7 @@ jobs:
       tarball_url: ${{ steps.meta.outputs.tarball_url }}
       tarball_sha256: ${{ steps.meta.outputs.tarball_sha256 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Node 24 ships npm 11.x, which already supports Trusted Publishers
       # (OIDC). We intentionally don't run `npm install -g npm@latest` — the
@@ -39,7 +39,7 @@ jobs:
       # node_modules (missing `promise-retry`) that makes self-upgrade fail.
       # ci.yml still runs the test matrix against 20/22/24 for runtime compat.
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.x
           registry-url: https://registry.npmjs.org
@@ -103,7 +103,7 @@ jobs:
           echo "tarball_sha256=$TARBALL_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           generate_release_notes: true
           files: |
@@ -145,7 +145,7 @@ jobs:
 
       - name: Checkout tap
         if: steps.gate.outputs.skip == 'false'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: coreplanelabs/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}

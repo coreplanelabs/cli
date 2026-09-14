@@ -50,7 +50,7 @@ jobs:
       # The installer needs Node 20+ to take the release-download path (its
       # no-Node branch falls back to Homebrew, which is not what this smokes).
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20.x
 
