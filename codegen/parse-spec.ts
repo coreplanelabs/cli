@@ -10,9 +10,9 @@ import { schemaToTypescript, type TypeGenOptions } from './type-utils';
 
 const CLIENT_OPTS: TypeGenOptions = { refPrefix: 'T.' };
 
-// The automations feature is retired; drop its endpoints and schemas from the
-// generated client even while the API still serves them.
-const EXCLUDED_PATH = /\/automations(\/|$)/;
+// The automations and scan reports features are retired; drop their endpoints
+// and schemas from the generated client even while the API still serves them.
+const EXCLUDED_PATH = /\/(automations|scan_reports)(\/|$)/;
 const EXCLUDED_SCHEMAS = new Set([
   'Automation',
   'AutomationExecution',
@@ -20,6 +20,7 @@ const EXCLUDED_SCHEMAS = new Set([
   'AutomationActionExecution',
   'TriggerAutomationBody',
   'CreateAutomationFromTemplateBody',
+  'Scan Report',
 ]);
 
 export function parseSpec(spec: OpenAPISpec): ParsedSpec {
