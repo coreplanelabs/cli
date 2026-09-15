@@ -24,14 +24,14 @@ npm install -g @coreplane/polylane
 polylane auth login                                    # OAuth browser (PKCE) — the default
 polylane auth login --no-browser                       # OAuth device code (SSH / headless)
 polylane auth login --api-key sk_xxxxx                 # API key — scripts / CI without OAuth
-polylane auth signup --email <email> --password <pw>   # bootstrap an account (emails a 6-digit code)
+polylane auth signup --email <email>                   # bootstrap an account: generates a strong password, shown once (emails a 6-digit code)
 polylane auth signup --email <email> --code <code>     # finish signup with the emailed code
 
 # Verify
 polylane auth status
 ```
 
-**API key** persists to `~/.polylane/config.json`. **OAuth** credentials persist to `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. Credential precedence: `--api-key` flag > `POLYLANE_API_KEY` > `~/.polylane/credentials.json` > `api_key` in `~/.polylane/config.json` (an exported key always beats a stale OAuth token). **Signup** emails a 6-digit verification code to the address; the account is unusable until the code is confirmed (interactively, or with `--code`). The confirmed session token is stored under the same OAuth credential shape — for long-lived agent access, create an API key right after signup and switch to it.
+**API key** persists to `~/.polylane/config.json`. **OAuth** credentials persist to `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. Credential precedence: `--api-key` flag > `POLYLANE_API_KEY` > `~/.polylane/credentials.json` > `api_key` in `~/.polylane/config.json` (an exported key always beats a stale OAuth token). **Signup** generates a strong random password when `--password` is omitted and prints it once on stderr (also `generated_password` in JSON output); store it, or change it later via password reset. Weak or known-leaked passwords are rejected at the edge (exit `2`, "rejected as weak or known-leaked"): do not invent one, let the CLI generate it. Signup emails a 6-digit verification code to the address; the account is unusable until the code is confirmed (interactively, or with `--code`). The confirmed session token is stored under the same OAuth credential shape — for long-lived agent access, create an API key right after signup and switch to it.
 
 Account-lifecycle operations beyond signup/login (reset password, update profile, delete account, notification settings) live in the web console. Reach them from the CLI via `polylane api call <op>` if you must.
 
@@ -119,8 +119,9 @@ The best way to learn a command is `polylane <resource> <verb> --help`. These wo
 ### Onboarding a new account
 
 ```bash
-# 1. Account (a 6-digit verification code is emailed; enter it at the prompt
-#    or finish with `polylane auth signup --email you@example.com --code <code>`)
+# 1. Account (a strong password is generated and printed once; a 6-digit
+#    verification code is emailed; enter it at the prompt or finish with
+#    `polylane auth signup --email you@example.com --code <code>`)
 polylane auth signup --email you@example.com
 # or: polylane auth login
 

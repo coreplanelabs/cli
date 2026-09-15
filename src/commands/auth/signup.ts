@@ -7,7 +7,7 @@ import { isInteractive } from '../../utils/env';
 import { oauthLogin, selectWorkspace, type WhoamiResult, type WorkspaceItem } from './login';
 import { writeCredentials } from '../../auth/credentials';
 import { resolveOnboardingRunId, consumeOnboardingRunFile } from '../../auth/onboarding-run';
-import { parseSessionExpiresAt } from '../../auth/signup-helpers';
+import { generatePassword, isCloudflareChallenge, parseSessionExpiresAt } from '../../auth/signup-helpers';
 import { readInstallRef } from '../../telemetry/environment';
 import type { OAuthCredential } from '../../auth/types';
 import { writeConfigFile } from '../../config/loader';
@@ -57,6 +57,10 @@ interface VerifiedSession {
 
 const CODE_ATTEMPTS = 3;
 
+const WEAK_PASSWORD_ERROR = 'The password was rejected as weak or known-leaked';
+const WEAK_PASSWORD_HINT =
+  'Use a random one: re-run without --password and the CLI generates a strong password (shown once).';
+
 const OAUTH_PROVIDER_LABELS: Record<'google' | 'github', string> = {
   google: 'Google',
   github: 'GitHub',
@@ -70,6 +74,20 @@ const TERMS_NOTICE = [
   '  https://polylane.com/terms/',
   '  https://polylane.com/privacy/',
 ].join('\n');
+
+// Shown exactly once, on stderr, right after the server accepted it. Password
+// reset from the console sign-in page is the way to pick a different one.
+function announceGeneratedPassword(config: Config, email: string, password: string): void {
+  const message = [
+    `A strong password was generated for ${email}; it is shown only once:`,
+    ``,
+    `  ${password}`,
+    ``,
+    `Store it now. Change it later via "Forgot password" on the console sign-in page.`,
+  ].join('\n');
+  if (isInteractive(config.nonInteractive)) note(message, 'Generated password');
+  else process.stderr.write(`\n${message}\n\n`);
+}
 
 function writeSessionCredential(token: string, expiresAt: string, account: string): void {
   const cred: OAuthCredential = {
@@ -253,9 +271,18 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
     return;
   }
 
-  const passwordArg = getArgString(args, 'password');
-  const password =
-    passwordArg ?? (await promptPassword({ nonInteractive: config.nonInteractive }, 'Password'));
+  // No --password means a generated one: the API's edge challenges weak or
+  // known-leaked values, so the CLI never asks a script to invent one. An
+  // interactive user may still type their own (or leave it empty to generate).
+  let password = getArgString(args, 'password');
+  if (password === undefined && isInteractive(config.nonInteractive)) {
+    password = await promptPassword(
+      { nonInteractive: config.nonInteractive },
+      'Password (leave empty to generate a strong one)'
+    );
+  }
+  const generated = !password;
+  if (!password) password = generatePassword();
 
   // Need response headers (Set-Cookie -> session expiry) so call request() directly
   // rather than via the generated client which only exposes the body.
@@ -274,10 +301,29 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
     body: { email, password, ...(ref ? { ref } : {}), ...(run ? { run } : {}) },
     noAuth: true,
   });
-  const json = (await res.json()) as SignupEnvelope;
+  if (isCloudflareChallenge(res)) {
+    throw new CLIError(
+      WEAK_PASSWORD_ERROR,
+      ExitCode.USAGE,
+      generated ? 'Retry; a fresh password is generated on every run.' : WEAK_PASSWORD_HINT
+    );
+  }
+  let json: SignupEnvelope;
+  try {
+    json = (await res.json()) as SignupEnvelope;
+  } catch {
+    throw new CLIError(
+      `Signup returned a non-JSON response (status ${res.status})`,
+      ExitCode.GENERAL,
+      generated ? 'Retry in a moment.' : WEAK_PASSWORD_HINT
+    );
+  }
   if (!res.ok || !json.success) {
     throw new CLIError(json.error?.detail ?? json.error?.message ?? 'Signup did not complete', ExitCode.GENERAL);
   }
+  if (generated) announceGeneratedPassword(config, email, password);
+  // Scripts read stdout: a generated password rides the JSON envelope too.
+  const result = generated ? { ...json.result, generated_password: password } : json.result;
   // The run id (if any) rode this signup request and the server has bound it —
   // on both the created and existing-account paths. Consume the one-shot file so
   // it can't re-stamp future signups on this machine. Never under --dry-run: the
@@ -287,7 +333,7 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
   const { user, token } = json.result;
   if (!user) {
     // dry-run stub or unexpected server response
-    emitResult(config, json.result);
+    emitResult(config, result);
     outro('Account created, but no session returned. Run `polylane auth login`.');
     return;
   }
@@ -295,14 +341,14 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
   if (user.emailVerified) {
     // Existing account re-authenticated: the session works immediately.
     if (!token) {
-      emitResult(config, json.result);
+      emitResult(config, result);
       outro('Account created, but no session returned. Run `polylane auth login`.');
       return;
     }
     const expiresAt = parseSessionExpiresAt(res.headers.get('set-cookie')) ?? new Date().toISOString();
     writeSessionCredential(token, expiresAt, user.email ?? user.id);
     await persistDefaultWorkspace(config);
-    emitResult(config, json.result);
+    emitResult(config, result);
     if (config.hints) note(nextSteps(), 'Next steps');
     outro(`Signed in as ${user.email ?? user.id}.`);
     return;
@@ -324,7 +370,7 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
   }
 
   if (!isInteractive(config.nonInteractive)) {
-    emitResult(config, json.result);
+    emitResult(config, result);
     outro(
       `Check ${email} for a verification code, then run: polylane auth signup --email ${email} --code <code>`
     );
@@ -362,7 +408,11 @@ export const authSignupCommand: Command = {
   operationId: 'auth.signup',
   options: [
     { flag: '--email <email>', description: 'Email address (implies email signup)', type: 'string' },
-    { flag: '--password <password>', description: 'Password (prompted if omitted)', type: 'string' },
+    {
+      flag: '--password <password>',
+      description: 'Password; when omitted a strong random one is generated and shown once (weak or known-leaked values are rejected)',
+      type: 'string',
+    },
     {
       flag: '--code <code>',
       description: 'Verification code from the signup email (completes email signup)',
@@ -371,6 +421,7 @@ export const authSignupCommand: Command = {
   ],
   examples: [
     'polylane auth signup',
+    'polylane auth signup --email agent@example.com                # generates a strong password, shown once',
     'polylane auth signup --email agent@example.com --password "$PW"',
     'polylane auth signup --email agent@example.com --code 123456   # finish verification',
   ],
