@@ -206,6 +206,18 @@ describe('ensureCloudAccountCapacity', () => {
     assert.deepEqual(h.checkouts, [{ mode: 'change', plan: 'team', cycle: 'annual', previousPlanId: 'starter', noBrowser: false }]);
   });
 
+  it('a paying workspace whose limit an admin lowered is pitched the next plan up, never its own', async () => {
+    const h = harness({
+      plan: usage(0, 0, 'starter'),
+      subscription: { plan: 'starter', status: 'active', billingCycle: 'monthly', stripeSubscriptionId: 'sub_1' },
+      answer: false,
+    });
+    assert.equal(await ensureCloudAccountCapacity(config, 'ws_1', { noBrowser: false }, h.deps), 'declined');
+    assert.match(errOut.join(''), /Your Starter plan includes 0 cloud accounts; 0 connected\./);
+    assert.match(errOut.join(''), /Team \(\$200\/mo\) allows unlimited cloud accounts\./);
+    assert.deepEqual(h.confirms, ['Switch to Team now? (prorated)']);
+  });
+
   it('exits QUOTA pointing at the pricing page when the catalog is unavailable', async () => {
     const h = harness({ plan: usage(2, 2), catalog: new Error('down') });
     await assert.rejects(

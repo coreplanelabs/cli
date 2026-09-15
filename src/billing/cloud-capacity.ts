@@ -80,7 +80,7 @@ export async function ensureCloudAccountCapacity(
 
   let next: CatalogPlan | null = null;
   try {
-    next = cheapestPlanRaising(await deps.fetchCatalog(config), 'maxCloudAccounts', plan.usage.cloudAccounts.limit);
+    next = cheapestPlanRaising(await deps.fetchCatalog(config), 'maxCloudAccounts', plan.usage.cloudAccounts.limit, plan.plan.id);
   } catch {
     throw new CLIError(limitLine(plan), ExitCode.QUOTA, `Plans: ${PRICING_URL}\n${UPGRADE_LATER}`);
   }

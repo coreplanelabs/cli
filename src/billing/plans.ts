@@ -75,16 +75,20 @@ export function isPurchasable(plan: CatalogPlan): boolean {
   return plan.selectable && plan.monthlyPriceCents > 0;
 }
 
-// The cheapest purchasable plan that lifts `dimension` above `currentLimit`,
-// or null when no plan on sale does (the workspace is already on the top
-// tier for that dimension, or the catalog is empty).
+// The cheapest purchasable plan above the current one that lifts `dimension`
+// past `currentLimit`, or null when none does (the workspace is on the top
+// tier for that dimension, or the catalog is empty). The current plan is
+// never a candidate: an admin-lowered limit on a paid plan must not pitch the
+// plan the workspace already pays for.
 export function cheapestPlanRaising(
   catalog: PlanCatalog,
   dimension: keyof PlanLimits & string,
-  currentLimit: number
+  currentLimit: number,
+  currentPlanId: string
 ): CatalogPlan | null {
+  const currentPrice = catalog.plans.find((p) => p.id === currentPlanId)?.monthlyPriceCents ?? 0;
   const candidates = catalog.plans.filter((plan) => {
-    if (!isPurchasable(plan)) return false;
+    if (!isPurchasable(plan) || plan.id === currentPlanId || plan.monthlyPriceCents <= currentPrice) return false;
     const limit = plan.limits[dimension];
     if (limit === undefined) return false;
     if (isUnlimited(limit)) return !isUnlimited(currentLimit);
