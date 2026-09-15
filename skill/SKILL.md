@@ -31,7 +31,7 @@ polylane auth signup --email <email> --code <code>     # finish signup with the 
 polylane auth status
 ```
 
-**API key** persists to `~/.polylane/config.json`. **OAuth** credentials persist to `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. **Signup** emails a 6-digit verification code to the address; the account is unusable until the code is confirmed (interactively, or with `--code`). The confirmed session token is stored under the same OAuth credential shape — for long-lived agent access, create an API key right after signup and switch to it.
+**API key** persists to `~/.polylane/config.json`. **OAuth** credentials persist to `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. Credential precedence: `--api-key` flag > `POLYLANE_API_KEY` > `~/.polylane/credentials.json` > `api_key` in `~/.polylane/config.json` (an exported key always beats a stale OAuth token). **Signup** emails a 6-digit verification code to the address; the account is unusable until the code is confirmed (interactively, or with `--code`). The confirmed session token is stored under the same OAuth credential shape — for long-lived agent access, create an API key right after signup and switch to it.
 
 Account-lifecycle operations beyond signup/login (reset password, update profile, delete account, notification settings) live in the web console. Reach them from the CLI via `polylane api call <op>` if you must.
 
@@ -244,7 +244,7 @@ polylane issue list --quiet 2>/dev/null
 
 ## Configuration precedence
 
-**CLI flags > environment variables > `~/.polylane/config.json` > defaults.**
+**CLI flags > environment variables > `~/.polylane/config.json` > defaults.** For credentials specifically: `--api-key` > `POLYLANE_API_KEY` > `~/.polylane/credentials.json` (OAuth) > `api_key` in `~/.polylane/config.json`.
 
 | Variable | Purpose |
 |---|---|

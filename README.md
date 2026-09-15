@@ -209,6 +209,15 @@ OAuth is the default way to connect — including for agents. Use an API key onl
 
 OAuth credentials live at `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. `polylane auth status` reports the active source.
 
+Credential precedence (first match wins):
+
+1. `--api-key <key>` flag
+2. `POLYLANE_API_KEY` environment variable
+3. `~/.polylane/credentials.json` (OAuth, from `auth login` / `auth signup`)
+4. `api_key` in `~/.polylane/config.json` (from `auth login --api-key`)
+
+The environment variable outranks the credentials file so that a key exported in CI is never silently overridden by a stale OAuth token left on the runner.
+
 For account lifecycle operations beyond signup/login (reset password, update profile, delete account, notification settings) — use the web console. They're available via `polylane api call <op>` if you really need them from the CLI, but they're not first-class commands.
 
 ## Telemetry
