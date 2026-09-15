@@ -77,20 +77,20 @@ describe('capacityOf', () => {
 
 describe('cheapestPlanRaising', () => {
   it('picks the cheapest paid plan with a higher limit', () => {
-    assert.equal(cheapestPlanRaising(catalog, 'maxCloudAccounts', 2)?.id, 'starter');
+    assert.equal(cheapestPlanRaising(catalog, 'maxCloudAccounts', 2, 'free')?.id, 'starter');
   });
 
   it('skips plans that do not raise the limit', () => {
-    assert.equal(cheapestPlanRaising(catalog, 'maxCloudAccounts', 5)?.id, 'team');
+    assert.equal(cheapestPlanRaising(catalog, 'maxCloudAccounts', 5, 'starter')?.id, 'team');
   });
 
   it('returns null when the current limit is already unlimited', () => {
-    assert.equal(cheapestPlanRaising(catalog, 'maxCloudAccounts', -1), null);
+    assert.equal(cheapestPlanRaising(catalog, 'maxCloudAccounts', -1, 'team'), null);
   });
 
   it('never offers Free or Enterprise', () => {
     const only = { ...catalog, plans: catalog.plans.filter((p) => p.monthlyPriceCents === 0) };
-    assert.equal(cheapestPlanRaising(only, 'maxCloudAccounts', 0), null);
+    assert.equal(cheapestPlanRaising(only, 'maxCloudAccounts', 0, 'free'), null);
   });
 
   it('follows the catalog when the free limit moves', () => {
@@ -99,12 +99,22 @@ describe('cheapestPlanRaising', () => {
       plans: catalog.plans.map((p) => (p.id === 'starter' ? { ...p, limits: { ...p.limits, maxCloudAccounts: 1 } } : p)),
     };
     // Starter no longer raises a limit of 1, so the next tier is offered.
-    assert.equal(cheapestPlanRaising(moved, 'maxCloudAccounts', 1)?.id, 'team');
+    assert.equal(cheapestPlanRaising(moved, 'maxCloudAccounts', 1, 'free')?.id, 'team');
+  });
+
+  it('never pitches the plan the workspace is already on, even when an admin lowered its limit below the catalog default', () => {
+    // Seen live on UAT: Starter with maxCloudAccounts lowered to 0 was offered Starter.
+    assert.equal(cheapestPlanRaising(catalog, 'maxCloudAccounts', 0, 'starter')?.id, 'team');
+  });
+
+  it('never pitches a plan priced at or below the current one', () => {
+    assert.equal(cheapestPlanRaising(catalog, 'maxCloudAccounts', 0, 'team')?.id, 'scale');
+    assert.equal(cheapestPlanRaising(catalog, 'maxCloudAccounts', 0, 'scale'), null);
   });
 
   it('ignores plans that are not selectable', () => {
     const hidden = { ...catalog, plans: catalog.plans.map((p) => (p.id === 'starter' ? { ...p, selectable: false } : p)) };
-    assert.equal(cheapestPlanRaising(hidden, 'maxCloudAccounts', 2)?.id, 'team');
+    assert.equal(cheapestPlanRaising(hidden, 'maxCloudAccounts', 2, 'free')?.id, 'team');
   });
 });
 
