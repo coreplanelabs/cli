@@ -24,6 +24,14 @@ export function writeJsonFile(path: string, data: unknown, mode?: number): void 
   }
 }
 
+// For config files that hold, or will be handed, a credential. The mode only
+// applies when the file is created: a file another tool already owns keeps
+// whatever permissions it has, never widened, never tightened behind its back.
+export function writePrivateTextFile(path: string, contents: string): void {
+  ensureDir(dirname(path));
+  writeFileSync(path, contents, { encoding: 'utf-8', mode: 0o600 });
+}
+
 export function fileExists(path: string): boolean {
   try {
     return existsSync(path);

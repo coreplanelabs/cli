@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from '
 
 import { applyEdits, modify, parse as parseJsonc, type ParseError } from 'jsonc-parser';
 
-import { ensureDir } from '../utils/fs';
+import { ensureDir, writePrivateTextFile } from '../utils/fs';
 import { SKILL_MD } from '../generated/skill';
 
 export const MCP_SERVER_NAME = 'polylane';
@@ -41,6 +41,10 @@ export function writeSkillFile(path: string, dryRun = false): WriteOutcome {
   return { label, path, action: 'created' };
 }
 
+// Every MCP config writer below creates its file 0600: the installer hands
+// these same files the workspace API key right after `polylane setup`, and the
+// bare entry is where an agent stores its own OAuth tokens. A file that
+// already exists keeps its mode.
 export function upsertJsonEntry(
   path: string,
   keyPath: string[],
@@ -83,10 +87,7 @@ export function upsertJsonEntry(
   }
 
   node[leaf] = value;
-  if (!dryRun) {
-    ensureDir(dirname(path));
-    writeFileSync(path, JSON.stringify(root, null, 2) + '\n', 'utf-8');
-  }
+  if (!dryRun) writePrivateTextFile(path, JSON.stringify(root, null, 2) + '\n');
   return { label, path, action: existed ? 'updated' : 'created' };
 }
 
@@ -111,10 +112,7 @@ export function upsertJsoncEntry(
 ): WriteOutcome {
   const label = 'MCP server';
   if (!existsSync(path)) {
-    if (!dryRun) {
-      ensureDir(dirname(path));
-      writeFileSync(path, JSON.stringify(nestEntry(keyPath, value), null, 2) + '\n', 'utf-8');
-    }
+    if (!dryRun) writePrivateTextFile(path, JSON.stringify(nestEntry(keyPath, value), null, 2) + '\n');
     return { label, path, action: 'created' };
   }
 
@@ -151,7 +149,7 @@ export function upsertJsoncEntry(
     formattingOptions: { insertSpaces: true, tabSize: 2 },
     getInsertionIndex: () => 0,
   });
-  if (!dryRun) writeFileSync(path, applyEdits(text, edits), 'utf-8');
+  if (!dryRun) writePrivateTextFile(path, applyEdits(text, edits));
   return { label, path, action: 'updated' };
 }
 
@@ -176,14 +174,11 @@ export function upsertTomlSection(
     }
     if (!dryRun) {
       const separator = current.endsWith('\n') || current === '' ? '' : '\n';
-      writeFileSync(path, `${current}${separator}\n${sectionHeader}\n${sectionBody}`, 'utf-8');
+      writePrivateTextFile(path, `${current}${separator}\n${sectionHeader}\n${sectionBody}`);
     }
     return { label, path, action: 'updated' };
   }
-  if (!dryRun) {
-    ensureDir(dirname(path));
-    writeFileSync(path, `${sectionHeader}\n${sectionBody}`, 'utf-8');
-  }
+  if (!dryRun) writePrivateTextFile(path, `${sectionHeader}\n${sectionBody}`);
   return { label, path, action: 'created' };
 }
 
@@ -262,10 +257,7 @@ const GOOSE_EXTENSION_LINES = [
 export function upsertGooseExtension(path: string, dryRun = false): WriteOutcome {
   const label = 'MCP server';
   if (!existsSync(path)) {
-    if (!dryRun) {
-      ensureDir(dirname(path));
-      writeFileSync(path, ['extensions:', ...GOOSE_EXTENSION_LINES, ''].join('\n'), 'utf-8');
-    }
+    if (!dryRun) writePrivateTextFile(path, ['extensions:', ...GOOSE_EXTENSION_LINES, ''].join('\n'));
     return { label, path, action: 'created' };
   }
   const current = readFileSync(path, 'utf-8');
@@ -276,14 +268,14 @@ export function upsertGooseExtension(path: string, dryRun = false): WriteOutcome
   const blockStart = lines.findIndex((l) => /^extensions:\s*$/.test(l));
   if (blockStart >= 0) {
     lines.splice(blockStart + 1, 0, ...GOOSE_EXTENSION_LINES);
-    if (!dryRun) writeFileSync(path, lines.join('\n'), 'utf-8');
+    if (!dryRun) writePrivateTextFile(path, lines.join('\n'));
     return { label, path, action: 'updated' };
   }
   if (/^extensions:/m.test(current)) {
     return { label, path, action: 'skipped', detail: '`extensions:` is not a plain block; add the entry manually', needsManualStep: true };
   }
   const separator = current.endsWith('\n') || current === '' ? '' : '\n';
-  if (!dryRun) writeFileSync(path, `${current}${separator}\nextensions:\n${GOOSE_EXTENSION_LINES.join('\n')}\n`, 'utf-8');
+  if (!dryRun) writePrivateTextFile(path, `${current}${separator}\nextensions:\n${GOOSE_EXTENSION_LINES.join('\n')}\n`);
   return { label, path, action: 'updated' };
 }
 
