@@ -231,12 +231,25 @@ describe('runCheckout', () => {
     assert.equal(h.out.join(''), 'file:///etc/passwd\n');
   });
 
-  it('honours --no-browser', async () => {
-    const h = harness();
-    const run = runCheckout(mockConfig({ output: 'text', nonInteractive: false }), { ...base, noBrowser: true }, h.deps);
-    h.listener!.settle('cancel');
-    await run;
+  it('honours --no-browser: nothing opened, no loopback listener, Stripe returns to the console', async () => {
+    const h = harness({ planIds: ['free', 'starter'] });
+    const outcome = await runCheckout(mockConfig({ output: 'text', nonInteractive: false }), { ...base, noBrowser: true }, h.deps);
+    assert.equal(outcome, 'upgraded');
     assert.deepEqual(h.opened, []);
+    assert.deepEqual(h.bodies, [{ workspaceId: 'ws_1', plan: 'starter', billingCycle: 'monthly' }]);
+  });
+
+  it('skips the loopback listener over SSH, where the browser is on another machine', async () => {
+    const prior = process.env.SSH_CONNECTION;
+    process.env.SSH_CONNECTION = '10.0.0.2 51000 10.0.0.1 22';
+    try {
+      const h = harness({ planIds: ['free', 'starter'] });
+      assert.equal(await runCheckout(mockConfig({ output: 'text', nonInteractive: false }), base, h.deps), 'upgraded');
+      assert.deepEqual(h.bodies, [{ workspaceId: 'ws_1', plan: 'starter', billingCycle: 'monthly' }]);
+    } finally {
+      if (prior === undefined) delete process.env.SSH_CONNECTION;
+      else process.env.SSH_CONNECTION = prior;
+    }
   });
 
   it('wraps a checkout API error, keeps its exit code, and always says how to upgrade later', async () => {

@@ -52,3 +52,9 @@ export function shouldUseColor(noColor: boolean): boolean {
   if (process.env.FORCE_COLOR) return true;
   return isStdoutTTY();
 }
+
+// A terminal reached over SSH cannot be the machine the browser runs on, so a
+// loopback listener there would never be reached by a redirect.
+export function isRemoteTerminal(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.SSH_CONNECTION || env.SSH_TTY || env.SSH_CLIENT);
+}
