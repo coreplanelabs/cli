@@ -14,6 +14,7 @@ import { threadCommands } from './thread';
 import { integrationCommands } from './integration';
 import { cloudCommands } from './cloud';
 import { workspaceCommands } from './workspace';
+import { subscriptionCommands } from './subscription';
 import { apiCommands } from './api';
 import { telemetryCommands } from './telemetry';
 import { noteCommands } from './note';
@@ -37,6 +38,7 @@ export function registerAllCommands(): void {
     ...integrationCommands,
     ...cloudCommands,
     ...workspaceCommands,
+    ...subscriptionCommands,
     ...noteCommands,
     ...autofixCommands,
     ...artifactCommands,

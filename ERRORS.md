@@ -74,6 +74,8 @@ Every command inherits these. Specific messages are subject to change, but the *
 |---|---|
 | HTTP 429 | `Rate limited` + any `Retry-After` |
 | HTTP 426 | `Plan upgrade required` |
+| HTTP 402 (a plan limit, e.g. one more cloud account than the plan allows) | `Plan limit exceeded: maxCloudAccounts. The free plan allows 2. …` with the hint `Upgrade your plan: polylane subscription upgrade` |
+| `cloud connect` at the plan's cloud-account limit, and the upgrade offer was declined, canceled in Stripe, or not completed in time | `Upgrade any time: polylane subscription upgrade` on stderr, exit `4`, no `Error:` line: nothing failed, and the accounts already connected are untouched. Non-interactive runs get the same as an error (`Your Free plan includes 2 cloud accounts; 2 connected.`) |
 
 ### Usage (exit `2`)
 
@@ -144,6 +146,7 @@ Commands that generate an install / consent URL (`auth login`, `integration conn
 | Scenario | Exit | Typical message |
 |---|---|---|
 | `cloud connect --provider aws` ends before the CloudFormation stack finishes creating | 7 | `AWS is still connecting — the CloudFormation stack has not shown up yet.` with a hint to check `polylane cloud list` |
+| `subscription upgrade` (or the upgrade offer inside `cloud connect`): Stripe reported the payment but the workspace plan had not changed after 90 s | 7 | `Payment received; your plan is updating.` with a hint to re-check (`polylane subscription show`, or re-run `polylane cloud connect`) |
 
 `7` is not an error: the launch went through and nothing needs to be re-run unless the stack fails. Treat it as "not connected yet" and re-check with `polylane cloud list` before depending on the account.
 

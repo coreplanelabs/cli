@@ -60,6 +60,7 @@ describe('command resolution', () => {
       'repo',
       'service',
       'setup',
+      'subscription',
       'telemetry',
       'thread',
       'tools',

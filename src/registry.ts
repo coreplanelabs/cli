@@ -28,6 +28,7 @@ const RESOURCE_ORDER: Record<string, ResourceGroup> = {
   integration: { name: 'integration', description: 'Integrations (code hosts, chat, observability, issue tracking, coding agents, MCP)', order: 68 },
   cloud: { name: 'cloud', description: 'Cloud accounts (aws, cloudflare, vercel, clickhouse, turso, ...)', order: 69 },
   workspace: { name: 'workspace', description: 'Workspaces', order: 70 },
+  subscription: { name: 'subscription', description: 'Plan and billing (plans, show, upgrade, manage)', order: 71 },
   auth: { name: 'auth', description: 'Authentication (login, status, logout)', order: 80 },
   setup: { name: 'setup', description: 'Wire the CLI into coding agents (agent skill + MCP server)', order: 85 },
   map: { name: 'map', description: 'Map this repository into your workspace using your coding agent', order: 86 },
