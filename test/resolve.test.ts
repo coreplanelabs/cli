@@ -61,7 +61,6 @@ describe('command resolution', () => {
       'scan',
       'service',
       'setup',
-      'skill',
       'telemetry',
       'thread',
       'tools',
