@@ -132,7 +132,7 @@ These are the non-obvious command-level behaviours an agent should know about. S
 ### Idempotent operations
 
 - `auth signup` is idempotent for an existing user with a matching password: it returns a fresh session token instead of an error. Agents can call it again to renew.
-- `auth signup` without `--password` generates a strong random password and prints it once (stderr, and `generated_password` in JSON output). A supplied password that the API edge flags as weak or known-leaked exits `2` with `The password was rejected as weak or known-leaked` and a hint to re-run without `--password`; the raw challenge page is never shown.
+- `auth signup` without `--password` generates a strong random password and prints it once (stderr, and `generated_password` in JSON output). A supplied password that the API edge challenges (usually because it is weak or known-leaked; IP reputation or rate limiting can also trigger it) exits `2` with `The sign-up request was challenged by the edge, usually because the password is weak or known-leaked` and a hint to re-run without `--password`; a challenge on a CLI-generated password exits `1` with a retry hint. The raw challenge page is never shown.
 
 ### Partial-success responses
 

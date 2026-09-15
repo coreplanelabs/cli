@@ -57,8 +57,11 @@ interface VerifiedSession {
 
 const CODE_ATTEMPTS = 3;
 
-const WEAK_PASSWORD_ERROR = 'The password was rejected as weak or known-leaked';
-const WEAK_PASSWORD_HINT =
+// A challenge is not always about the password (IP reputation and rate
+// limiting produce the same page), so the message hedges.
+const CHALLENGE_ERROR =
+  'The sign-up request was challenged by the edge, usually because the password is weak or known-leaked';
+const CHALLENGE_HINT =
   'Use a random one: re-run without --password and the CLI generates a strong password (shown once).';
 
 const OAUTH_PROVIDER_LABELS: Record<'google' | 'github', string> = {
@@ -302,10 +305,12 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
     noAuth: true,
   });
   if (isCloudflareChallenge(res)) {
+    // A generated password is not the caller's mistake: that is a transient
+    // edge condition (exit 1), not a usage error (exit 2).
     throw new CLIError(
-      WEAK_PASSWORD_ERROR,
-      ExitCode.USAGE,
-      generated ? 'Retry; a fresh password is generated on every run.' : WEAK_PASSWORD_HINT
+      CHALLENGE_ERROR,
+      generated ? ExitCode.GENERAL : ExitCode.USAGE,
+      generated ? 'Retry in a moment; a fresh password is generated on every run.' : CHALLENGE_HINT
     );
   }
   let json: SignupEnvelope;
@@ -315,7 +320,7 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
     throw new CLIError(
       `Signup returned a non-JSON response (status ${res.status})`,
       ExitCode.GENERAL,
-      generated ? 'Retry in a moment.' : WEAK_PASSWORD_HINT
+      generated ? 'Retry in a moment.' : CHALLENGE_HINT
     );
   }
   if (!res.ok || !json.success) {
