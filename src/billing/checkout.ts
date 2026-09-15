@@ -5,7 +5,7 @@ import { isApiError } from '../errors/api';
 import { CLIError } from '../errors/base';
 import { Spinner } from '../output/progress';
 import { openBrowser } from '../utils/browser';
-import { isInteractive } from '../utils/env';
+import { isInteractive, isRemoteTerminal } from '../utils/env';
 import type { BillingCycle, CatalogPlan, WorkspacePlan } from './plans';
 import { startReturnListener, type ReturnListener, type ReturnOutcome } from './return-listener';
 
@@ -95,7 +95,12 @@ function printCheckoutUrl(config: Config, url: string, noBrowser: boolean, deps:
 // the return URLs). Ctrl+C stops waiting and counts as "not now".
 export async function runCheckout(config: Config, opts: CheckoutOptions, deps: CheckoutDeps = defaultDeps): Promise<CheckoutOutcome> {
   const waits = deps.canWait(config);
-  const listener = waits ? await deps.startListener() : null;
+  // The loopback listener only helps when the browser runs on this machine.
+  // --no-browser says it does not, and an SSH session means it cannot; in
+  // both cases Stripe returns to the console page and the plan poll below
+  // is the only signal.
+  const browserIsHere = !opts.noBrowser && !isRemoteTerminal();
+  const listener = waits && browserIsHere ? await deps.startListener() : null;
   // Registered before the checkout request so a return that lands during it
   // is already visible when the wait starts.
   let returned: ReturnOutcome | null = null;
