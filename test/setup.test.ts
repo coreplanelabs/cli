@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync, statSync, chmodSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
@@ -786,5 +786,66 @@ describe('agent definitions', () => {
     const mcp = outcomes.find((o) => o.label === 'MCP server');
     assert.ok(mcp);
     assert.equal(mcp.action, 'skipped');
+  });
+});
+
+// MCP config files end up holding credentials: the installer writes the
+// workspace API key into them right after setup, and agents store their own
+// OAuth tokens there. Files the CLI creates are owner-only; files another tool
+// already owns keep their mode. Windows has no POSIX modes to assert on.
+describe('MCP config file modes', { skip: process.platform === 'win32' }, () => {
+  const mode = (path: string): number => statSync(path).mode & 0o777;
+
+  it('creates every MCP config file 0600', () => {
+    const json = join(tempDir, 'mcp.json');
+    upsertJsonEntry(json, ['mcpServers', MCP_SERVER_NAME], { url: MCP_SERVER_URL });
+    assert.equal(mode(json), 0o600);
+
+    const jsonc = join(tempDir, 'opencode.json');
+    upsertJsoncEntry(jsonc, ['mcp', MCP_SERVER_NAME], { type: 'remote', url: MCP_SERVER_URL });
+    assert.equal(mode(jsonc), 0o600);
+
+    const toml = join(tempDir, 'config.toml');
+    upsertTomlSection(toml, '[mcp_servers.polylane]', `url = "${MCP_SERVER_URL}"\n`);
+    assert.equal(mode(toml), 0o600);
+
+    const yaml = join(tempDir, 'config.yaml');
+    upsertGooseExtension(yaml);
+    assert.equal(mode(yaml), 0o600);
+  });
+
+  it('creates every user-level agent config file 0600', () => {
+    for (const definition of AGENTS) {
+      for (const outcome of definition.user(tempDir, false)) {
+        if (outcome.label !== 'MCP server' || outcome.action !== 'created') continue;
+        assert.equal(mode(outcome.path), 0o600, `${definition.id}: ${outcome.path}`);
+      }
+    }
+  });
+
+  it('keeps the existing mode of a file it edits in place', () => {
+    const json = join(tempDir, 'mcp.json');
+    writeFileSync(json, '{"mcpServers":{"other":{"url":"https://other.example"}}}\n', 'utf-8');
+    chmodSync(json, 0o644);
+    assert.equal(upsertJsonEntry(json, ['mcpServers', MCP_SERVER_NAME], { url: MCP_SERVER_URL }).action, 'updated');
+    assert.equal(mode(json), 0o644);
+
+    const jsonc = join(tempDir, 'opencode.jsonc');
+    writeFileSync(jsonc, '// hi\n{ "mcp": {} }\n', 'utf-8');
+    chmodSync(jsonc, 0o644);
+    assert.equal(upsertJsoncEntry(jsonc, ['mcp', MCP_SERVER_NAME], { type: 'remote', url: MCP_SERVER_URL }).action, 'updated');
+    assert.equal(mode(jsonc), 0o644);
+
+    const toml = join(tempDir, 'config.toml');
+    writeFileSync(toml, 'model = "x"\n', 'utf-8');
+    chmodSync(toml, 0o644);
+    assert.equal(upsertTomlSection(toml, '[mcp_servers.polylane]', `url = "${MCP_SERVER_URL}"\n`).action, 'updated');
+    assert.equal(mode(toml), 0o644);
+
+    const yaml = join(tempDir, 'config.yaml');
+    writeFileSync(yaml, 'extensions:\n  other:\n    enabled: true\n', 'utf-8');
+    chmodSync(yaml, 0o644);
+    assert.equal(upsertGooseExtension(yaml).action, 'updated');
+    assert.equal(mode(yaml), 0o644);
   });
 });
