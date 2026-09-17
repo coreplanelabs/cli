@@ -51,6 +51,7 @@ type Provider =
   | 'convex'
   | 'clickhouse'
   | 'turso'
+  | 'triggerdev'
   | 'kubernetes';
 
 export const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> = [
@@ -66,6 +67,7 @@ export const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: str
   { value: 'convex', label: 'Convex', hint: 'team access token' },
   { value: 'clickhouse', label: 'ClickHouse', hint: 'API key ID + secret' },
   { value: 'turso', label: 'Turso', hint: 'platform API token' },
+  { value: 'triggerdev', label: 'Trigger.dev', hint: 'environment API key' },
   { value: 'kubernetes', label: 'Kubernetes', hint: 'in-cluster agent, installed with Helm (console)' },
 ];
 
@@ -325,6 +327,63 @@ export async function connectTurso(
   }
 }
 
+const TRIGGERDEV_PROJECT_REF_HINT =
+  'The project ref is the `project` line in trigger.config.ts and starts with proj_.';
+
+const TRIGGERDEV_HEADLESS_HINT =
+  'Create an environment API key in your Trigger.dev project (production environment > API Keys, No restrictions access preset), then re-run:\n' +
+  'polylane cloud connect --provider triggerdev --api-key <key>\n' +
+  `Add --project-ref <proj_...> when the API asks for it. ${TRIGGERDEV_PROJECT_REF_HINT}`;
+
+// The generated client trails the deployed API spec; the triggerdev body
+// shape is the contract from the API-side design record.
+export type TriggerdevConnectBody = {
+  workspaceId: string;
+  provider: 'triggerdev';
+  apiKey: string;
+  projectRef?: string;
+};
+
+// The API resolves the project from the key alone when it can; it answers 400
+// when it needs the project ref to disambiguate. Prompt for the ref only then,
+// once, and retry. Any other 400 (for example a key that cannot read runs)
+// already carries the API's guidance and ends the step.
+export async function connectTriggerdev(
+  config: Config,
+  api: PolylaneAPI,
+  body: TriggerdevConnectBody
+): Promise<typeof BACK | ConnectResult> {
+  const send = (b: TriggerdevConnectBody): Promise<ConnectResult> =>
+    api.cloudAccountsConnect(b as unknown as ConnectBody);
+  try {
+    return await send(body);
+  } catch (err) {
+    if (
+      !isApiError(err) ||
+      err.status !== 400 ||
+      body.projectRef !== undefined ||
+      !/project ref/i.test(err.message)
+    ) {
+      throw err;
+    }
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(
+        err.message,
+        ExitCode.USAGE,
+        `Pass --project-ref <proj_...>.\n${TRIGGERDEV_PROJECT_REF_HINT}`
+      );
+    }
+    note(`${err.message}\n${TRIGGERDEV_PROJECT_REF_HINT}`, 'Trigger.dev project ref');
+    const picked = await promptTextOrBack(
+      { nonInteractive: config.nonInteractive },
+      'Trigger.dev project ref (proj_...)',
+      { validate: (v: string) => (v.trim() ? undefined : 'Required') }
+    );
+    if (picked === BACK) return BACK;
+    return send({ ...body, projectRef: picked.trim() });
+  }
+}
+
 async function openOrPrintInstallUrl(config: Config, url: string, label: string, noBrowser: boolean): Promise<void> {
   if (config.output === 'json') {
     formatOutput(config, { url });
@@ -510,6 +569,41 @@ async function connectProvider(
       provider: 'turso',
       token,
       ...(organization !== undefined ? { organization } : {}),
+    });
+    if (result === BACK) return BACK;
+    printConnectSuccess(config, result);
+    return 'connected';
+  }
+  if (provider === 'triggerdev') {
+    if (!isInteractive(config.nonInteractive) && getArgString(args, 'apiKey') === undefined) {
+      throw new CLIError('Missing required flag: --api-key', ExitCode.USAGE, TRIGGERDEV_HEADLESS_HINT);
+    }
+    let apiKey = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: 'Trigger.dev environment API key',
+          instructions:
+            'In your Trigger.dev project, open the production environment, then API Keys, and create a key with the No restrictions access preset. That preset is the only kind on the Free and Hobby plans; on Pro you may instead use restricted keys such as Observer plus Deploy only, adding them one at a time. Re-running this command with another key adds it to the same account.',
+          link: 'https://cloud.trigger.dev',
+          linkLabel: 'Open Trigger.dev',
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    const projectRef = getArgString(args, 'projectRef');
+    const result = await connectTriggerdev(config, api, {
+      workspaceId,
+      provider: 'triggerdev',
+      apiKey,
+      ...(projectRef !== undefined ? { projectRef } : {}),
     });
     if (result === BACK) return BACK;
     printConnectSuccess(config, result);
@@ -841,7 +935,7 @@ async function connectProvider(
 
 export const cloudConnectCommand: Command = {
   name: 'cloud connect',
-  description: 'Connect a cloud account (AWS, Cloudflare, Vercel, Fly.io, Render, Railway, PlanetScale, Supabase, Modal, Convex, ClickHouse, Turso, Kubernetes)',
+  description: 'Connect a cloud account (AWS, Cloudflare, Vercel, Fly.io, Render, Railway, PlanetScale, Supabase, Modal, Convex, ClickHouse, Turso, Trigger.dev, Kubernetes)',
   operationId: 'cloud_accounts.connect',
   options: [
     {
@@ -867,7 +961,8 @@ export const cloudConnectCommand: Command = {
     { flag: '--token-secret <secret>', description: 'Modal token secret', type: 'string' },
     { flag: '--organization <org>', description: 'PlanetScale organization, or Turso organization slug', type: 'string' },
     // Render
-    { flag: '--api-key <key>', description: 'Render API key', type: 'string' },
+    { flag: '--api-key <key>', description: 'Render API key, or Trigger.dev environment API key', type: 'string' },
+    { flag: '--project-ref <ref>', description: 'Trigger.dev: project ref (proj_...), only needed when the API asks for it', type: 'string' },
     // ClickHouse
     { flag: '--key-id <id>', description: 'ClickHouse Cloud API key ID', type: 'string' },
     { flag: '--key-secret <secret>', description: 'ClickHouse Cloud API key secret', type: 'string' },
@@ -890,6 +985,8 @@ export const cloudConnectCommand: Command = {
     'polylane cloud connect --provider clickhouse --key-id <id> --key-secret <secret>',
     'polylane cloud connect --provider turso --token <token>',
     'polylane cloud connect --provider turso --token <token> --organization <slug>',
+    'polylane cloud connect --provider triggerdev --api-key <key>',
+    'polylane cloud connect --provider triggerdev --api-key <key> --project-ref proj_abc123',
     'polylane cloud connect --provider kubernetes',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
