@@ -52,6 +52,26 @@ describe('loadConfig', () => {
     assert.equal(config.domain, 'api.prod.example.com');
   });
 
+  it('records which layer supplied the api key', () => {
+    assert.equal(loadConfig({} as GlobalFlags).apiKeySource, undefined);
+
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(configFile, JSON.stringify({ api_key: 'sk_file' }));
+    assert.deepEqual(
+      [loadConfig({} as GlobalFlags).apiKey, loadConfig({} as GlobalFlags).apiKeySource],
+      ['sk_file', 'config']
+    );
+
+    process.env.POLYLANE_API_KEY = 'sk_env';
+    assert.deepEqual(
+      [loadConfig({} as GlobalFlags).apiKey, loadConfig({} as GlobalFlags).apiKeySource],
+      ['sk_env', 'env']
+    );
+
+    const fromFlag = loadConfig({ apiKey: 'sk_flag' } as GlobalFlags);
+    assert.deepEqual([fromFlag.apiKey, fromFlag.apiKeySource], ['sk_flag', 'flag']);
+  });
+
   it('parses timeout from env', () => {
     process.env.POLYLANE_TIMEOUT = '60';
     const config = loadConfig({} as GlobalFlags);

@@ -34,25 +34,30 @@ function writeStaleCredentials(): void {
 }
 
 describe('resolveCredential precedence', () => {
-  const originalArgv = [...process.argv];
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
     delete process.env.POLYLANE_API_KEY;
-    process.argv = originalArgv.filter((a) => !a.startsWith('--api-key'));
     rmSync(credentialsFile, { force: true });
   });
 
   afterEach(() => {
-    process.argv = [...originalArgv];
     process.env = { ...originalEnv, HOME: tempHome };
+  });
+
+  it('an env key set in the process but not recorded by the loader is not a credential', async () => {
+    writeStaleCredentials();
+    process.env.POLYLANE_API_KEY = 'sk_from_env';
+
+    const cred = await resolveCredential(mockConfig());
+    assert.equal(cred.type, 'oauth');
   });
 
   it('POLYLANE_API_KEY wins over a stale credentials.json', async () => {
     writeStaleCredentials();
     process.env.POLYLANE_API_KEY = 'sk_from_env';
 
-    const cred = await resolveCredential(mockConfig({ apiKey: 'sk_from_env' }));
+    const cred = await resolveCredential(mockConfig({ apiKey: 'sk_from_env', apiKeySource: 'env' }));
     assert.equal(cred.type, 'api-key');
     assert.equal(cred.type === 'api-key' && cred.key, 'sk_from_env');
     assert.equal(cred.type === 'api-key' && cred.source, 'env');
@@ -61,9 +66,8 @@ describe('resolveCredential precedence', () => {
   it('--api-key wins over POLYLANE_API_KEY and credentials.json', async () => {
     writeStaleCredentials();
     process.env.POLYLANE_API_KEY = 'sk_from_env';
-    process.argv.push('--api-key', 'sk_from_flag');
 
-    const cred = await resolveCredential(mockConfig({ apiKey: 'sk_from_flag' }));
+    const cred = await resolveCredential(mockConfig({ apiKey: 'sk_from_flag', apiKeySource: 'flag' }));
     assert.equal(cred.type === 'api-key' && cred.key, 'sk_from_flag');
     assert.equal(cred.type === 'api-key' && cred.source, 'flag');
   });
@@ -71,13 +75,13 @@ describe('resolveCredential precedence', () => {
   it('credentials.json wins over the config file api_key', async () => {
     writeStaleCredentials();
 
-    const cred = await resolveCredential(mockConfig({ apiKey: 'sk_from_config' }));
+    const cred = await resolveCredential(mockConfig({ apiKey: 'sk_from_config', apiKeySource: 'config' }));
     assert.equal(cred.type, 'oauth');
     assert.equal(cred.type === 'oauth' && cred.accessToken, 'stale-oauth-token');
   });
 
   it('falls back to the config file api_key', async () => {
-    const cred = await resolveCredential(mockConfig({ apiKey: 'sk_from_config' }));
+    const cred = await resolveCredential(mockConfig({ apiKey: 'sk_from_config', apiKeySource: 'config' }));
     assert.equal(cred.type === 'api-key' && cred.key, 'sk_from_config');
     assert.equal(cred.type === 'api-key' && cred.source, 'config');
   });

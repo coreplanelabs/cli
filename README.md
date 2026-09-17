@@ -216,6 +216,8 @@ Credential precedence (first match wins):
 3. `~/.polylane/credentials.json` (OAuth, from `auth login` / `auth signup`)
 4. `api_key` in `~/.polylane/config.json` (from `auth login --api-key`)
 
+A command's own `--api-key` is not the Polylane key: `cloud connect --provider render --api-key <key>` and `cloud connect --provider triggerdev --api-key <key>` take the provider's key, and the Polylane credential comes from the layers above.
+
 The environment variable outranks the credentials file so that a key exported in CI is never silently overridden by a stale OAuth token left on the runner.
 
 For account lifecycle operations beyond signup/login (reset password, update profile, delete account, notification settings) — use the web console. They're available via `polylane api call <op>` if you really need them from the CLI, but they're not first-class commands.

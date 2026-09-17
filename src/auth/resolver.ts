@@ -8,21 +8,16 @@ import { ExitCode } from '../errors/codes';
 // Precedence: --api-key flag > POLYLANE_API_KEY > ~/.polylane/credentials.json
 // (OAuth) > ~/.polylane/config.json api_key. The env var sits above the
 // credentials file on purpose: a CI runner exporting POLYLANE_API_KEY must not
-// be silently overridden by a stale OAuth token left on disk.
+// be silently overridden by a stale OAuth token left on disk. The loader
+// records which layer supplied config.apiKey; argv is never consulted here,
+// since a command's own `--api-key` (a provider key) is not the Polylane key.
 export async function resolveCredential(config: Config): Promise<Credential> {
-  // 1. Flag-provided api key
-  if (process.argv.includes('--api-key') || process.argv.some((a) => a.startsWith('--api-key='))) {
-    if (config.apiKey) {
-      return { type: 'api-key', key: config.apiKey, source: 'flag' };
-    }
+  // 1. Flag or env api key
+  if (config.apiKey && (config.apiKeySource === 'flag' || config.apiKeySource === 'env')) {
+    return { type: 'api-key', key: config.apiKey, source: config.apiKeySource };
   }
 
-  // 2. Env var
-  if (process.env.POLYLANE_API_KEY) {
-    return { type: 'api-key', key: process.env.POLYLANE_API_KEY, source: 'env' };
-  }
-
-  // 3. OAuth credentials on disk
+  // 2. OAuth credentials on disk
   const stored = readCredentials();
   if (stored) {
     if (isTokenExpiringSoon(stored)) {
@@ -36,7 +31,7 @@ export async function resolveCredential(config: Config): Promise<Credential> {
     }
   }
 
-  // 4. Config file
+  // 3. Config file
   if (config.apiKey) {
     return { type: 'api-key', key: config.apiKey, source: 'config' };
   }

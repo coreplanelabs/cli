@@ -1,4 +1,4 @@
-import { parseFlags, scanCommandPath } from './args';
+import { globalFlagsOf, parseFlags, scanCommandPath } from './args';
 import { GLOBAL_OPTIONS } from './command';
 import type { GlobalFlags } from './types/flags';
 import { loadConfig } from './config/loader';
@@ -122,7 +122,7 @@ async function run(): Promise<void> {
     command.options ?? [],
     GLOBAL_OPTIONS
   );
-  const globalFlags = flags as GlobalFlags;
+  const globalFlags = globalFlagsOf(flags, command.options ?? []);
   const config = loadConfig(globalFlags);
 
   if (globalFlags.help) {

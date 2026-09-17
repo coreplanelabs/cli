@@ -1,5 +1,6 @@
 import { CONFIG_FILE, ensureConfigDir } from './paths';
 import {
+  type ApiKeySource,
   type Config,
   type RawConfig,
   DEFAULT_DOMAIN,
@@ -69,6 +70,8 @@ export function loadConfig(flags: GlobalFlags): Config {
 
   const apiKey = flags.apiKey ?? env.POLYLANE_API_KEY ?? file.api_key;
   if (apiKey !== undefined) validateApiKey(apiKey);
+  const apiKeySource: ApiKeySource | undefined =
+    flags.apiKey !== undefined ? 'flag' : env.POLYLANE_API_KEY !== undefined ? 'env' : file.api_key !== undefined ? 'config' : undefined;
 
   const workspaceId = flags.workspace ?? env.POLYLANE_WORKSPACE_ID ?? file.workspace_id;
   if (workspaceId !== undefined) validateWorkspaceId(workspaceId);
@@ -110,6 +113,7 @@ export function loadConfig(flags: GlobalFlags): Config {
 
   return {
     apiKey,
+    apiKeySource,
     domain,
     workspaceId,
     output,
