@@ -9,8 +9,10 @@ import type { PolylaneAPI } from '../src/generated/client';
 
 const config = { nonInteractive: true } as Config;
 const body = { workspaceId: 'ws_1', provider: 'triggerdev', apiKey: 'tr_key' } as const;
-const REF_REQUIRED =
-  'This API key is valid for multiple projects. Specify the project ref of the project to connect.';
+// The API's `detail` strings, verbatim from nominal
+// apps/apis/api-cloud-accounts/src/routers/cloud-accounts/connects/triggerdev.ts.
+const REF_REQUIRED = 'The Trigger.dev project ref is required for a restricted key';
+const RUNS_REQUIRED = 'This Trigger.dev API key cannot read runs';
 
 function mockApi(connect: (body: unknown) => Promise<unknown>): PolylaneAPI {
   return { cloudAccountsConnect: connect } as unknown as PolylaneAPI;
@@ -50,6 +52,8 @@ describe('connectTriggerdev', () => {
         err.exitCode === ExitCode.USAGE &&
         err.message.includes('project ref') &&
         (err.hint?.includes('--project-ref') ?? false) &&
+        (err.hint?.includes('This key cannot name its project.') ?? false) &&
+        (err.hint?.includes("project's settings page") ?? false) &&
         (err.hint?.includes('trigger.config.ts') ?? false)
     );
   });
@@ -66,11 +70,7 @@ describe('connectTriggerdev', () => {
   });
 
   it('rethrows other 400s untouched, including a key that cannot read runs', async () => {
-    const original = new ApiError(
-      400,
-      'This API key cannot read runs. Create a key with the No restrictions access preset, or a restricted key that includes run read access.',
-      ExitCode.USAGE
-    );
+    const original = new ApiError(400, RUNS_REQUIRED, ExitCode.USAGE);
     const api = mockApi(async () => {
       throw original;
     });
