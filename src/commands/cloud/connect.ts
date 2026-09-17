@@ -327,13 +327,15 @@ export async function connectTurso(
   }
 }
 
-const TRIGGERDEV_PROJECT_REF_HINT =
-  'The project ref is the `project` line in trigger.config.ts and starts with proj_.';
+const TRIGGERDEV_PROJECT_REF_WHERE =
+  "Paste the project ref from the project's settings page (it starts with proj_). It is also the `project` line in trigger.config.ts.";
+
+const TRIGGERDEV_PROJECT_REF_HINT = `This key cannot name its project. ${TRIGGERDEV_PROJECT_REF_WHERE}`;
 
 const TRIGGERDEV_HEADLESS_HINT =
-  'Create an environment API key in your Trigger.dev project (production environment > API Keys, No restrictions access preset), then re-run:\n' +
+  'Create an environment API key in your Trigger.dev project (production environment > API Keys, "No restrictions" access preset), then re-run:\n' +
   'polylane cloud connect --provider triggerdev --api-key <key>\n' +
-  `Add --project-ref <proj_...> when the API asks for it. ${TRIGGERDEV_PROJECT_REF_HINT}`;
+  `Add --project-ref <proj_...> when the API answers that the key cannot name its project. ${TRIGGERDEV_PROJECT_REF_WHERE}`;
 
 // The generated client trails the deployed API spec; the triggerdev body
 // shape is the contract from the API-side design record.
@@ -376,8 +378,8 @@ export async function connectTriggerdev(
     note(`${err.message}\n${TRIGGERDEV_PROJECT_REF_HINT}`, 'Trigger.dev project ref');
     const picked = await promptTextOrBack(
       { nonInteractive: config.nonInteractive },
-      'Trigger.dev project ref (proj_...)',
-      { validate: (v: string) => (v.trim() ? undefined : 'Required') }
+      'Project ref',
+      { placeholder: 'proj_…', validate: (v: string) => (v.trim() ? undefined : 'Required') }
     );
     if (picked === BACK) return BACK;
     return send({ ...body, projectRef: picked.trim() });
@@ -588,7 +590,7 @@ async function connectProvider(
         {
           message: 'Trigger.dev environment API key',
           instructions:
-            'In your Trigger.dev project, open the production environment, then API Keys, and create a key with the No restrictions access preset. That preset is the only kind on the Free and Hobby plans; on Pro you may instead use restricted keys such as Observer plus Deploy only, adding them one at a time. Re-running this command with another key adds it to the same account.',
+            'In your production environment open API Keys and create a key with the "No restrictions" access preset. That preset is the only kind on the Free and Hobby plans; on Pro you may instead use restricted keys such as "Observer" plus "Deploy only", adding them one at a time. Re-running this command with another key adds it to the same account.',
           link: 'https://cloud.trigger.dev',
           linkLabel: 'Open Trigger.dev',
         },
