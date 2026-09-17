@@ -1,4 +1,5 @@
 import { type OptionDef, extractFlagName, hasValue } from './command';
+import type { GlobalFlags } from './types/flags';
 import { CLIError } from './errors/base';
 import { ExitCode } from './errors/codes';
 
@@ -151,4 +152,19 @@ export function parseFlags(
   }
 
   return { flags, positional };
+}
+
+// parseFlags folds global and command options into one record, so a command
+// that declares a flag by the same name as a global one (`cloud connect
+// --api-key` takes the provider's key; the global `--api-key` is the Polylane
+// key) hands both meanings to the same key. The command's declaration wins:
+// the value is the command's and never reaches the global layer, or a Render
+// or Trigger.dev key would be sent as the Polylane credential.
+export function globalFlagsOf(flags: Record<string, unknown>, commandOptions: OptionDef[]): GlobalFlags {
+  const commandOwned = new Set(commandOptions.map((opt) => kebabToCamel(extractFlagName(opt.flag))));
+  const global: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(flags)) {
+    if (!commandOwned.has(key)) global[key] = value;
+  }
+  return global as GlobalFlags;
 }

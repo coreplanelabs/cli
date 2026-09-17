@@ -4,6 +4,9 @@ import { ExitCode } from '../errors/codes';
 
 export interface Config {
   apiKey?: string;
+  /** Which layer supplied `apiKey`; the resolver ranks a flag or env key above
+   * stored OAuth credentials and a config-file key below them. */
+  apiKeySource?: ApiKeySource;
   domain: string;
   workspaceId?: string;
   output: OutputFormat;
@@ -19,6 +22,8 @@ export interface Config {
    * errors, prompts, or consent notices. */
   hints: boolean;
 }
+
+export type ApiKeySource = 'flag' | 'env' | 'config';
 
 export interface RawConfig {
   api_key?: string;

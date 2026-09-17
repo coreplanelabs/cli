@@ -120,7 +120,9 @@ async function apiKeyLogin(config: Config, key: string): Promise<void> {
   const name = user.forename ? `${user.forename}${user.surname ? ' ' + user.surname : ''}` : user.email ?? user.id;
   process.stderr.write(`\nSigned in as ${name} (${user.email ?? user.id})\n`);
 
-  const configWithKey: Config = { ...config, apiKey: key };
+  // The key just accepted drives the rest of the sign-in ahead of any OAuth
+  // session left on disk, exactly as a global `--api-key` would.
+  const configWithKey: Config = { ...config, apiKey: key, apiKeySource: 'flag' };
   const wsId = await selectWorkspace(configWithKey, user);
 
   writeConfigFile({

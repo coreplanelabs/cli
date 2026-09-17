@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseFlags, scanCommandPath } from '../src/args';
+import { globalFlagsOf, parseFlags, scanCommandPath } from '../src/args';
 import { GLOBAL_OPTIONS } from '../src/command';
 import type { OptionDef } from '../src/command';
 
@@ -97,5 +97,28 @@ describe('parseFlags', () => {
   it('pass-through after --', () => {
     const { positional } = parseFlags(['--', '--something', 'else'], commandOptions, []);
     assert.deepEqual(positional, ['--something', 'else']);
+  });
+});
+
+describe('globalFlagsOf', () => {
+  const colliding: OptionDef[] = [
+    { flag: '--api-key <key>', description: 'provider key', type: 'string' },
+    { flag: '--enabled', description: 'enabled', type: 'boolean' },
+  ];
+
+  it('drops a flag the command declares itself, even when a global flag shares its name', () => {
+    const { flags } = parseFlags(['--api-key', 'rnd_x', '--workspace', 'ws_1', '--enabled'], colliding, GLOBAL_OPTIONS);
+    assert.deepEqual(globalFlagsOf(flags, colliding), { workspace: 'ws_1' });
+    assert.equal(flags.apiKey, 'rnd_x');
+  });
+
+  it('keeps a global flag for a command that does not declare it', () => {
+    const { flags } = parseFlags(['--api-key', 'sk_x', '--name', 'n'], commandOptions, GLOBAL_OPTIONS);
+    assert.deepEqual(globalFlagsOf(flags, commandOptions), { apiKey: 'sk_x' });
+  });
+
+  it('passes everything through for a command with no options', () => {
+    const { flags } = parseFlags(['--api-key', 'sk_x', '--quiet'], [], GLOBAL_OPTIONS);
+    assert.deepEqual(globalFlagsOf(flags, []), { apiKey: 'sk_x', quiet: true });
   });
 });
