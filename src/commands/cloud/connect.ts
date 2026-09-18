@@ -261,7 +261,7 @@ export function startAwsStackWait(
 
 type ConnectResult = Awaited<ReturnType<PolylaneAPI['cloudAccountsConnect']>>;
 
-function printConnectSuccess(config: Config, result: ConnectResult): void {
+export function printConnectSuccess(config: Config, result: ConnectResult): void {
   if (config.output === 'json' || !('accounts' in result)) {
     formatOutput(config, result);
     return;
@@ -270,7 +270,7 @@ function printConnectSuccess(config: Config, result: ConnectResult): void {
     process.stderr.write(`✓ Connected: ${accountLabel(account)}\n`);
   }
   for (const failure of result.failures) {
-    process.stderr.write(`Couldn't connect ${failure.account}: ${failure.message}\n`);
+    process.stderr.write(`Couldn't connect ${failure.account}: ${failure.response ?? failure.message}\n`);
   }
 }
 
@@ -327,64 +327,11 @@ export async function connectTurso(
   }
 }
 
-const TRIGGERDEV_PROJECT_REF_WHERE =
-  "Paste the project ref from the project's settings page (it starts with proj_). It is also the `project` line in trigger.config.ts.";
-
-const TRIGGERDEV_PROJECT_REF_HINT = `This key cannot name its project. ${TRIGGERDEV_PROJECT_REF_WHERE}`;
+const TRIGGERDEV_INSTRUCTIONS =
+  'In the Trigger.dev environment you want to monitor, open API Keys and create a key with the "No restrictions" access preset. The API refuses every other preset. A prod key connects production and a staging key connects staging, each as its own account.';
 
 const TRIGGERDEV_HEADLESS_HINT =
-  'Create an environment API key in your Trigger.dev project (production environment > API Keys, "No restrictions" access preset), then re-run:\n' +
-  'polylane cloud connect --provider triggerdev --api-key <key>\n' +
-  `Add --project-ref <proj_...> when the API answers that the key cannot name its project. ${TRIGGERDEV_PROJECT_REF_WHERE}`;
-
-// The generated client trails the deployed API spec; the triggerdev body
-// shape is the contract from the API-side design record.
-export type TriggerdevConnectBody = {
-  workspaceId: string;
-  provider: 'triggerdev';
-  apiKey: string;
-  projectRef?: string;
-};
-
-// The API resolves the project from the key alone when it can; it answers 400
-// when it needs the project ref to disambiguate. Prompt for the ref only then,
-// once, and retry. Any other 400 (for example a key that cannot read runs)
-// already carries the API's guidance and ends the step.
-export async function connectTriggerdev(
-  config: Config,
-  api: PolylaneAPI,
-  body: TriggerdevConnectBody
-): Promise<typeof BACK | ConnectResult> {
-  const send = (b: TriggerdevConnectBody): Promise<ConnectResult> =>
-    api.cloudAccountsConnect(b as unknown as ConnectBody);
-  try {
-    return await send(body);
-  } catch (err) {
-    if (
-      !isApiError(err) ||
-      err.status !== 400 ||
-      body.projectRef !== undefined ||
-      !/project ref/i.test(err.message)
-    ) {
-      throw err;
-    }
-    if (!isInteractive(config.nonInteractive)) {
-      throw new CLIError(
-        err.message,
-        ExitCode.USAGE,
-        `Pass --project-ref <proj_...>.\n${TRIGGERDEV_PROJECT_REF_HINT}`
-      );
-    }
-    note(`${err.message}\n${TRIGGERDEV_PROJECT_REF_HINT}`, 'Trigger.dev project ref');
-    const picked = await promptTextOrBack(
-      { nonInteractive: config.nonInteractive },
-      'Project ref',
-      { placeholder: 'proj_…', validate: (v: string) => (v.trim() ? undefined : 'Required') }
-    );
-    if (picked === BACK) return BACK;
-    return send({ ...body, projectRef: picked.trim() });
-  }
-}
+  `${TRIGGERDEV_INSTRUCTIONS}\n` + 'Then re-run:\npolylane cloud connect --provider triggerdev --api-key <key>';
 
 async function openOrPrintInstallUrl(config: Config, url: string, label: string, noBrowser: boolean): Promise<void> {
   if (config.output === 'json') {
@@ -589,8 +536,7 @@ async function connectProvider(
         '--api-key',
         {
           message: 'Trigger.dev environment API key',
-          instructions:
-            'In your production environment open API Keys and create a key with the "No restrictions" access preset. That preset is the only kind on the Free and Hobby plans; on Pro you may instead use restricted keys such as "Observer" plus "Deploy only", adding them one at a time. Re-running this command with another key adds it to the same account.',
+          instructions: TRIGGERDEV_INSTRUCTIONS,
           link: 'https://cloud.trigger.dev',
           linkLabel: 'Open Trigger.dev',
         },
@@ -600,14 +546,7 @@ async function connectProvider(
       ),
     ]);
     if (!ok) return BACK;
-    const projectRef = getArgString(args, 'projectRef');
-    const result = await connectTriggerdev(config, api, {
-      workspaceId,
-      provider: 'triggerdev',
-      apiKey,
-      ...(projectRef !== undefined ? { projectRef } : {}),
-    });
-    if (result === BACK) return BACK;
+    const result = await api.cloudAccountsConnect({ workspaceId, provider: 'triggerdev', apiKey });
     printConnectSuccess(config, result);
     return 'connected';
   }
@@ -964,7 +903,6 @@ export const cloudConnectCommand: Command = {
     { flag: '--organization <org>', description: 'PlanetScale organization, or Turso organization slug', type: 'string' },
     // Render
     { flag: '--api-key <key>', description: 'Render API key, or Trigger.dev environment API key', type: 'string' },
-    { flag: '--project-ref <ref>', description: 'Trigger.dev: project ref (proj_...), only needed when the API asks for it', type: 'string' },
     // ClickHouse
     { flag: '--key-id <id>', description: 'ClickHouse Cloud API key ID', type: 'string' },
     { flag: '--key-secret <secret>', description: 'ClickHouse Cloud API key secret', type: 'string' },
@@ -988,7 +926,6 @@ export const cloudConnectCommand: Command = {
     'polylane cloud connect --provider turso --token <token>',
     'polylane cloud connect --provider turso --token <token> --organization <slug>',
     'polylane cloud connect --provider triggerdev --api-key <key>',
-    'polylane cloud connect --provider triggerdev --api-key <key> --project-ref proj_abc123',
     'polylane cloud connect --provider kubernetes',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {

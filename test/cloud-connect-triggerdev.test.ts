@@ -1,93 +1,77 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { connectTriggerdev } from '../src/commands/cloud/connect';
-import { ApiError } from '../src/errors/api';
-import { CLIError } from '../src/errors/base';
-import { ExitCode } from '../src/errors/codes';
+import { printConnectSuccess, cloudConnectCommand } from '../src/commands/cloud/connect';
 import type { Config } from '../src/config/schema';
-import type { PolylaneAPI } from '../src/generated/client';
 
-const config = { nonInteractive: true } as Config;
-const body = { workspaceId: 'ws_1', provider: 'triggerdev', apiKey: 'tr_key' } as const;
-// The API's `detail` strings, verbatim from nominal
-// apps/apis/api-cloud-accounts/src/routers/cloud-accounts/connects/triggerdev.ts.
-const REF_REQUIRED = 'The Trigger.dev project ref is required for a restricted key';
-const RUNS_REQUIRED = 'This Trigger.dev API key cannot read runs';
+const config = { output: 'text' } as Config;
 
-function mockApi(connect: (body: unknown) => Promise<unknown>): PolylaneAPI {
-  return { cloudAccountsConnect: connect } as unknown as PolylaneAPI;
+type ConnectResult = Parameters<typeof printConnectSuccess>[1];
+
+// The refusal copy comes from the API verbatim (nominal
+// apps/apis/api-cloud-accounts/src/routers/cloud-accounts/connects/triggerdev.ts);
+// the CLI never rewrites it.
+const NO_RESTRICTIONS_REFUSED =
+  "Polylane needs a key created with the 'No restrictions' preset";
+
+async function captureStderr(fn: () => Promise<void> | void): Promise<string> {
+  const writes: string[] = [];
+  const original = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    writes.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    await fn();
+  } finally {
+    process.stderr.write = original;
+  }
+  return writes.join('');
 }
 
-describe('connectTriggerdev', () => {
-  it('sends the body without projectRef and returns the result', async () => {
-    const seen: unknown[] = [];
-    const result = { provider: 'triggerdev', accounts: [], failures: [] };
-    const api = mockApi(async (b) => {
-      seen.push(b);
-      return result;
-    });
-    assert.equal(await connectTriggerdev(config, api, body), result);
-    assert.deepEqual(seen, [body]);
+describe('printConnectSuccess', () => {
+  it("surfaces the API's refusal from failures[].response verbatim", async () => {
+    const result = {
+      provider: 'triggerdev',
+      accounts: [],
+      failures: [
+        {
+          message: 'There was an error when connecting an account.',
+          response: NO_RESTRICTIONS_REFUSED,
+          account: 'proj_abc123/prod',
+          name: 'my-project (prod)',
+          type: '400',
+        },
+      ],
+    } as unknown as ConnectResult;
+    const output = await captureStderr(() => printConnectSuccess(config, result));
+    assert.equal(output, `Couldn't connect proj_abc123/prod: ${NO_RESTRICTIONS_REFUSED}\n`);
   });
 
-  it('sends projectRef through when given', async () => {
-    const seen: unknown[] = [];
-    const withRef = { ...body, projectRef: 'proj_abc123' };
-    const api = mockApi(async (b) => {
-      seen.push(b);
-      return { provider: 'triggerdev', accounts: [], failures: [] };
-    });
-    await connectTriggerdev(config, api, withRef);
-    assert.deepEqual(seen, [withRef]);
-  });
-
-  it('turns the project-ref-required 400 into a usage error with a --project-ref hint when not interactive', async () => {
-    const api = mockApi(async () => {
-      throw new ApiError(400, REF_REQUIRED, ExitCode.USAGE);
-    });
-    await assert.rejects(
-      () => connectTriggerdev(config, api, body),
-      (err: unknown) =>
-        err instanceof CLIError &&
-        err.exitCode === ExitCode.USAGE &&
-        err.message.includes('project ref') &&
-        (err.hint?.includes('--project-ref') ?? false) &&
-        (err.hint?.includes('This key cannot name its project.') ?? false) &&
-        (err.hint?.includes("project's settings page") ?? false) &&
-        (err.hint?.includes('trigger.config.ts') ?? false)
+  it('falls back to the failure message when the API sent no response text', async () => {
+    const result = {
+      provider: 'triggerdev',
+      accounts: [],
+      failures: [
+        {
+          message: 'There was an error when connecting an account.',
+          account: 'proj_abc123/prod',
+          name: 'my-project (prod)',
+          type: 'unknown',
+        },
+      ],
+    } as unknown as ConnectResult;
+    const output = await captureStderr(() => printConnectSuccess(config, result));
+    assert.equal(
+      output,
+      "Couldn't connect proj_abc123/prod: There was an error when connecting an account.\n"
     );
   });
+});
 
-  it('rethrows the project-ref-required 400 when a projectRef was already sent', async () => {
-    const original = new ApiError(400, REF_REQUIRED, ExitCode.USAGE);
-    const api = mockApi(async () => {
-      throw original;
-    });
-    await assert.rejects(
-      () => connectTriggerdev(config, api, { ...body, projectRef: 'proj_abc123' }),
-      (err: unknown) => err === original
-    );
-  });
-
-  it('rethrows other 400s untouched, including a key that cannot read runs', async () => {
-    const original = new ApiError(400, RUNS_REQUIRED, ExitCode.USAGE);
-    const api = mockApi(async () => {
-      throw original;
-    });
-    await assert.rejects(
-      () => connectTriggerdev(config, api, body),
-      (err: unknown) => err === original
-    );
-  });
-
-  it('rethrows non-400 errors untouched', async () => {
-    const original = new ApiError(401, 'Not signed in.', ExitCode.AUTH);
-    const api = mockApi(async () => {
-      throw original;
-    });
-    await assert.rejects(
-      () => connectTriggerdev(config, api, body),
-      (err: unknown) => err === original
-    );
+describe('cloud connect --provider triggerdev flags', () => {
+  it('takes only --api-key: the project ref comes from the key, so no --project-ref flag exists', () => {
+    const flags = (cloudConnectCommand.options ?? []).map((o) => o.flag);
+    assert.ok(flags.some((f) => f.startsWith('--api-key')));
+    assert.ok(!flags.some((f) => f.startsWith('--project-ref')));
   });
 });
