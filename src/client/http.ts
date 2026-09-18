@@ -71,11 +71,15 @@ export async function request(config: Config, opts: RequestOpts): Promise<Respon
     Object.assign(headers, getAuthHeader(cred));
   }
 
-  if (opts.body !== undefined) {
+  // The API edge answers a mutating request without a JSON content type with a
+  // 403 HTML page before it reaches a worker, so a body-less POST, PUT, PATCH or
+  // DELETE goes out as an empty object.
+  const payload = opts.body !== undefined ? opts.body : method === 'GET' ? undefined : {};
+  if (payload !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const body = opts.body !== undefined ? JSON.stringify(opts.body) : undefined;
+  const body = payload !== undefined ? JSON.stringify(payload) : undefined;
 
   logVerbose(config, '>', `${method} ${fullUrl}`);
   if (headers['x-api-key']) {
