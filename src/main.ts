@@ -34,7 +34,6 @@ const NO_AUTH_COMMANDS = new Set([
   'subscription plans',
   'help',
   'setup',
-  'map',
   'update',
   'version',
   'api list',
