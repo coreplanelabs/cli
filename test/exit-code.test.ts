@@ -63,16 +63,20 @@ describe('cloud connect exit code', () => {
     assert.equal(connectExitCode('connected', null), ExitCode.SUCCESS);
     assert.equal(connectExitCode('connected', 'connected'), ExitCode.SUCCESS);
     assert.equal(connectExitCode(null, 'connected'), ExitCode.SUCCESS);
+    assert.equal(connectExitCode(null, []), ExitCode.SUCCESS);
+    assert.equal(connectExitCode(null, ['connected', 'connected']), ExitCode.SUCCESS);
   });
 
   it('is PENDING when the CloudFormation stack is still creating', () => {
     assert.equal(connectExitCode(null, 'pending'), ExitCode.PENDING);
     assert.equal(connectExitCode('connected', 'pending'), ExitCode.PENDING);
+    assert.equal(connectExitCode(null, ['connected', 'pending']), ExitCode.PENDING);
   });
 
   it('is GENERAL when a browser wait timed out, even if AWS is merely pending', () => {
     assert.equal(connectExitCode('timeout', null), ExitCode.GENERAL);
     assert.equal(connectExitCode('timeout', 'pending'), ExitCode.GENERAL);
     assert.equal(connectExitCode('timeout', 'connected'), ExitCode.GENERAL);
+    assert.equal(connectExitCode('timeout', ['connected', 'pending']), ExitCode.GENERAL);
   });
 });

@@ -140,13 +140,13 @@ Some connect-style operations may return `{ accounts: [...], failures: [...] }` 
 
 ### Browser-opening operations
 
-Commands that generate an install / consent URL (`auth login`, `integration connect --type <browser-flow>`, `cloud connect --provider <browser-flow>`, …) always print the URL to stdout and, in interactive mode, also try to open the browser. They succeed whether or not the browser actually opens. When the command can wait for the upstream side to finish (`integration connect`, `cloud connect`), the exit code reflects that wait: `0` once the connection shows up, `1` when the wait timed out, `7` when `cloud connect --provider aws` ends while the CloudFormation stack is still creating (the account arrives later; `polylane cloud list` shows it). After a browser flow, re-query state with the relevant `list` / `show` command to confirm.
+Commands that generate an install / consent URL (`auth login`, `integration connect --type <browser-flow>`, `cloud connect --provider <browser-flow>`, …) always print the URL to stdout and, in interactive mode, also try to open the browser. They succeed whether or not the browser actually opens. When the command can wait for the upstream side to finish (`integration connect`, `cloud connect`), the exit code reflects that wait: `0` once the connection shows up and `1` when the foreground wait times out. Explicit `cloud connect --provider aws` keeps its 15-minute foreground wait. The interactive provider picker instead watches each submitted AWS account independently while more accounts are added; choosing Done stops those local pollers immediately and exits `7` if any remain pending. After a browser flow, re-query state with the relevant `list` / `show` command to confirm.
 
 ### Pending (exit `7`)
 
 | Scenario | Exit | Typical message |
 |---|---|---|
-| `cloud connect --provider aws` ends before the CloudFormation stack finishes creating | 7 | `AWS is still connecting — the CloudFormation stack has not shown up yet.` with a hint to check `polylane cloud list` |
+| Done is chosen in the interactive `cloud connect` provider picker before one or more AWS CloudFormation stacks finish creating | 7 | One status per pending 12-digit account, with `polylane cloud list` check and account-specific `cloud connect` retry commands |
 | `subscription upgrade` (or the upgrade offer inside `cloud connect`): Stripe reported the payment but the workspace plan had not changed after 90 s | 7 | `Payment received; your plan is updating.` with a hint to re-check (`polylane subscription show`, or re-run `polylane cloud connect`) |
 
 `7` is not an error: the launch went through and nothing needs to be re-run unless the stack fails. Treat it as "not connected yet" and re-check with `polylane cloud list` before depending on the account.

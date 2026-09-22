@@ -1,6 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAwsRegions } from '../src/commands/cloud/connect';
+import { parseAwsAccountId, parseAwsRegions } from '../src/commands/cloud/connect';
+
+describe('parseAwsAccountId', () => {
+  it('accepts and trims a 12-digit account ID', () => {
+    assert.equal(parseAwsAccountId(' 123456789012 '), '123456789012');
+  });
+
+  it('rejects IDs that are not exactly 12 digits', () => {
+    assert.throws(() => parseAwsAccountId('123'), /12-digit/);
+    assert.throws(() => parseAwsAccountId('12345678901x'), /12-digit/);
+  });
+});
 
 describe('parseAwsRegions', () => {
   it('maps a single region to a one-element list', () => {
