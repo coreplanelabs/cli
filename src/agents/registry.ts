@@ -11,9 +11,6 @@ export const MCP_SERVER_NAME = 'polylane';
 export const MCP_SERVER_URL = process.env.POLYLANE_MCP_URL || 'https://mcp.polylane.com/mcp';
 export const SKILL_DIRECTORY_NAME = 'polylane-cli';
 
-/** The prompt handed to a coding agent to map the current repository. */
-export const MAPPING_PROMPT = 'Map this repository with Polylane';
-
 export type WriteAction = 'created' | 'updated' | 'unchanged' | 'skipped';
 
 export interface WriteOutcome {
@@ -279,28 +276,12 @@ export function upsertGooseExtension(path: string, dryRun = false): WriteOutcome
   return { label, path, action: 'updated' };
 }
 
-/**
- * How to launch an agent headlessly for a one-shot, auto-approved run of a
- * prompt. Absent for agents with no scriptable headless entry (IDE/extension
- * surfaces like Windsurf, Zed, Roo, VS Code).
- */
-export interface HeadlessRun {
-  /** The executable to invoke; must resolve on PATH for the recipe to run. */
-  bin: string;
-  /** Build the full argv (excluding `bin`) for a one-shot run of `prompt`. */
-  args(prompt: string): string[];
-  /** Extra environment needed to run non-interactively (merged over process.env). */
-  env?: Record<string, string>;
-}
-
 export interface AgentSetup {
   id: string;
   name: string;
   detect(home: string): boolean;
   user(home: string, dryRun: boolean): WriteOutcome[];
   project?(projectDir: string, dryRun: boolean): WriteOutcome[];
-  /** How to run this agent headlessly, when it has a scriptable one-shot mode. */
-  headlessRun?: HeadlessRun;
 }
 
 function skillFile(baseDir: string): string {
@@ -311,7 +292,6 @@ export const AGENTS: AgentSetup[] = [
   {
     id: 'claude',
     name: 'Claude Code',
-    headlessRun: { bin: 'claude', args: (prompt) => ['-p', prompt, '--permission-mode', 'bypassPermissions'] },
     detect: (home) => hasAgentFootprint(join(home, '.claude')) || existsSync(join(home, '.claude.json')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.claude')), dryRun),
@@ -325,7 +305,6 @@ export const AGENTS: AgentSetup[] = [
   {
     id: 'cursor',
     name: 'Cursor',
-    headlessRun: { bin: 'cursor-agent', args: (prompt) => ['-p', prompt, '--force'] },
     detect: (home) => hasAgentFootprint(join(home, '.cursor')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.cursor')), dryRun),
@@ -339,7 +318,6 @@ export const AGENTS: AgentSetup[] = [
   {
     id: 'opencode',
     name: 'OpenCode',
-    headlessRun: { bin: 'opencode', args: (prompt) => ['run', prompt] },
     detect: (home) => hasAgentFootprint(join(home, '.config', 'opencode')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.config', 'opencode')), dryRun),
@@ -363,7 +341,6 @@ export const AGENTS: AgentSetup[] = [
   {
     id: 'codex',
     name: 'Codex CLI',
-    headlessRun: { bin: 'codex', args: (prompt) => ['exec', '--full-auto', prompt] },
     detect: (home) => hasAgentFootprint(join(home, '.codex')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.codex')), dryRun),
@@ -382,7 +359,6 @@ export const AGENTS: AgentSetup[] = [
   {
     id: 'pi',
     name: 'Pi',
-    headlessRun: { bin: 'pi', args: (prompt) => ['-p', prompt] },
     detect: (home) => hasAgentFootprint(join(home, '.pi')),
     user: (home, dryRun) => [
       writeSkillFile(skillFile(join(home, '.pi', 'agent')), dryRun),
@@ -409,7 +385,6 @@ export const AGENTS: AgentSetup[] = [
   {
     id: 'cline',
     name: 'Cline',
-    headlessRun: { bin: 'cline', args: (prompt) => ['--yolo', prompt] },
     // Two Cline surfaces share one config format: the VS Code extension
     // (globalStorage) and the Cline CLI (~/.cline). Write to whichever exists
     // so we never create VS Code's storage tree for an uninstalled extension.
@@ -450,14 +425,12 @@ export const AGENTS: AgentSetup[] = [
   {
     id: 'goose',
     name: 'Goose',
-    headlessRun: { bin: 'goose', args: (prompt) => ['run', '--no-session', '-t', prompt], env: { GOOSE_MODE: 'auto' } },
     detect: (home) => hasAgentFootprint(join(home, '.config', 'goose')),
     user: (home, dryRun) => [upsertGooseExtension(join(home, '.config', 'goose', 'config.yaml'), dryRun)],
   },
   {
     id: 'gemini',
     name: 'Gemini CLI',
-    headlessRun: { bin: 'gemini', args: (prompt) => ['-p', prompt, '--yolo'] },
     detect: (home) => hasAgentFootprint(join(home, '.gemini')),
     user: (home, dryRun) => [
       upsertJsonEntry(join(home, '.gemini', 'settings.json'), ['mcpServers', MCP_SERVER_NAME], GEMINI_SERVER_ENTRY, dryRun),
@@ -512,8 +485,6 @@ export const AGENTS: AgentSetup[] = [
   },
 ];
 
-export const AGENT_IDS = AGENTS.map((a) => a.id);
-
 /** The agents installed for `home`, in registry order. The one detection the installer and setup share. */
 export function detectedAgents(home: string): AgentSetup[] {
   return AGENTS.filter((a) => a.detect(home));
@@ -554,9 +525,5 @@ export function detectedAgentIds(home: string, namespace: AgentIdNamespace): str
     if (id) ids.push(id);
   }
   return ids;
-}
-
-export function agentById(id: string): AgentSetup | undefined {
-  return AGENTS.find((a) => a.id === id);
 }
 

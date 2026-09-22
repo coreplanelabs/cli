@@ -35,9 +35,10 @@ describe('command resolution', () => {
     assert.equal(r.command.name, 'api call');
   });
 
-  it('returns null for unknown paths', () => {
+  it('returns null for unknown and removed paths', () => {
     assert.equal(registry.resolve(['unknown']), null);
     assert.equal(registry.resolve(['issue', 'nope']), null);
+    assert.equal(registry.resolve(['map']), null);
   });
 
   it('has all resource groups', () => {
@@ -54,7 +55,6 @@ describe('command resolution', () => {
       'help',
       'integration',
       'issue',
-      'map',
       'memory',
       'note',
       'repo',
