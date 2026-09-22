@@ -55,7 +55,10 @@ export function slackChannelOps(api: PolylaneAPI): SlackChannelOps | null {
 export const PICKER_SEARCH = '__search__';
 export const PICKER_DONE = '__done__';
 export const SLACK_CHANNELS_LATER_LINE = 'Add Polylane to Slack channels any time: polylane integration connect --type slack';
-const NO_CHANNELS_LINE = 'No public Slack channel to join yet. Polylane will suggest channels in Slack as they appear.';
+export const SLACK_CHANNEL_PICKER_NOTE =
+  'Find and add public channels here. For private channels, invite @Polylane from the channel in Slack.';
+export const NO_SLACK_CHANNELS_LINE =
+  'No public Slack channels are available here.';
 const SEARCH_MIN_CHARS = 2;
 const SEARCH_MAX_RESULTS = 10;
 
@@ -81,8 +84,12 @@ export function pickerOptions(
 }
 
 export function pickerMessage(selected: SlackChannelRef[]): string {
-  if (selected.length === 0) return 'Which Slack channels should Polylane join?';
-  return `Selected: ${selected.map((c) => `#${c.name}`).join(', ')}. Add another, or Done.`;
+  if (selected.length === 0) return 'Which public channels should Polylane join?';
+  return `Selected: ${selected.map((c) => `#${c.name}`).join(', ')}. Add another public channel, or Done.`;
+}
+
+export function noSlackChannelMatchesLine(fragment: string): string {
+  return `No public Slack channel matching "${fragment.trim()}" is available here.`;
 }
 
 export function filterChannels(channels: SearchableChannel[], fragment: string, selectedIds: string[]): SearchableChannel[] {
@@ -120,7 +127,7 @@ async function searchChannel(
   selected: SlackChannelRef[]
 ): Promise<SlackChannelRef | typeof BACK | null> {
   const ctx = { nonInteractive: config.nonInteractive };
-  const fragment = await promptTextOrBack(ctx, 'Channel name (at least two characters)');
+  const fragment = await promptTextOrBack(ctx, 'Public channel name (at least two characters)');
   if (fragment === BACK) return BACK;
   const spinner = new Spinner('Searching channels…');
   spinner.start();
@@ -133,7 +140,7 @@ async function searchChannel(
   }
   const matches = filterChannels(channels, fragment, selected.map((c) => c.id));
   if (matches.length === 0) {
-    say(`No public channel matching "${fragment.trim()}" that Polylane is not already in.`);
+    say(noSlackChannelMatchesLine(fragment));
     return null;
   }
   const picked = await promptSelectOrBack(
@@ -183,7 +190,7 @@ export async function runSlackChannelStep(
     if (!shouldOfferSlackChannels(true, opts.alreadyConnected, suggested.inAnyRealChannel)) return;
 
     note(
-      'Polylane works in the channels where alerts, deploys, and incidents land. Pick the ones it should join; you can add more later.',
+      SLACK_CHANNEL_PICKER_NOTE,
       'Slack channels'
     );
     const ctx = { nonInteractive: config.nonInteractive };
@@ -209,7 +216,7 @@ export async function runSlackChannelStep(
       if (suggestion) selected.push({ id: suggestion.id, name: suggestion.name });
     }
     if (selected.length === 0) {
-      if (suggested.suggestions.length === 0) say(NO_CHANNELS_LINE);
+      if (suggested.suggestions.length === 0) say(NO_SLACK_CHANNELS_LINE);
       say(SLACK_CHANNELS_LATER_LINE);
       return;
     }

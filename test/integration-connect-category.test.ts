@@ -45,6 +45,15 @@ describe('typeOptionsForCategory', () => {
     );
   });
 
+  it('explains the team benefit before Slack is selected', () => {
+    const slack = typeOptionsForCategory('communication')[0];
+    assert.ok(slack);
+    assert.match(slack.hint, /start investigations/i);
+    assert.match(slack.hint, /incident/i);
+    assert.match(slack.hint, /autofix/i);
+    assert.match(slack.hint, /channels/i);
+  });
+
   it('covers every option with a known category', () => {
     for (const category of CONNECT_CATEGORIES) {
       assert.ok(typeOptionsForCategory(category).length > 0, `empty category: ${category}`);
