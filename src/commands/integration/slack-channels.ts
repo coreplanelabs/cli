@@ -84,7 +84,7 @@ export function pickerOptions(
 }
 
 export function pickerMessage(selected: SlackChannelRef[]): string {
-  if (selected.length === 0) return 'Which public channels should Polylane join?';
+  if (selected.length === 0) return 'Where do you triage and discuss incidents?';
   return `Selected: ${selected.map((c) => `#${c.name}`).join(', ')}. Add another public channel, or Done.`;
 }
 

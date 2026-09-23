@@ -63,8 +63,15 @@ describe('pickerMessage', () => {
       SLACK_CHANNEL_PICKER_NOTE,
       'Find and add public channels here. For private channels, invite @Polylane from the channel in Slack.'
     );
-    assert.equal(pickerMessage([]), 'Which public channels should Polylane join?');
+    assert.equal(pickerMessage([]), 'Where do you triage and discuss incidents?');
     assert.match(pickerMessage([{ id: 'C1', name: 'alerts' }, { id: 'C2', name: 'deploys' }]), /#alerts, #deploys/);
+  });
+
+  it('keeps repeated-selection wording after a choice', () => {
+    assert.equal(
+      pickerMessage([{ id: 'C1', name: 'alerts' }, { id: 'C2', name: 'deploys' }]),
+      'Selected: #alerts, #deploys. Add another public channel, or Done.'
+    );
   });
 
   it('keeps empty and no-match states scoped to public channels without repeating the note', () => {
