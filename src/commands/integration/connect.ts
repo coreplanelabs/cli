@@ -66,7 +66,12 @@ type ConnectCategory = (typeof CONNECT_CATEGORIES)[number];
 
 const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string; category: ConnectCategory }> = [
   { value: 'github', label: 'GitHub', hint: 'install the GitHub App (browser)', category: 'git' },
-  { value: 'slack', label: 'Slack', hint: 'install the Slack app (browser)', category: 'communication' },
+  {
+    value: 'slack',
+    label: 'Slack',
+    hint: 'start investigations + receive incident/autofix updates in channels',
+    category: 'communication',
+  },
   { value: 'sentry', label: 'Sentry', hint: 'install the Sentry integration (browser)', category: 'observability' },
   { value: 'datadog', label: 'Datadog', hint: 'API + application keys', category: 'observability' },
   { value: 'honeycomb', label: 'Honeycomb', hint: 'configuration API key', category: 'observability' },

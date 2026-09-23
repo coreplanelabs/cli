@@ -92,6 +92,18 @@ export function parseAwsRegions(value: string): string[] | null {
   return all ? null : regions;
 }
 
+export function parseAwsAccountId(value: string): string {
+  const accountId = value.trim();
+  if (!/^\d{12}$/.test(accountId)) {
+    throw new CLIError(
+      `Invalid 12-digit AWS account ID: "${value}"`,
+      ExitCode.USAGE,
+      'Pass the 12-digit AWS account ID, for example --account 123456789012'
+    );
+  }
+  return accountId;
+}
+
 const AWS_REGIONS = [
   { value: AWS_ALL_REGIONS, label: 'All regions (every region enabled on the account, now and later)' },
   { value: 'us-east-1', label: 'us-east-1 (N. Virginia)' },
@@ -121,15 +133,22 @@ export type ConnectOutcome = HandoffOutcome | 'pending';
 
 export function connectExitCode(
   outcome: HandoffOutcome | null,
-  awsOutcome: Extract<ConnectOutcome, 'connected' | 'pending'> | null
+  awsOutcome:
+    | Extract<ConnectOutcome, 'connected' | 'pending'>
+    | ReadonlyArray<Extract<ConnectOutcome, 'connected' | 'pending'>>
+    | null
 ): ExitCode {
   if (outcome === 'timeout') return ExitCode.GENERAL;
-  if (awsOutcome === 'pending') return ExitCode.PENDING;
+  const awsOutcomes = Array.isArray(awsOutcome) ? awsOutcome : awsOutcome === null ? [] : [awsOutcome];
+  if (awsOutcomes.includes('pending')) return ExitCode.PENDING;
   return ExitCode.SUCCESS;
 }
 
-export interface AccountBaseline {
+export interface AccountSnapshot {
   existing: CloudAccount[];
+}
+
+export interface AccountBaseline extends AccountSnapshot {
   check: () => Promise<CloudAccount[] | null>;
 }
 
@@ -149,6 +168,52 @@ export async function accountBaseline(
     return fresh.length > 0 ? fresh : null;
   };
   return { existing: before.items, check };
+}
+
+export function accountCheckForAwsId(
+  baseline: AccountSnapshot,
+  accountId: string,
+  listCurrent: () => Promise<CloudAccount[]>
+): () => Promise<CloudAccount[] | null> {
+  const seen = new Map(
+    baseline.existing
+      .filter((account) => account.account === accountId)
+      .map((account) => [account.id, account.updated ?? ''])
+  );
+  return async (): Promise<CloudAccount[] | null> => {
+    const current = (await listCurrent()).filter((account) => account.account === accountId);
+    const fresh = current.filter((account) => !seen.has(account.id) || seen.get(account.id) !== (account.updated ?? ''));
+    return fresh.length > 0 ? fresh : null;
+  };
+}
+
+export function connectedAwsAccountsForId(existing: CloudAccount[], accountId: string): CloudAccount[] {
+  return existing.filter((account) => account.account === accountId);
+}
+
+export type AwsSubmissionPreparation =
+  | { kind: 'pending' }
+  | { kind: 'connected'; accounts: CloudAccount[] }
+  | { kind: 'submit'; baseline: AccountSnapshot };
+
+export async function prepareAwsSubmission(
+  accountId: string,
+  reconnect: boolean,
+  waits: AwsStackWaits,
+  listCurrent: () => Promise<CloudAccount[]>
+): Promise<AwsSubmissionPreparation> {
+  if (waits.has(accountId)) return { kind: 'pending' };
+  const existing = await listCurrent();
+  const matchingExisting = connectedAwsAccountsForId(existing, accountId);
+  if (!reconnect && matchingExisting.length > 0) return { kind: 'connected', accounts: matchingExisting };
+  return {
+    kind: 'submit',
+    baseline: { existing },
+  };
+}
+
+export function useAwsBackgroundPicker(config: Config, interactivePicker: boolean): boolean {
+  return interactivePicker && !config.dryRun && config.output !== 'json';
 }
 
 function printAlreadyConnected(config: Config, name: string, accounts: CloudAccount[]): void {
@@ -195,34 +260,24 @@ function accountLabel(account: CloudAccount): string {
 }
 
 const AWS_WAIT_INTERVAL_MS = 5_000;
-const AWS_SETTLE_TIMEOUT_MS = 2 * 60_000;
 const AWS_CHECK_HINT = 'Check with `polylane cloud list`.';
-const AWS_STILL_CONNECTING =
-  'AWS is still connecting — the CloudFormation stack has not shown up yet.\n' +
-  'Check later with `polylane cloud list`; the account appears there once the\n' +
-  'stack finishes creating. If the stack failed or rolled back, your AWS\n' +
-  'CloudFormation console shows the reason; fix it and re-run\n' +
-  '`polylane cloud connect --provider aws`. Exiting 7 (pending) until then.';
 
 export interface AwsStackWait {
+  accountId: string;
   pending: () => boolean;
   flush: () => void;
-  settle: () => Promise<Extract<ConnectOutcome, 'connected' | 'pending'>>;
+  stop: () => Extract<ConnectOutcome, 'connected' | 'pending'>;
 }
 
-// The picker flow hands the CloudFormation deploy to this instead of blocking
-// on it: polling runs in the background while the user keeps connecting other
-// clouds, flush() prints the "AWS connected" transition between prompts (never
-// over one), and settle() ends the session with a short bounded foreground
-// wait so a stack that is still deploying reports its state instead of
-// holding the terminal for the full deploy.
+// The picker flow hands each CloudFormation deploy to one of these instead of
+// blocking on it. Polling stays silent while a prompt is active, flush() prints
+// the transition between prompts, and stop() makes Done immediate.
 export function startAwsStackWait(
-  config: Config,
+  accountId: string,
   check: () => Promise<CloudAccount[] | null>,
-  opts: { settleTimeoutMs?: number; intervalMs?: number } = {}
+  opts: { intervalMs?: number } = {}
 ): AwsStackWait {
   const intervalMs = opts.intervalMs ?? AWS_WAIT_INTERVAL_MS;
-  const settleTimeoutMs = opts.settleTimeoutMs ?? AWS_SETTLE_TIMEOUT_MS;
   const background = startBackgroundCompletion(check, intervalMs);
   let reported: 'connected' | 'pending' | null = null;
   const reportConnected = (accounts: CloudAccount[]): 'connected' => {
@@ -233,30 +288,84 @@ export function startAwsStackWait(
     return 'connected';
   };
   return {
-    pending: () => reported === null,
+    accountId,
+    pending: () => reported === null && background.peek() === null,
     flush: (): void => {
       if (reported !== null) return;
       const found = background.peek();
       if (found) reportConnected(found);
     },
-    settle: async (): Promise<'connected' | 'pending'> => {
+    stop: (): 'connected' | 'pending' => {
       if (reported !== null) return reported;
       background.stop();
       const already = background.peek();
       if (already) return reportConnected(already);
-      const found = await waitForBrowserCompletion(config, check, {
-        waitingFor: 'the CloudFormation stack to deploy (usually a few minutes)',
-        interruptHint: AWS_CHECK_HINT,
-        startHint: 'AWS: waiting for the CloudFormation stack to finish deploying.',
-        timeoutMs: settleTimeoutMs,
-        intervalMs,
-      });
-      if (found) return reportConnected(found);
       reported = 'pending';
-      process.stderr.write(`${AWS_STILL_CONNECTING}\n`);
       return 'pending';
     },
   };
+}
+
+export class AwsStackWaits {
+  private readonly waits = new Map<string, AwsStackWait>();
+  private submitted = 0;
+
+  add(wait: AwsStackWait): boolean {
+    if (this.waits.has(wait.accountId)) {
+      wait.stop();
+      return false;
+    }
+    this.waits.set(wait.accountId, wait);
+    this.submitted += 1;
+    return true;
+  }
+
+  hasSubmitted(): boolean {
+    return this.submitted > 0;
+  }
+
+  has(accountId: string): boolean {
+    const wait = this.waits.get(accountId);
+    if (!wait) return false;
+    wait.flush();
+    if (wait.pending()) return true;
+    this.waits.delete(accountId);
+    return false;
+  }
+
+  flush(): void {
+    for (const [accountId, wait] of this.waits) {
+      wait.flush();
+      if (!wait.pending()) this.waits.delete(accountId);
+    }
+  }
+
+  pendingAccountIds(): string[] {
+    return [...this.waits.keys()];
+  }
+
+  printPendingStatus(): void {
+    const pending = this.pendingAccountIds();
+    if (pending.length > 0) process.stderr.write(`AWS pending: ${pending.join(', ')}\n`);
+  }
+
+  finish(): Array<Extract<ConnectOutcome, 'connected' | 'pending'>> {
+    this.flush();
+    const outcomes: Array<Extract<ConnectOutcome, 'connected' | 'pending'>> = [];
+    for (const [accountId, wait] of this.waits) {
+      const outcome = wait.stop();
+      outcomes.push(outcome);
+      if (outcome === 'pending') {
+        process.stderr.write(
+          `AWS account ${accountId} is still connecting — the CloudFormation stack has not shown up yet.\n` +
+            `Check ${accountId}: \`polylane cloud list\` (look for account ${accountId})\n` +
+            `Retry ${accountId}: \`polylane cloud connect --provider aws --account ${accountId}\`\n`
+        );
+      }
+    }
+    this.waits.clear();
+    return outcomes;
+  }
 }
 
 type ConnectResult = Awaited<ReturnType<PolylaneAPI['cloudAccountsConnect']>>;
@@ -458,7 +567,8 @@ async function connectProvider(
   workspaceId: string,
   provider: Provider,
   noBrowser: boolean,
-  background: boolean
+  background: boolean,
+  awsWaits: AwsStackWaits
 ): Promise<typeof BACK | HandoffOutcome | AwsStackWait> {
   const ctx = { nonInteractive: config.nonInteractive };
   const reconnect = getArgBoolean(args, 'reconnect') === true;
@@ -582,21 +692,9 @@ async function connectProvider(
   }
 
   let body: ConnectBody;
-  let awsBaseline: AccountBaseline | null = null;
+  let awsBaseline: AccountSnapshot | null = null;
+  let awsAccountId: string | null = null;
   if (provider === 'aws') {
-    // Short-circuit before the wizard when AWS is already connected — unless
-    // an explicit --account targets an account that is not connected yet.
-    awsBaseline = config.dryRun ? null : await accountBaseline(api, workspaceId, 'aws');
-    const accountFlag = getArgString(args, 'account');
-    if (
-      awsBaseline &&
-      !reconnect &&
-      awsBaseline.existing.length > 0 &&
-      (accountFlag === undefined || awsBaseline.existing.some((a) => a.account === accountFlag))
-    ) {
-      printAlreadyConnected(config, 'AWS', awsBaseline.existing);
-      return 'connected';
-    }
     let account = '';
     let regions: string[] | null = null;
     let subscribeToAlarms = getArgBoolean(args, 'subscribeAlarms') === true;
@@ -626,11 +724,27 @@ async function connectProvider(
       },
     ]);
     if (!ok) return BACK;
+    awsAccountId = parseAwsAccountId(account);
+    if (!config.dryRun) {
+      const preparation = await prepareAwsSubmission(awsAccountId, reconnect, awsWaits, async () => {
+        const current = await api.cloudAccountsList(workspaceId, { provider: 'aws', perPage: 100 });
+        return current.items;
+      });
+      if (preparation.kind === 'pending') {
+        process.stderr.write(`AWS account ${awsAccountId} is already pending — finish its CloudFormation stack or pick Done.\n`);
+        return BACK;
+      }
+      if (preparation.kind === 'connected') {
+        printAlreadyConnected(config, 'AWS', preparation.accounts);
+        return 'connected';
+      }
+      awsBaseline = preparation.baseline;
+    }
     const createMonitoringAlarms = getArgBoolean(args, 'createAlarms') === true;
     body = {
       workspaceId,
       provider: 'aws',
-      account,
+      account: awsAccountId,
       regions,
       ...(createMonitoringAlarms ? { createMonitoringAlarms } : {}),
       ...(subscribeToAlarms ? { subscribeToAlarms } : {}),
@@ -844,9 +958,15 @@ async function connectProvider(
   }
 
   // AWS ends in the browser too (deploying the CloudFormation stack); the
-  // baseline snapshot from before the wizard lets the CLI wait for the
-  // account after.
-  const awsCheck = canWaitForBrowser(config) && awsBaseline ? awsBaseline.check : null;
+  // snapshot refreshed immediately before submission lets the CLI wait for
+  // this exact account without claiming another account's completion.
+  const awsCheck =
+    canWaitForBrowser(config) && awsBaseline && awsAccountId
+      ? accountCheckForAwsId(awsBaseline, awsAccountId, async () => {
+          const current = await api.cloudAccountsList(workspaceId, { provider: 'aws', perPage: 100 });
+          return current.items;
+        })
+      : null;
 
   const result = await api.cloudAccountsConnect(body);
 
@@ -855,13 +975,14 @@ async function connectProvider(
   // is watched in the background so the rest of the session isn't blocked;
   // an explicit --provider aws keeps the foreground wait for scripts.
   if (result.provider === 'aws') {
+    if (awsAccountId === null) throw new Error('AWS connect completed without an account ID');
     await openOrPrintInstallUrl(config, result.url, 'the AWS CloudFormation stack', noBrowser);
     if (background && awsCheck) {
       process.stderr.write('\nAWS: CloudFormation stack creating — finish it in your browser.\n');
       if (!config.quiet) {
         process.stderr.write(`Polylane keeps checking in the background while you continue. ${AWS_CHECK_HINT}\n`);
       }
-      return startAwsStackWait(config, awsCheck);
+      return startAwsStackWait(awsAccountId, awsCheck);
     }
     return confirmBrowserConnect(config, awsCheck, 'the CloudFormation stack to deploy (usually a few minutes)', {
       timeoutMs: 15 * 60_000,
@@ -949,16 +1070,18 @@ export const cloudConnectCommand: Command = {
     const api = new PolylaneAPI(config);
     const providerFromFlag = getArgString(args, 'provider') !== undefined;
     const interactivePicker = !providerFromFlag && isInteractive(config.nonInteractive);
+    const awsBackgroundPicker = useAwsBackgroundPicker(config, interactivePicker);
 
     // Provider selection restarts whenever the user backs out of the first
     // step of the chosen flow, so nothing is committed until a flow completes.
     // While an AWS CloudFormation deploy runs in the background the picker
     // stays open so other clouds can connect meanwhile; its transitions are
     // flushed between prompts and the session settles them before it ends.
-    let awsWait: AwsStackWait | null = null;
+    const awsWaits = new AwsStackWaits();
     for (;;) {
-      awsWait?.flush();
-      const exitLabel: string = awsWait !== null && awsWait.pending() ? 'Done' : 'Cancel';
+      awsWaits.flush();
+      awsWaits.printPendingStatus();
+      const exitLabel = awsWaits.hasSubmitted() ? 'Done' : 'Cancel';
       const provider: Provider | typeof BACK =
         !interactivePicker
           ? await promptChoice<Provider>(
@@ -977,25 +1100,21 @@ export const cloudConnectCommand: Command = {
               exitLabel
             );
       if (provider === BACK) break;
-      if (provider === 'aws' && awsWait?.pending()) {
-        process.stderr.write('AWS: still waiting for the CloudFormation stack — connect another cloud or pick Done.\n');
-        continue;
-      }
-      const outcome = await connectProvider(config, api, args, workspaceId, provider, noBrowser, interactivePicker);
+      const outcome = await connectProvider(config, api, args, workspaceId, provider, noBrowser, awsBackgroundPicker, awsWaits);
       if (outcome === BACK) {
         if (providerFromFlag) break;
         continue;
       }
       if (typeof outcome !== 'string') {
-        awsWait = outcome;
+        awsWaits.add(outcome);
         continue;
       }
-      const awsOutcome = awsWait ? await awsWait.settle() : null;
-      process.exitCode = connectExitCode(outcome, awsOutcome);
+      if (awsBackgroundPicker && provider === 'aws') continue;
+      process.exitCode = connectExitCode(outcome, awsWaits.finish());
       return;
     }
-    if (awsWait) {
-      process.exitCode = connectExitCode(null, await awsWait.settle());
+    if (awsWaits.hasSubmitted()) {
+      process.exitCode = connectExitCode(null, awsWaits.finish());
       return;
     }
     cancel('Nothing connected.');

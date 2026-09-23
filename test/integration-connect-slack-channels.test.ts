@@ -4,9 +4,12 @@ import { mockConfig } from './helpers/config';
 import {
   PICKER_DONE,
   PICKER_SEARCH,
+  NO_SLACK_CHANNELS_LINE,
+  SLACK_CHANNEL_PICKER_NOTE,
   SLACK_CHANNELS_LATER_LINE,
   filterChannels,
   formatJoinResults,
+  noSlackChannelMatchesLine,
   pickerMessage,
   pickerOptions,
   printSlackChannelsLater,
@@ -55,9 +58,19 @@ describe('pickerOptions', () => {
 });
 
 describe('pickerMessage', () => {
-  it('names the current selection', () => {
-    assert.match(pickerMessage([]), /Slack channels/);
+  it('gives concise public and private channel instructions before selection', () => {
+    assert.equal(
+      SLACK_CHANNEL_PICKER_NOTE,
+      'Find and add public channels here. For private channels, invite @Polylane from the channel in Slack.'
+    );
+    assert.equal(pickerMessage([]), 'Which public channels should Polylane join?');
     assert.match(pickerMessage([{ id: 'C1', name: 'alerts' }, { id: 'C2', name: 'deploys' }]), /#alerts, #deploys/);
+  });
+
+  it('keeps empty and no-match states scoped to public channels without repeating the note', () => {
+    assert.equal(NO_SLACK_CHANNELS_LINE, 'No public Slack channels are available here.');
+    assert.equal(noSlackChannelMatchesLine('infra'), 'No public Slack channel matching "infra" is available here.');
+    assert.doesNotMatch(NO_SLACK_CHANNELS_LINE, /private|invite/i);
   });
 });
 
