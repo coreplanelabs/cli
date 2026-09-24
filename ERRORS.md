@@ -123,6 +123,12 @@ Hint: polylane workspace use <id>
 
 These are the non-obvious command-level behaviours an agent should know about. Specific error strings are subject to change — use these as categories you can rely on.
 
+### Authentication status (`auth status`)
+
+- The resolved credential is authenticated only when `/v1/auth/whoami` accepts it on the API domain selected by `--domain`, `POLYLANE_API_DOMAIN`, or configuration.
+- A selected-domain 401 exits `3` with a sign-in hint. Network, timeout, malformed-response, and server failures keep their global error categories and never produce `authenticated: true`.
+- Successful validation preserves the credential source, domain, workspace, expiry, and user details in the status output.
+
 ### Destructive operations (`auth logout`, `integration disconnect`, `cloud disconnect`, `memory delete`, …)
 
 - Prompt for confirmation in interactive mode.
