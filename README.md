@@ -172,7 +172,7 @@ polylane ... --non-interactive --quiet --output json
 | `POLYLANE_TELEMETRY` | `0` / `false` / `off` disables anonymous usage telemetry |
 | `POLYLANE_TELEMETRY_ENDPOINT` | Override the telemetry endpoint (defaults to `<api>/v1/telemetry/cli`) |
 | `DO_NOT_TRACK` | Universal `1` disables telemetry ([standard](https://consoledonottrack.com/)) |
-| `POLYLANE_OAUTH_CLIENT_ID` / `POLYLANE_OAUTH_CLIENT_SECRET` | OAuth client override (normally baked at build) |
+| `POLYLANE_OAUTH_CLIENT_ID` / `POLYLANE_OAUTH_CLIENT_SECRET` | Environment-bound OAuth client overrides (normally baked together with the matching API domain) |
 | `POLYLANE_CONSOLE_DOMAIN` | Consent-UI host override (defaults to the API host with `api.` → `console.`) |
 | `NO_COLOR` | Disable ANSI colours |
 
@@ -207,7 +207,9 @@ OAuth is the default way to connect — including for agents. Use an API key onl
 | `polylane auth signup` | Create an account — Google/GitHub (one browser trip: signup + CLI OAuth) or email + password |
 | `polylane auth signup --email …` | Bootstrap a fresh account from an agent: a strong random password is generated and shown once (pass `--password` to choose your own; weak or known-leaked values are rejected); finish with `--code <code>` from the verification email |
 
-OAuth credentials live at `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. `polylane auth status` reports the active source.
+OAuth credentials live at `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. OAuth client overrides are environment-bound: use a client configured for the API domain selected by `--domain` or `POLYLANE_API_DOMAIN`, and keep its secret in approved environment-specific secret storage.
+
+`polylane auth status` reports the active source only after `/v1/auth/whoami` validates the resolved credential against that selected API domain. A rejected credential exits with authentication semantics and a sign-in hint; network, timeout, malformed-response, and server failures retain their own error categories instead of reporting authenticated success.
 
 Credential precedence (first match wins):
 
