@@ -10,7 +10,7 @@ import { isCLIError } from '../src/errors/base';
 describe('typeOptionsForCategory', () => {
   it('returns every option when no category is given', () => {
     const all = typeOptionsForCategory(undefined);
-    assert.equal(all.length, 17);
+    assert.equal(all.length, 18);
   });
 
   it('narrows to exactly the observability integrations', () => {
@@ -20,7 +20,7 @@ describe('typeOptionsForCategory', () => {
 
   it('narrows to exactly the product analytics integrations', () => {
     const types = typeOptionsForCategory('product-analytics').map((o) => o.value);
-    assert.deepEqual(types, ['mixpanel']);
+    assert.deepEqual(types, ['mixpanel', 'posthog']);
   });
 
   it('narrows to exactly the code agents', () => {
@@ -78,9 +78,9 @@ describe('typeOptionsForCategory', () => {
 
 describe('resolveTypeOptions', () => {
   it('lets --type win over the filter', () => {
-    assert.equal(resolveTypeOptions('observability', true).length, 17);
+    assert.equal(resolveTypeOptions('observability', true).length, 18);
     assert.equal(resolveTypeOptions('observability', false).length, 8);
-    assert.equal(resolveTypeOptions(undefined, false).length, 17);
+    assert.equal(resolveTypeOptions(undefined, false).length, 18);
   });
 
   it('rejects an unknown category even when --type is present', () => {

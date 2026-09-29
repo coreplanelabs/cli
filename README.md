@@ -103,6 +103,7 @@ polylane workspace create --name "My Workspace"   # creates + makes default
 # 3. Connect your stack (discover what's available first)
 polylane integration catalog
 polylane integration connect --type <type>        # see `polylane integration connect --help`
+polylane integration connect --type posthog       # choose a project; repeat to add another
 polylane cloud connect --provider <provider>      # see `polylane cloud connect --help`
 
 # 4. Work
