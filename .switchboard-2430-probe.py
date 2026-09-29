@@ -3,7 +3,8 @@
 Reports only a fixed status. It does not print, write, hash, or log credentials.
 Use --self-test to exercise synthetic values without inspecting this machine;
 that mode has a distinct output that cannot count as a live receipt.
-The resident image deliberately lacks gh; both Git lookups must return the run bearer.
+The resident image deliberately lacks gh. The Door lookup must return the run
+bearer; the public github.com lookup may have no credential at all.
 Trusted image/helper/config inventory is a separate acceptance gate.
 """
 
@@ -27,11 +28,19 @@ from pathlib import Path
 PASS = "PASS_RESIDENT_GIT_RUN_BEARER_ONLY"
 APP = "FAIL_APP_BEARER"
 UNKNOWN = "INDETERMINATE"
-SBR = re.compile(r"sbr_[A-Za-z0-9_-]{1,64}\.[A-Za-z0-9_-]{20,128}\Z")
+SBR = re.compile(r"sbr_([A-Za-z0-9_-]{1,64})\.[A-Za-z0-9_-]{20,128}\Z")
 APP_TOKEN = re.compile(rb"ghs_[A-Za-z0-9_]{8,}")
 OTHER_TOKEN = re.compile(rb"(?:ghu_|gho_|ghp_|ghr_|github_pat_|sbr_)[A-Za-z0-9_.-]{8,}")
 HOST = re.compile(r"[A-Za-z0-9.-]+(?::[0-9]{1,5})?\Z")
 MAX_FILE = 65_536
+NO_PUBLIC_CREDENTIAL = b"fatal: could not read Username for 'https://github.com': terminal prompts disabled\n"
+NO_PUBLIC_CREDENTIAL_WITH_ASKPASS = (
+    b"error: unable to read askpass response from '/bin/false'\n" + NO_PUBLIC_CREDENTIAL
+)
+DOOR_HELPER = (
+    b'!f() { test -n "$GH_ENTERPRISE_TOKEN" || exit 1; '
+    b'printf \'%s\\n\' \'username=x-access-token\' "password=$GH_ENTERPRISE_TOKEN"; }; f'
+)
 
 
 def kind(value: bytes, expected: bytes) -> str:
@@ -62,6 +71,49 @@ def binary_status(path: str) -> str:
     if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
         return "unknown"
     return "trusted"
+
+
+def public_credential_missing(host: str, code: int, output: bytes, errors: bytes) -> bool:
+    return (
+        host == "github.com"
+        and code == 128
+        and not output
+        and errors in {NO_PUBLIC_CREDENTIAL, NO_PUBLIC_CREDENTIAL_WITH_ASKPASS}
+    )
+
+
+def config_contents_class(output: bytes, expected: bytes, door_host: str) -> str:
+    if APP_TOKEN.search(output):
+        return "app"
+    if OTHER_TOKEN.search(output.replace(expected, b"")):
+        return "unknown"
+    door_key = f"credential.https://{door_host}.helper".encode()
+    door_helpers = 0
+    for entry in output.split(b"\0"):
+        if not entry:
+            continue
+        key, separator, value = entry.partition(b"\n")
+        if not separator:
+            return "unknown"
+        if key == b"credential.helper":
+            if value:
+                return "unknown"
+        elif key == b"core.askpass" and value:
+            return "unknown"
+        elif key.startswith(b"credential.") and key.endswith(b".helper"):
+            if key != door_key or value != DOOR_HELPER:
+                return "unknown"
+            door_helpers += 1
+    return "run" if door_helpers == 1 else "unknown"
+
+
+def config_class(expected: bytes, door_host: str) -> str:
+    code, output, errors = command(["/usr/bin/git", "config", "--null", "--list"])
+    if APP_TOKEN.search(output + errors):
+        return "app"
+    if code != 0 or errors:
+        return "unknown"
+    return config_contents_class(output, expected, door_host)
 
 
 def command(argv: list[str], input_text: str | None = None) -> tuple[int, bytes, bytes]:
@@ -137,7 +189,11 @@ def git_password(host: str, path: str, expected: bytes) -> tuple[int, bytes, str
         ["/usr/bin/git", "credential", "fill"],
         f"protocol=https\nhost={host}\npath={path}\n\n",
     )
-    sidecar = "app" if APP_TOKEN.search(errors) else "unknown" if errors else "absent"
+    sidecar = (
+        "app" if APP_TOKEN.search(errors)
+        else "missing_public" if public_credential_missing(host, code, output, errors)
+        else "unknown" if errors else "absent"
+    )
     if APP_TOKEN.search(output) or OTHER_TOKEN.search(output.replace(expected, b"")):
         return code, output, sidecar
     fields: dict[bytes, bytes] = {}
@@ -229,9 +285,11 @@ def file_class(path: Path, expected: bytes) -> str:
     return "run" if expected in data else "absent"
 
 
-def credential_result(code: int, password: bytes, sidecar: str, expected: bytes) -> str:
+def credential_result(code: int, password: bytes, sidecar: str, expected: bytes, allow_missing: bool = False) -> str:
     observed = kind(password, expected)
     result = worst(PASS, sidecar)
+    if allow_missing and code == 128 and observed == "absent" and sidecar == "missing_public":
+        return PASS
     if code != 0 or observed == "absent":
         return worst(result, "app" if observed == "app" else "unknown")
     return worst(result, observed)
@@ -249,6 +307,7 @@ def probe() -> str:
     door_host = os.environ.get("GH_HOST", "")
     bearer = os.environ.get("GH_ENTERPRISE_TOKEN", "")
     harness_bearer = os.environ.get("SWITCHBOARD_RUN_BEARER", "")
+    bearer_match = SBR.fullmatch(bearer)
     if (
         not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", run_id)
         or repo != "coreplanelabs/cli"
@@ -256,8 +315,8 @@ def probe() -> str:
         or not HOST.fullmatch(door_host)
         or door_host != expected_door_host
         or door_host == "github.com"
-        or not SBR.fullmatch(bearer)
-        or not bearer.startswith(f"sbr_{run_id}.")
+        or not bearer_match
+        or run_id != bearer_match.group(1)
         or not hmac.compare_digest(bearer, harness_bearer)
     ):
         return UNKNOWN
@@ -273,8 +332,11 @@ def probe() -> str:
             return APP
         if name in {"GH_TOKEN", "GITHUB_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GITHUB_APP_PRIVATE_KEY", "SWITCHBOARD_GIT_CREDENTIAL"} and value:
             result = UNKNOWN
+        if name in {"GIT_ASKPASS", "SSH_ASKPASS"} and value:
+            result = UNKNOWN
         if OTHER_TOKEN.search(raw.replace(expected, b"")):
             result = UNKNOWN
+    result = worst(result, config_class(expected, door_host))
     paths, gitdir_known = candidate_files()
     if not gitdir_known:
         result = UNKNOWN
@@ -285,7 +347,7 @@ def probe() -> str:
         (door_host, f"git/{repo}.git"),
     ]:
         code, password, sidecar = git_password(host, path, expected)
-        classified = credential_result(code, password, sidecar, expected)
+        classified = credential_result(code, password, sidecar, expected, allow_missing=host == "github.com")
         result = APP if classified == APP else worst(result, "unknown" if classified == UNKNOWN else "run")
     return result
 
@@ -313,6 +375,27 @@ def self_test() -> str:
     if credential_result(0, fake, "unknown", fake) != UNKNOWN:
         return UNKNOWN
     if credential_result(0, fake, "app", fake) != APP:
+        return UNKNOWN
+    if credential_result(128, b"", "missing_public", fake, allow_missing=True) != PASS:
+        return UNKNOWN
+    if credential_result(128, b"", "missing_public", fake) != UNKNOWN:
+        return UNKNOWN
+    if credential_result(128, b"ghs_exampletoken12345678", "app", fake, allow_missing=True) != APP:
+        return UNKNOWN
+    if not public_credential_missing("github.com", 128, b"", NO_PUBLIC_CREDENTIAL_WITH_ASKPASS):
+        return UNKNOWN
+    if public_credential_missing("github.com", 128, b"", b"fatal: other error\n"):
+        return UNKNOWN
+    good_config = b"credential.helper\n\0credential.https://git.example.helper\n" + DOOR_HELPER + b"\0"
+    if config_contents_class(good_config, fake, "git.example") != "run":
+        return UNKNOWN
+    if config_contents_class(good_config + b"credential.https://github.com.helper\n!echo unknown\0", fake, "git.example") != "unknown":
+        return UNKNOWN
+    if config_contents_class(good_config + b"credential.helper\n!echo unknown\0", fake, "git.example") != "unknown":
+        return UNKNOWN
+    if config_contents_class(good_config + b"credential.helper\nghs_exampletoken12345678\0", fake, "git.example") != "app":
+        return UNKNOWN
+    if config_contents_class(good_config + b"core.askpass\n/bin/some-helper\0", fake, "git.example") != "unknown":
         return UNKNOWN
     with tempfile.TemporaryDirectory(prefix="sb2430-synthetic-") as directory:
         store = Path(directory) / "github-credentials"
