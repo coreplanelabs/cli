@@ -484,7 +484,7 @@ async function browserConnect(
     return 'connected';
   }
   const check = canWaitForBrowser(config) && baseline ? baseline.check : null;
-  await openOrPrintInstallUrl(config, cliConnectUrl(config, provider, workspaceId), label, noBrowser);
+  await openOrPrintInstallUrl(config, cliConnectUrl(config, provider, workspaceId, reconnect), label, noBrowser);
   return confirmBrowserConnect(config, check, `${label} to connect`);
 }
 
