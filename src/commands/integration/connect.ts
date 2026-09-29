@@ -136,8 +136,8 @@ export function prReviewsFlagsGiven(args: Record<string, unknown>): boolean {
 
 // The console's /cli/connect page carries the answer across the GitHub install round-trip
 // and hands it to the API, which records it on the integration before the repository sync.
-export function githubConnectUrl(config: Config, workspaceId: string, prReviews: PrReviewsChoice | undefined): string {
-  const url = cliConnectUrl(config, 'github', workspaceId);
+export function githubConnectUrl(config: Config, workspaceId: string, prReviews: PrReviewsChoice | undefined, reconnect = false): string {
+  const url = cliConnectUrl(config, 'github', workspaceId, reconnect);
   return prReviews ? `${url}&pr_reviews=${prReviews}` : url;
 }
 
@@ -1148,7 +1148,7 @@ async function connectType(
       return 'connected';
     }
     const check = canWaitForBrowser(config) && baseline ? baseline.check : null;
-    let url = cliConnectUrl(config, type, workspaceId);
+    let url = cliConnectUrl(config, type, workspaceId, reconnect);
     if (type !== 'github' && prReviewsFlagsGiven(args) && config.output !== 'json') {
       process.stderr.write('--pr-reviews / --no-pr-reviews only apply to --type github; ignored.\n');
     }
@@ -1159,7 +1159,7 @@ async function connectType(
         if (answer === BACK) return BACK;
         prReviews = answer;
       }
-      url = githubConnectUrl(config, workspaceId, prReviews);
+      url = githubConnectUrl(config, workspaceId, prReviews, reconnect);
     }
     await openOrPrintInstallUrl(config, url, labels[type], noBrowser);
     const outcome = await confirmBrowserConnect(config, check, names[type]);

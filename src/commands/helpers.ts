@@ -265,8 +265,9 @@ export function secretStep(
 // marks the browser session as CLI-initiated (cookie), generates the provider
 // install URL, and forwards to it — so the flow ends on the console's
 // "go back to your terminal" page instead of the workspace dashboard.
-export function cliConnectUrl(config: Config, flow: string, workspaceId: string): string {
-  return `${consoleBaseUrl(config)}/cli/connect?flow=${encodeURIComponent(flow)}&workspace=${encodeURIComponent(workspaceId)}`;
+export function cliConnectUrl(config: Config, flow: string, workspaceId: string, reconnect = false): string {
+  const url = `${consoleBaseUrl(config)}/cli/connect?flow=${encodeURIComponent(flow)}&workspace=${encodeURIComponent(workspaceId)}`;
+  return reconnect ? `${url}&reconnect=1` : url;
 }
 
 // After a connect flow hands off to the browser, the terminal session should
