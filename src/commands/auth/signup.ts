@@ -78,6 +78,10 @@ const TERMS_NOTICE = [
   '  https://polylane.com/privacy/',
 ].join('\n');
 
+// The installer prints the notice before its login picker and sets this only
+// for the CLI process it starts, so an email choice does not print it twice.
+const showTermsNotice = (): boolean => process.env.POLYLANE_TERMS_NOTICE_ACK !== '1';
+
 // Shown exactly once, on stderr, right after the server accepted it. Password
 // reset from the console sign-in page is the way to pick a different one.
 function announceGeneratedPassword(config: Config, email: string, password: string): void {
@@ -166,8 +170,7 @@ async function oauthSignup(config: Config, provider: 'google' | 'github'): Promi
     [
       `Your browser will open the Polylane signup page.`,
       `Pick "${label}" there, then approve the CLI's access when asked.`,
-      ``,
-      TERMS_NOTICE,
+      ...(showTermsNotice() ? ['', TERMS_NOTICE] : []),
     ].join('\n'),
     `Sign up with ${label}`
   );
@@ -255,7 +258,7 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
   // the console (nominal#465). No separate confirm step — that was tried in
   // cli#53 and reverted. Scripted runs get it on stderr, never blocking. The
   // --code completion path creates nothing, so it stays silent.
-  if (!codeArg) {
+  if (!codeArg && showTermsNotice()) {
     if (isInteractive(config.nonInteractive)) note(TERMS_NOTICE);
     else process.stderr.write(`\n${TERMS_NOTICE}\n\n`);
   }

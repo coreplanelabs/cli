@@ -122,6 +122,7 @@ describe('auth signup terms notice', () => {
   });
 
   beforeEach(() => {
+    delete process.env.POLYLANE_TERMS_NOTICE_ACK;
     rmSync(CONFIG_FILE, { force: true });
     rmSync(CREDENTIALS_FILE, { force: true });
   });
@@ -166,6 +167,26 @@ describe('auth signup terms notice', () => {
 
     assert.equal(output.split(TERMS_LINE).length - 1, 1);
     assert.ok(!output.includes('Continue?'));
+  });
+
+  it('keeps the email signup prompts but does not repeat a notice printed by the installer', async () => {
+    mockApi({ '/v1/auth/signup': signupResponse });
+    process.env.POLYLANE_TERMS_NOTICE_ACK = '1';
+
+    captureOutput();
+    try {
+      await authSignupCommand.execute(
+        mockConfig({ telemetry: false, nonInteractive: false }),
+        {} as GlobalFlags,
+        { email: 'dev@acme.com' }
+      );
+    } finally {
+      restoreOutput();
+      delete process.env.POLYLANE_TERMS_NOTICE_ACK;
+    }
+
+    assert.ok(!output.includes(TERMS_LINE));
+    assert.ok(output.includes(PASSWORD_PROMPT_MARKER));
   });
 
   it('shows the notice without a gate when --password is passed interactively', async () => {
