@@ -51,6 +51,7 @@ type ConnectableType =
   | 'grafana'
   | 'logfire'
   | 'mixpanel'
+  | 'posthog'
   | 'devin'
   | 'cursor'
   | 'factory'
@@ -81,6 +82,7 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'grafana', label: 'Grafana Cloud', hint: 'stack URL + service account token', category: 'observability' },
   { value: 'logfire', label: 'Logfire', hint: 'project + organization keys', category: 'observability' },
   { value: 'mixpanel', label: 'Mixpanel', hint: 'service account + project ID', category: 'product-analytics' },
+  { value: 'posthog', label: 'PostHog', hint: "choose one project on PostHog's consent screen", category: 'product-analytics' },
   { value: 'devin', label: 'Devin', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'factory', label: 'Factory', hint: 'API key · coding agent', category: 'code-agent' },
@@ -647,7 +649,7 @@ async function connectWithCredentials(
   api: PolylaneAPI,
   args: Record<string, unknown>,
   workspaceId: string,
-  type: Exclude<ConnectableType, 'github' | 'slack' | 'sentry' | 'mcp'>
+  type: Exclude<ConnectableType, 'github' | 'slack' | 'sentry' | 'posthog' | 'mcp'>
 ): Promise<typeof BACK | ConnectOutcome> {
   let body: ConnectBody;
   if (type === 'datadog') {
@@ -1125,15 +1127,15 @@ async function connectType(
 ): Promise<typeof BACK | ConnectOutcome> {
   // --- Install-URL flows: the browser enters via the console's /cli/connect
   // page (which ends the journey on its "go back to your terminal" page),
-  // while the CLI waits for the integration to appear. When the type is
-  // already connected, succeed without opening a browser — only an explicit
-  // --reconnect takes the wait-for-update path ---
-  if (type === 'github' || type === 'slack' || type === 'sentry') {
-    const labels = { github: 'the GitHub App', slack: 'the Slack app', sentry: 'the Sentry integration' } as const;
-    const names = { github: 'GitHub', slack: 'Slack', sentry: 'Sentry' } as const;
+  // while the CLI waits for the integration to appear. Singleton integrations
+  // short-circuit when already connected unless --reconnect is explicit.
+  // PostHog allows another project per consent, so it always opens the flow.
+  if (type === 'github' || type === 'slack' || type === 'sentry' || type === 'posthog') {
+    const labels = { github: 'the GitHub App', slack: 'the Slack app', sentry: 'the Sentry integration', posthog: 'the PostHog integration' } as const;
+    const names = { github: 'GitHub', slack: 'Slack', sentry: 'Sentry', posthog: 'PostHog' } as const;
     const reconnect = getArgBoolean(args, 'reconnect') === true;
     const baseline = config.dryRun ? null : await integrationBaseline(api, workspaceId, type);
-    if (baseline && !reconnect && baseline.existing.length > 0) {
+    if (baseline && !reconnect && type !== 'posthog' && baseline.existing.length > 0) {
       const existing = baseline.existing[0]!;
       printAlreadyConnected(config, names[type], existing);
       if (type === 'slack') {
@@ -1181,7 +1183,7 @@ async function connectType(
 
 export const integrationConnectCommand: Command = {
   name: 'integration connect',
-  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, OpenStatus, Grafana Cloud, Logfire, Mixpanel, Devin, Cursor, Factory, Conductor, Linear, MCP)',
+  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, OpenStatus, Grafana Cloud, Logfire, Mixpanel, PostHog, Devin, Cursor, Factory, Conductor, Linear, MCP)',
   operationId: 'integrations.connect',
   options: [
     {
@@ -1216,8 +1218,8 @@ export const integrationConnectCommand: Command = {
     { flag: '--extra-headers <json>', description: 'MCP extra headers as JSON object', type: 'string' },
     { flag: '--oauth', description: 'MCP: use OAuth flow (opens browser to authorize)', type: 'boolean' },
     { flag: '--scope <scope>', description: 'MCP OAuth scope', type: 'string' },
-    { flag: '--no-browser', description: 'GitHub / Slack / Sentry / MCP OAuth: print the URL instead of opening it', type: 'boolean' },
-    { flag: '--reconnect', description: 'GitHub / Slack / Sentry: run the connect flow even when the integration is already connected', type: 'boolean' },
+    { flag: '--no-browser', description: 'GitHub / Slack / Sentry / PostHog / MCP OAuth: print the URL instead of opening it', type: 'boolean' },
+    { flag: '--reconnect', description: 'GitHub / Slack / Sentry / PostHog: run the connect flow even when the integration is already connected', type: 'boolean' },
     {
       flag: '--pr-reviews',
       description: 'GitHub: review pull requests for production impact on the repositories this connection brings in (the default), without the prompt',
@@ -1244,6 +1246,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type grafana --stack-url https://mystack.grafana.net --service-account-token glsa_...',
     'polylane integration connect --type logfire --api-key pylf_... --organization-api-key pylf_...',
     'polylane integration connect --type mixpanel --region us --service-account-username ... --service-account-secret ... --project-id 1234567',
+    'polylane integration connect --type posthog',
     'polylane integration connect --type cursor --api-key crsr_...',
     'polylane integration connect --type linear --api-key lin_api_...',
     'polylane integration connect --type mcp --url https://mcp.example.com/sse --name "My MCP"',

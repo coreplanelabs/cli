@@ -145,6 +145,8 @@ polylane service list                             # cloud infra discovered from 
 
 `integration connect` and `cloud connect` dispatch on `--type` / `--provider`. Some options open a browser for an install URL; others take API credentials directly. Use `--help` on each to see the required flags and optional `--no-browser`. Browser flows wait in the terminal until the connection appears (interactive TTY only); with `--output json` or in non-interactive runs they print the URL and exit, so poll `integration list` / `cloud list` to confirm.
 
+`polylane integration connect --type posthog` opens Polylane in the browser. Choose one project on PostHog's consent screen. Repeat the command to add another project or renew consent for one already connected. The command waits for the connection in an interactive terminal. Use `--no-browser` to copy the URL.
+
 Plans cap how many cloud accounts a workspace can connect; the numbers come from the API, never from the CLI. `cloud connect` checks first: with room it connects; at the limit it names the plan and the count (`Your Free plan includes 2 cloud accounts; 2 connected.`), offers the cheapest plan that raises it, and on yes opens Stripe Checkout and waits, then carries on with the connect once the plan lands. A no, a Stripe cancel, or no answer in time exits `4` with `Upgrade any time: polylane subscription upgrade` and leaves the connected accounts as they are. Non-interactive runs at the limit exit `4` with the same line as an error. The API answers a connect over the limit with `402` (exit `4`) either way.
 
 ```bash
