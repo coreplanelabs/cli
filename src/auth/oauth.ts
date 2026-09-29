@@ -38,6 +38,8 @@ export function oauthClientSecret(): string {
 
 // Full set of permission scopes requested by the CLI.
 export const DEFAULT_SCOPES = [
+  'agent_tools:read',
+  'agent_tools:write',
   'analytics:export',
   'analytics:read',
   'api_keys:delete',
@@ -62,6 +64,9 @@ export const DEFAULT_SCOPES = [
   'integrations:delete',
   'integrations:read',
   'integrations:write',
+  'issues:delete',
+  'issues:read',
+  'issues:write',
   'labels:delete',
   'labels:read',
   'labels:write',
@@ -74,6 +79,8 @@ export const DEFAULT_SCOPES = [
   'oauth_clients:delete',
   'oauth_clients:read',
   'oauth_clients:write',
+  'pages:delete',
+  'pages:read',
   'ratings:write',
   'repositories:delete',
   'repositories:read',

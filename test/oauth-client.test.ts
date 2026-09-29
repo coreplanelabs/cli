@@ -6,7 +6,22 @@ import assert from 'node:assert/strict';
 delete process.env.POLYLANE_OAUTH_CLIENT_ID;
 delete process.env.POLYLANE_OAUTH_CLIENT_SECRET;
 
-const { oauthClientId, oauthClientSecret } = await import('../src/auth/oauth');
+const { DEFAULT_SCOPES, oauthClientId, oauthClientSecret } = await import('../src/auth/oauth');
+
+it('requests the issue, agent tool, and page scopes the CLI exposes', () => {
+  const scopes = new Set(DEFAULT_SCOPES.split(' '));
+  for (const scope of [
+    'agent_tools:read',
+    'agent_tools:write',
+    'issues:delete',
+    'issues:read',
+    'issues:write',
+    'pages:delete',
+    'pages:read',
+  ]) {
+    assert.ok(scopes.has(scope), `${scope} is missing from CLI OAuth login`);
+  }
+});
 
 describe('oauth client resolution', () => {
   beforeEach(() => {
