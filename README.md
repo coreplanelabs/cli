@@ -256,6 +256,7 @@ See [ERRORS.md](ERRORS.md) for the per-scenario reference.
 
 - **[skill/SKILL.md](skill/SKILL.md)** — agent-facing usage reference
 - **[AGENTS.md](AGENTS.md)** — contributor guide for agents writing code in this repo
+- **[REVIEW.md](REVIEW.md)** — required pull request review procedure and verdict format
 - **[ERRORS.md](ERRORS.md)** — error scenarios and messages
 
 ## Development
