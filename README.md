@@ -257,6 +257,7 @@ See [ERRORS.md](ERRORS.md) for the per-scenario reference.
 - **[skill/SKILL.md](skill/SKILL.md)** — agent-facing usage reference
 - **[AGENTS.md](AGENTS.md)** — contributor guide for agents writing code in this repo
 - **[ERRORS.md](ERRORS.md)** — error scenarios and messages
+- **[PRIVACY.md](PRIVACY.md)** — the CLI's telemetry and data-handling details
 
 ## Development
 
