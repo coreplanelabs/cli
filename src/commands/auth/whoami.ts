@@ -10,6 +10,10 @@ export const authWhoamiCommand: Command = {
   async execute(config: Config): Promise<void> {
     const api = new PolylaneAPI(config);
     const user = await api.authWhoami();
+    if (config.quiet && config.output === 'text') {
+      process.stdout.write(`Signed in as ${user.email || user.id}\n`);
+      return;
+    }
     formatOutput(config, user);
   },
 };
