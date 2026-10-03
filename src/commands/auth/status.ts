@@ -30,15 +30,10 @@ export const authStatusCommand: Command = {
       return;
     }
 
-    let user: WhoamiResult | null = null;
-    try {
-      user = await requestJson<WhoamiResult>(config, {
-        method: 'GET',
-        url: '/v1/auth/whoami',
-      });
-    } catch {
-      // Ignore - we'll report what we know
-    }
+    const user = await requestJson<WhoamiResult>(config, {
+      method: 'GET',
+      url: '/v1/auth/whoami',
+    });
 
     if (cred.type === 'api-key') {
       const result = {
