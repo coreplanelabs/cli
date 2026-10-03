@@ -39,7 +39,7 @@ describe('auth whoami', () => {
   });
 
   it('keeps the full identity in ordinary text output', async () => {
-    await authWhoamiCommand.execute(mockConfig({ apiKey: 'test-key', output: 'text' }), {}, {});
+    await authWhoamiCommand.execute(mockConfig({ apiKey: 'test-key', apiKeySource: 'flag', output: 'text' }), {}, {});
     assert.match(stdout, /id\s+user_123/);
     assert.match(stdout, /email\s+dev@example\.test/);
     assert.match(stdout, /scope\s+read write/);
@@ -47,18 +47,18 @@ describe('auth whoami', () => {
   });
 
   it('prints only the email on one line in quiet text output', async () => {
-    await authWhoamiCommand.execute(mockConfig({ apiKey: 'test-key', output: 'text', quiet: true }), {}, {});
+    await authWhoamiCommand.execute(mockConfig({ apiKey: 'test-key', apiKeySource: 'flag', output: 'text', quiet: true }), {}, {});
     assert.equal(stdout, 'Signed in as dev@example.test\n');
   });
 
   it('preserves structured JSON even when quiet is set', async () => {
-    await authWhoamiCommand.execute(mockConfig({ apiKey: 'test-key', output: 'json', quiet: true }), {}, {});
+    await authWhoamiCommand.execute(mockConfig({ apiKey: 'test-key', apiKeySource: 'flag', output: 'json', quiet: true }), {}, {});
     assert.deepEqual(JSON.parse(stdout), user);
   });
 
   it('uses the user id when an email is unavailable', async () => {
     globalThis.fetch = (async () => Response.json({ success: true, error: null, result: { id: 'user_123', email: '' } })) as typeof fetch;
-    await authWhoamiCommand.execute(mockConfig({ apiKey: 'test-key', output: 'text', quiet: true }), {}, {});
+    await authWhoamiCommand.execute(mockConfig({ apiKey: 'test-key', apiKeySource: 'flag', output: 'text', quiet: true }), {}, {});
     assert.equal(stdout, 'Signed in as user_123\n');
   });
 });
