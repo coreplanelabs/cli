@@ -5,6 +5,7 @@ import { openBrowser } from '../utils/browser';
 import { readInstallRef } from '../telemetry/environment';
 import { ONBOARDING_RUN_QUERY_PARAM, resolveOnboardingRunId, withOnboardingRun } from './onboarding-run';
 import type { OAuthTokenResponse, OIDCConfig } from './types';
+import type { OAuthClient } from '../generated/types';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
 import { ALERT_ICON, CHECK_ICON, renderBrowserPage } from '../utils/browser-page';
@@ -37,7 +38,7 @@ export function oauthClientSecret(): string {
 }
 
 // Full set of permission scopes requested by the CLI.
-export const DEFAULT_SCOPES = [
+export const DEFAULT_SCOPES = ([
   'agent_tools:read',
   'agent_tools:write',
   'analytics:export',
@@ -58,9 +59,6 @@ export const DEFAULT_SCOPES = [
   'cloud_infra:delete',
   'cloud_infra:read',
   'cloud_infra:write',
-  'datasets:delete',
-  'datasets:read',
-  'datasets:write',
   'integrations:delete',
   'integrations:read',
   'integrations:write',
@@ -102,7 +100,7 @@ export const DEFAULT_SCOPES = [
   'workspaces:delete',
   'workspaces:read',
   'workspaces:write',
-].join(' ');
+] satisfies OAuthClient['scopes']).join(' ');
 
 function base64UrlEncode(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
