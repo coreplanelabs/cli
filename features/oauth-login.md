@@ -39,7 +39,8 @@ sign-in, and approve consent. Expect the CLI to finish sign-in without
 Confirm the grant's scopes stay within the registered client allowlist.
 
 Use an account you own. Keep credentials out of proof logs and run
-`polylane auth logout` after the check to revoke and remove the test grant.
+`polylane auth logout` after the check. This attempts access-token revocation
+and removes local credentials; it does not revoke the refresh token.
 
 ## Boundaries and proof status
 
