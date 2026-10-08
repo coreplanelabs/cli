@@ -167,6 +167,17 @@ describe('buildBrowserFlowUrls', () => {
     assert.ok(tagged.timeoutMs > plain.timeoutMs);
   });
 
+  it('omits retired dataset scopes from the Google consent redirect', () => {
+    const { openUrl } = buildBrowserFlowUrls(mockConfig(), 'state123', 'challenge123', {
+      provider: 'google',
+    });
+    const consentUrl = new URL(openUrl.searchParams.get('redirect')!, openUrl);
+    const scopes = consentUrl.searchParams.get('scope')!.split(' ');
+    for (const scope of ['datasets:read', 'datasets:write', 'datasets:delete']) {
+      assert.ok(!scopes.includes(scope), `${scope} is retired`);
+    }
+  });
+
   it('keeps the signup entry shape when no provider is named', () => {
     const plain = buildBrowserFlowUrls(mockConfig(), 'state123', 'challenge123');
     const signup = buildBrowserFlowUrls(mockConfig(), 'state123', 'challenge123', {
