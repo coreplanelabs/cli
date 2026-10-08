@@ -173,6 +173,7 @@ describe('buildBrowserFlowUrls', () => {
     });
     const consentUrl = new URL(openUrl.searchParams.get('redirect')!, openUrl);
     const scopes = consentUrl.searchParams.get('scope')!.split(' ');
+    assert.ok(scopes.includes('threads:read'));
     for (const scope of ['datasets:read', 'datasets:write', 'datasets:delete']) {
       assert.ok(!scopes.includes(scope), `${scope} is retired`);
     }
