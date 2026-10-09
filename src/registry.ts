@@ -35,7 +35,7 @@ const RESOURCE_ORDER: Record<string, ResourceGroup> = {
   telemetry: { name: 'telemetry', description: 'Anonymous usage telemetry (status/enable/disable)', order: 95 },
   api: { name: 'api', description: 'Raw API access (advanced)', order: 100 },
   help: { name: 'help', description: 'Show help for a command', order: 110 },
-  update: { name: 'update', description: 'Check for CLI updates', order: 120 },
+  update: { name: 'update', description: 'Update the active CLI install', order: 120 },
 };
 
 export class CommandRegistry {

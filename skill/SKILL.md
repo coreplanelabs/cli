@@ -31,6 +31,13 @@ polylane auth signup --email <email> --code <code>     # finish signup with the 
 polylane auth status
 ```
 
+The CLI updates its active install after successful commands, at most once
+per day, without a prompt. Run `polylane update` to update now or add
+`--dry-run` to inspect the update. Set `POLYLANE_NO_AUTO_UPDATE=1` to disable
+automatic updates. Keep `POLYLANE_VERSION` set to retain a version pin.
+CI, development, prerelease, and unknown installs do not update automatically.
+The next command uses the updated version; stdout stays pure data.
+
 **API key** persists to `~/.polylane/config.json`. **OAuth** credentials persist to `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. Credential precedence: `--api-key` flag > `POLYLANE_API_KEY` > `~/.polylane/credentials.json` > `api_key` in `~/.polylane/config.json` (an exported key always beats a stale OAuth token). **Signup** generates a strong random password when `--password` is omitted and prints it once on stderr (also `generated_password` in JSON output); store it, or change it later via password reset. Weak or known-leaked passwords are challenged at the edge (exit `2`, "challenged by the edge, usually because the password is weak or known-leaked"): do not invent one, let the CLI generate it. Signup emails a 6-digit verification code to the address; the account is unusable until the code is confirmed (interactively, or with `--code`). The confirmed session token is stored under the same OAuth credential shape — for long-lived agent access, create an API key right after signup and switch to it.
 
 Account-lifecycle operations beyond signup/login (reset password, update profile, delete account, notification settings) live in the web console. Reach them from the CLI via `polylane api call <op>` if you must.

@@ -36,6 +36,8 @@ async function main(): Promise<void> {
     'POLYLANE_ONBOARDING_RUN',
     'POLYLANE_TELEMETRY_NOTICE_ACK',
     'POLYLANE_TERMS_NOTICE_ACK',
+    'POLYLANE_NO_AUTO_UPDATE',
+    'POLYLANE_VERSION',
   ]);
   // Bake every other POLYLANE_* env var visible at build time into the bundle, so
   // the produced binary works without needing those vars set at runtime.
