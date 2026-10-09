@@ -1,3 +1,4 @@
+import { readInstallAttribution } from './signup-attribution';
 import { createServer } from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
 import type { Config } from '../config/schema';
@@ -293,6 +294,8 @@ export function buildBrowserFlowUrls(
     // the signup routes, so the install referral survives the browser hop.
     const ref = readInstallRef();
     if (ref) openUrl.searchParams.set('ref', ref);
+    const attribution = readInstallAttribution();
+    if (attribution) openUrl.searchParams.set('attribution', JSON.stringify(attribution));
     if (runId) openUrl.searchParams.set(ONBOARDING_RUN_QUERY_PARAM, runId);
     // The provider round-trip takes longer than a plain consent hop whether or
     // not the account is new, so every /signup entry gets the longer budget.

@@ -1,3 +1,4 @@
+import { readInstallAttribution } from '../../auth/signup-attribution';
 import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { formatOutput } from '../../output/formatter';
@@ -300,11 +301,12 @@ export async function emailSignup(config: Config, args: Record<string, unknown>)
   // the pre-auth onboarding run identifier. The server drops invalid values
   // and never rejects on them.
   const ref = readInstallRef();
+  const attribution = readInstallAttribution();
   const run = resolveOnboardingRunId();
   const res = await request(config, {
     method: 'POST',
     url: '/v1/auth/signup',
-    body: { email, password, ...(ref ? { ref } : {}), ...(run ? { run } : {}) },
+    body: { email, password, ...(attribution ? { attribution: JSON.stringify(attribution) } : {}), ...(ref ? { ref } : {}), ...(run ? { run } : {}) },
     noAuth: true,
   });
   if (isCloudflareChallenge(res)) {
