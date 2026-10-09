@@ -59,6 +59,20 @@ POLYLANE_VERSION=v0.1.0 curl -fsSL https://polylane.com/install.sh | bash
 $env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/install.ps1 | iex
 ```
 
+The CLI checks for updates after successful commands, at most once per day,
+and updates the active install without a prompt. npm, Bun, and Homebrew installs
+use their own package manager. Standalone installs verify the release checksum
+and version before replacing the bundle. The current command finishes on its
+original version; the next command uses the update. Progress goes to stderr.
+
+Run `polylane update` to update now, or `polylane update --dry-run` to inspect
+the detected install and available update. Set `POLYLANE_NO_AUTO_UPDATE=1` to
+disable automatic updates. Keep `POLYLANE_VERSION` set when running the CLI to
+retain a version pin. Homebrew pins are also respected. CI, development,
+prerelease, and unrecognized installs do not update automatically. An automatic
+update failure does not change the command's result; `polylane update` reports
+update errors and exits nonzero.
+
 ### Wire it into your coding agents
 
 ```bash
