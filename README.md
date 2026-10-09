@@ -65,6 +65,9 @@ use their own package manager. Standalone installs verify the release checksum
 and version before replacing the bundle. The current command finishes on its
 original version; the next command uses the update. Progress goes to stderr.
 
+Automatic updates require CLI `0.2.50` or later. Upgrade earlier versions once
+with the package manager or installer that owns your current install.
+
 Run `polylane update` to update now, or `polylane update --dry-run` to inspect
 the detected install and available update. Set `POLYLANE_NO_AUTO_UPDATE=1` to
 disable automatic updates. Keep `POLYLANE_VERSION` set when running the CLI to
