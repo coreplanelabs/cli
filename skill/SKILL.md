@@ -1,6 +1,6 @@
 ---
 name: polylane-cli
-description: Use `polylane` to investigate production issues, explore cloud infrastructure (logs / metrics / dependency graphs), search code, save memories, connect observability tools and cloud accounts, and drive threads with the Polylane agent. Use when the user wants to debug a production issue, look up a service, search their codebase, manage integrations, connect a cloud provider, or talk to the Polylane agent from the terminal.
+description: Use `polylane` to investigate production issues, explore cloud infrastructure (logs / metrics / dependency graphs), find the repositories that deploy a service, save memories, connect observability tools and cloud accounts, and drive threads with the Polylane agent. Use when the user wants to debug a production issue, look up a service, find a repository, manage integrations, connect a cloud provider, or talk to the Polylane agent from the terminal.
 ---
 
 # Polylane CLI — Agent Skill Guide
@@ -184,9 +184,8 @@ polylane service logs <service-id> --since 1h --grep error
 polylane service metrics <service-id> --metric <name> --since 1h
 polylane service graph <service-id> --direction both --depth 1
 
-# Search code
+# Find the repository, then search it in a local clone
 polylane repo find "<query>"
-polylane repo grep <owner/repo> "<regex>"
 
 # Save what you learned
 polylane memory save "<finding>"
@@ -194,7 +193,7 @@ polylane memory save "<finding>"
 
 ### Running agent tools directly
 
-Polylane exposes the same tools its own agent uses — observability queries across every connected provider, infra-graph traversal, code and change-record search, deployments, audit logs. Discover them, then run them, without opening a thread.
+Polylane exposes the same tools its own agent uses — observability queries across every connected provider, infra-graph traversal, GitHub file and code reads, change-record search, deployments, audit logs. Discover them, then run them, without opening a thread.
 
 ```bash
 # Discover tools available to this workspace (filtered to your credential's scopes)
