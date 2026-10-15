@@ -35,10 +35,10 @@ Pick whichever channel fits your system. All install the same Node-based bundle 
 
 ```bash
 # macOS / Linux — curl
-curl -fsSL https://polylane.com/install.sh | bash
+curl -fsSL https://polylane.com/setup.sh | bash
 
 # Windows — PowerShell
-irm https://polylane.com/install.ps1 | iex
+irm https://polylane.com/setup.ps1 | iex
 
 # Homebrew (tap: coreplanelabs/tap)
 brew install coreplanelabs/tap/polylane
@@ -55,8 +55,8 @@ bun add -g @coreplane/polylane
 Version-pin the curl / PowerShell installers with:
 
 ```bash
-POLYLANE_VERSION=v0.1.0 curl -fsSL https://polylane.com/install.sh | bash
-$env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/install.ps1 | iex
+POLYLANE_VERSION=v0.1.0 curl -fsSL https://polylane.com/setup.sh | bash
+$env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/setup.ps1 | iex
 ```
 
 The CLI checks for updates after successful commands, at most once per day,

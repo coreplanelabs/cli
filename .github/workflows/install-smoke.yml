@@ -1,5 +1,5 @@
 # Real install smoke: installs the CLI through the PRODUCTION installer at
-# polylane.com/install, pinned to a given release, in a throwaway HOME.
+# polylane.com/setup, pinned to a given release, in a throwaway HOME.
 #
 # Why this exists: the GitHub release's asset list is a contract with the
 # installer. Shipping checksums.txt in v0.2.20 broke every curl install for
@@ -55,7 +55,7 @@ jobs:
           node-version: 20.x
 
       - name: Fetch the production installer
-        run: curl -fsSL --retry 3 --connect-timeout 10 -m 60 https://polylane.com/install -o /tmp/install.sh
+        run: curl -fsSL --retry 3 --connect-timeout 10 -m 60 https://polylane.com/setup -o /tmp/install.sh
 
       # Fresh HOME, no PATH or shell-config mutation, no telemetry, agent
       # wiring skipped. A piped run is EXPECTED to exit non-zero at the

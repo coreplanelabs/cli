@@ -111,7 +111,7 @@ jobs:
             release-artifacts/checksums.txt
 
   # Real install of the just-published release through the production
-  # installer (polylane.com/install), API-digest and checksums.txt legs both.
+  # installer (polylane.com/setup), API-digest and checksums.txt legs both.
   # Catches a release that breaks the installer contract within minutes of
   # publishing instead of at polylanedotcom's daily install-bytes cron — the
   # class of failure that took installs down for 15 minutes on v0.2.20 (RCA:
