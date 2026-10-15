@@ -186,6 +186,15 @@ export async function resolveServiceId(
   if (exact.nodes.length > 1) throw multipleMatches(raw, exact.nodes);
 
   const partial = await lookupNodes(api, workspaceId, raw, 'substring');
+  // A capped scan that kept nothing hasn't shown the service is missing, only that it ran out.
+  if (partial.nodes.length === 0 && partial.truncated) {
+    throw new CLIError(
+      `Couldn't finish looking up "${raw}": too many services partly match it`,
+      ExitCode.GENERAL,
+      'Use the full form: <provider>/<account>/<region>/<type>/<id>\n' +
+        'or narrow the search: polylane service find "<query>" --provider <p> --type <t>'
+    );
+  }
   if (partial.nodes.length === 0) {
     throw new CLIError(
       `No service found matching "${raw}"`,

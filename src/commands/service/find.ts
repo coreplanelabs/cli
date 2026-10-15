@@ -36,7 +36,8 @@ export const serviceFindCommand: Command = {
 
     formatList(
       config,
-      { items: projected, count: projected.length },
+      // truncated tells a script reading JSON that more services match than listed.
+      { items: projected, count: projected.length, truncated },
       {
         headers: ['ID', 'Type', 'Provider', 'Account', 'Region'],
         rows: (item) => [

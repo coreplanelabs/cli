@@ -153,6 +153,31 @@ describe('underscore wildcards that fill whole pages', () => {
   }
 });
 
+describe('a search that hits the page cap', () => {
+  // 10 pages of 200 wildcard-only rows sort ahead of the literal match, so the scan stops first.
+  const capped = (make: (i: number) => InfrastructureNode, literal: InfrastructureNode) =>
+    graphApi([...Array.from({ length: 2001 }, (_, i) => make(i)), literal]);
+
+  it('reports an incomplete lookup instead of "No service found"', async () => {
+    for (const api of [
+      capped((i) => node(`aa-payments-api-${String(i).padStart(4, '0')}`), node('zz-payments_api-worker')),
+      capped((i) => node(`aa-${i}`, { data: { name: `prod-payments-api-${i}` } }), node('zz-target', { data: { name: 'prod-payments_api-worker' } })),
+      capped((i) => node(`aa-${i}`, { alternateNames: [`prod-payments-api-${i}`] }), node('zz-target', { alternateNames: ['prod-payments_api-worker'] })),
+    ]) {
+      await assert.rejects(
+        () => resolveServiceId(config, 'payments_api', 'ws_1', api),
+        (err: unknown) => err instanceof CLIError && err.message.includes("Couldn't finish looking up")
+      );
+    }
+  });
+
+  it('marks an empty capped find as truncated, so JSON output can say so', async () => {
+    const api = capped((i) => node(`aa-payments-api-${String(i).padStart(4, '0')}`), node('zz-payments_api-worker'));
+    const out = await findServiceNodes(api, 'ws_1', 'payments_api', { provider: 'cloudflare', type: 'cf.workers.script' });
+    assert.deepEqual(out, { nodes: [], truncated: true });
+  });
+});
+
 describe('resolveServiceId', () => {
   it('returns the full form without calling the API', async () => {
     const seen: ListBody[] = [];
