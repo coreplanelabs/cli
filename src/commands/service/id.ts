@@ -1,7 +1,5 @@
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
-import type { Config } from '../../config/schema';
-import { PolylaneAPI } from '../../generated/client';
 
 export type Provider =
   | 'aws'
@@ -56,40 +54,14 @@ export function formatServiceId(node: {
   return `${node.provider}/${node.account}/${node.region}/${node.type}/${node.id}`;
 }
 
-export async function resolveServiceId(
-  config: Config,
-  raw: string,
-  workspaceId: string
-): Promise<ServiceId> {
+export function resolveServiceId(raw: string): ServiceId {
   const strict = parseServiceIdStrict(raw);
   if (strict) return strict;
 
-  const api = new PolylaneAPI(config);
-  const matches = await api.cloudInfraNodesSearch({ workspaceId, prompt: raw });
-
-  if (matches.length === 0) {
-    throw new CLIError(
-      `No service found matching "${raw}"`,
-      ExitCode.GENERAL,
-      'Use the full form: <provider>/<account>/<region>/<type>/<id>'
-    );
-  }
-
-  if (matches.length === 1) {
-    const m = matches[0]!;
-    return {
-      provider: m.provider as Provider,
-      account: m.account,
-      region: m.region,
-      type: m.type,
-      id: m.id,
-    };
-  }
-
-  const topK = matches.slice(0, 5).map((m) => `  ${formatServiceId(m)}`).join('\n');
   throw new CLIError(
-    `Multiple services match "${raw}"`,
+    `Invalid service ID "${raw}"`,
     ExitCode.USAGE,
-    `Candidates:\n${topK}\n\nUse the full form to disambiguate.`
+    'Use the full form: <provider>/<account>/<region>/<type>/<id>\n' +
+      'e.g. polylane service show aws/123456789/us-east-1/aws.lambda.function/payments'
   );
 }

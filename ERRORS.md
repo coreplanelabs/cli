@@ -123,7 +123,7 @@ Hint: polylane workspace use <id>
 
 These are the non-obvious command-level behaviours an agent should know about. Specific error strings are subject to change — use these as categories you can rely on.
 
-### Destructive operations (`auth logout`, `integration disconnect`, `cloud disconnect`, `memory delete`, …)
+### Destructive operations (`auth logout`, `integration disconnect`, `cloud disconnect`, `artifact delete`, …)
 
 - Prompt for confirmation in interactive mode.
 - Require `--yes` in non-interactive mode, else exit `2`.

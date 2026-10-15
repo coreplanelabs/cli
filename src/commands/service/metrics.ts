@@ -13,11 +13,11 @@ export const serviceMetricsCommand: Command = {
   operationId: 'cloud_infra.nodes.metrics.summary',
   positional: [{ name: 'service-id', description: 'Service identifier' }],
   options: [{ flag: '--since <dur>', description: 'Window (default 1h)', type: 'string' }],
-  examples: ['polylane service metrics payments --since 24h'],
+  examples: ['polylane service metrics aws/123456789/us-east-1/aws.lambda.function/payments --since 24h'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const raw = requirePositional(args, 0, 'service-id');
-    const service = await resolveServiceId(config, raw, workspaceId);
+    const service = resolveServiceId(raw);
 
     const sinceStr = getArgString(args, 'since') ?? '1h';
     const sinceMs = parseDuration(sinceStr);

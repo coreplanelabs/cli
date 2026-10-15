@@ -12,16 +12,15 @@ export const serviceShowCommand: Command = {
   description: 'Show a service with all its data',
   operationId: 'cloud_infra.nodes.get',
   positional: [
-    { name: 'service-id', description: '<provider>/<account>/<region>/<type>/<id> or a short name' },
+    { name: 'service-id', description: '<provider>/<account>/<region>/<type>/<id>' },
   ],
   examples: [
     'polylane service show aws/123456789/us-east-1/aws.lambda.function/payments',
-    'polylane service show payments',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const raw = requirePositional(args, 0, 'service-id');
-    const service = await resolveServiceId(config, raw, workspaceId);
+    const service = resolveServiceId(raw);
     const api = new PolylaneAPI(config);
     const result = await api.cloudInfraNodesGet({
       workspaceId,

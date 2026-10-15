@@ -19,14 +19,14 @@ export const serviceLogsCommand: Command = {
     { flag: '--templates', description: 'Recurring log patterns with historical rates instead of raw events', type: 'boolean' },
   ],
   examples: [
-    'polylane service logs payments',
-    'polylane service logs payments --since 24h --grep error',
-    'polylane service logs payments --templates',
+    'polylane service logs aws/123456789/us-east-1/aws.lambda.function/payments',
+    'polylane service logs aws/123456789/us-east-1/aws.lambda.function/payments --since 24h --grep error',
+    'polylane service logs aws/123456789/us-east-1/aws.lambda.function/payments --templates',
   ],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const raw = requirePositional(args, 0, 'service-id');
-    const service = await resolveServiceId(config, raw, workspaceId);
+    const service = resolveServiceId(raw);
 
     if (getArgBoolean(args, 'templates') === true) {
       await showTemplates(config, workspaceId, service);

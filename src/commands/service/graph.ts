@@ -24,11 +24,11 @@ export const serviceGraphCommand: Command = {
     { flag: '--direction <d>', description: 'inbound|outbound|both (default both)', type: 'string' },
     { flag: '--depth <n>', description: 'Traversal depth (default 1)', type: 'number' },
   ],
-  examples: ['polylane service graph payments --direction outbound --depth 2'],
+  examples: ['polylane service graph aws/123456789/us-east-1/aws.lambda.function/payments --direction outbound --depth 2'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
     const raw = requirePositional(args, 0, 'service-id');
-    const service = await resolveServiceId(config, raw, workspaceId);
+    const service = resolveServiceId(raw);
 
     const direction = (getArgString(args, 'direction') ?? 'both') as Direction;
     if (!['inbound', 'outbound', 'both'].includes(direction)) {
