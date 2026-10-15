@@ -15,13 +15,11 @@ export interface ResourceGroup {
 }
 
 const RESOURCE_ORDER: Record<string, ResourceGroup> = {
-  feed: { name: 'feed', description: 'Workspace activity feed (what just happened)', order: 6 },
   issue: { name: 'issue', description: 'Detected issues (anomalies + alerts) and their timelines', order: 8 },
   service: { name: 'service', description: 'Cloud infrastructure (nodes, logs, metrics, graph)', order: 20 },
   repo: { name: 'repo', description: 'Repositories', order: 30 },
   tools: { name: 'tools', description: 'Run Polylane agent tools (observability, infra graph, GitHub reads)', order: 40 },
-  memory: { name: 'memory', description: 'Persistent agent memory', order: 50 },
-  note: { name: 'note', description: 'Daily and global workspace notes', order: 52 },
+  memory: { name: 'memory', description: 'Workspace memory repository (files, history)', order: 50 },
   thread: { name: 'thread', description: 'Conversation threads', order: 60 },
   artifact: { name: 'artifact', description: 'Per-thread artifacts (reports, diagrams, PRs)', order: 61 },
   autofix: { name: 'autofix', description: 'Automated code fixes (read-only)', order: 66 },

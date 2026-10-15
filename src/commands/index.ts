@@ -4,7 +4,6 @@ import { configCommands } from './config';
 import { helpCommand } from './help';
 import { setupCommand } from './setup';
 import { updateCommand } from './update';
-import { feedCommands } from './feed';
 import { issueCommands } from './issue';
 import { serviceCommands } from './service';
 import { repoCommands } from './repo';
@@ -16,7 +15,6 @@ import { workspaceCommands } from './workspace';
 import { subscriptionCommands } from './subscription';
 import { apiCommands } from './api';
 import { telemetryCommands } from './telemetry';
-import { noteCommands } from './note';
 import { autofixCommands } from './autofix';
 import { artifactCommands } from './artifact';
 import { toolsCommands } from './tools';
@@ -28,7 +26,6 @@ export function registerAllCommands(): void {
   registered = true;
 
   const all = [
-    ...feedCommands,
     ...issueCommands,
     ...serviceCommands,
     ...repoCommands,
@@ -38,7 +35,6 @@ export function registerAllCommands(): void {
     ...cloudCommands,
     ...workspaceCommands,
     ...subscriptionCommands,
-    ...noteCommands,
     ...autofixCommands,
     ...artifactCommands,
     ...toolsCommands,

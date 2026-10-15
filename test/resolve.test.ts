@@ -51,12 +51,10 @@ describe('command resolution', () => {
       'autofix',
       'cloud',
       'config',
-      'feed',
       'help',
       'integration',
       'issue',
       'memory',
-      'note',
       'repo',
       'service',
       'setup',
@@ -87,10 +85,10 @@ describe('unknown command handling', () => {
     }) as typeof process.stdout.write;
     try {
       await assert.rejects(
-        helpCommand.execute(mockConfig(), {}, { _: ['nope', 'sub'] }),
+        helpCommand.execute(mockConfig(), {}, { _: ['isue', 'sub'] }),
         (err: unknown) => {
           assert.ok(err instanceof CLIError);
-          assert.equal(err.message, 'Unknown command: polylane nope sub. Closest match: polylane note.');
+          assert.equal(err.message, 'Unknown command: polylane isue sub. Closest match: polylane issue.');
           assert.equal(err.exitCode, ExitCode.USAGE);
           assert.ok(err.hint?.includes('polylane --help'));
           return true;
