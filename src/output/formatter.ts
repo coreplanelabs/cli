@@ -74,7 +74,7 @@ export function formatOutput(config: Config, data: unknown): void {
 
 export function formatList<T extends Record<string, unknown>>(
   config: Config,
-  result: { items: T[]; count: number },
+  result: { items: T[]; count: number; truncated?: boolean },
   table?: TableDef<T>
 ): void {
   if (config.output === 'json') {

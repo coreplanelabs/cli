@@ -1,13 +1,5 @@
 import { memoryListCommand } from './list';
-import { memoryFindCommand } from './find';
 import { memoryShowCommand } from './show';
-import { memorySaveCommand } from './save';
-import { memoryDeleteCommand } from './delete';
+import { memoryHistoryCommand } from './history';
 
-export const memoryCommands = [
-  memoryListCommand,
-  memoryFindCommand,
-  memoryShowCommand,
-  memorySaveCommand,
-  memoryDeleteCommand,
-];
+export const memoryCommands = [memoryListCommand, memoryShowCommand, memoryHistoryCommand];

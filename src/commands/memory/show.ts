@@ -6,14 +6,14 @@ import { requireWorkspace, requirePositional } from '../helpers';
 
 export const memoryShowCommand: Command = {
   name: 'memory show',
-  description: 'Show a memory with its markdown body',
-  operationId: 'memories.get',
-  positional: [{ name: 'memory-id', description: 'The memory ID' }],
+  description: 'Show a file from the workspace memory repository',
+  operationId: 'memories.file',
+  positional: [{ name: 'path', description: 'File path in the memory repository (from `memory list`)' }],
+  examples: ['polylane memory show services/payments.md'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
-    const id = requirePositional(args, 0, 'memory-id');
+    const path = requirePositional(args, 0, 'path').replace(/^\/+/, '');
     const api = new PolylaneAPI(config);
-    const result = await api.memoriesGet(workspaceId, id);
-    formatOutput(config, result);
+    formatOutput(config, await api.memoriesFile(workspaceId, { path }));
   },
 };
