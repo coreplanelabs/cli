@@ -68,42 +68,75 @@ export interface FindServiceOptions {
 
 type NodesListApi = Pick<PolylaneAPI, 'cloudInfraNodesList'>;
 
+interface NodeLookup {
+  nodes: InfrastructureNode[];
+  /** A field query filled its page, so more nodes may match than were returned. */
+  truncated: boolean;
+}
+
+// The graph wraps a LIKE value in % only when it holds no % or _, so a query with an
+// underscore would be matched as a whole value. Sending the pattern ourselves keeps it a
+// substring match; the _ it carries is a one-character wildcard, so containsQuery drops the
+// extra rows that lets through (case-insensitive, like SQLite's LIKE).
+function containsQuery(node: InfrastructureNode, query: string): boolean {
+  const q = query.toLowerCase();
+  const names = [node.id, node.data?.name, ...(node.alternateNames ?? [])];
+  return names.some((n) => typeof n === 'string' && n.toLowerCase().includes(q));
+}
+
+function isExactMatch(node: InfrastructureNode, raw: string): boolean {
+  return node.id === raw || node.data?.name === raw || node.alternateNames?.includes(raw) === true;
+}
+
 // The graph joins clauses after the scope filters without parentheses, so an OR clause would
-// escape provider/type. One LIKE query per name field, merged, keeps every match scoped.
+// escape provider/type. One query per name field, merged, keeps every match scoped.
+async function lookupNodes(
+  api: NodesListApi,
+  workspaceId: string,
+  query: string,
+  mode: 'exact' | 'substring',
+  opts: FindServiceOptions = {}
+): Promise<NodeLookup> {
+  const limit = opts.limit ?? DEFAULT_FIND_LIMIT;
+  const filters = {
+    ...(opts.provider ? { provider: opts.provider } : {}),
+    ...(opts.type ? { type: opts.type } : {}),
+  };
+  const clause =
+    mode === 'exact'
+      ? { value: query, predicate: '=' as const }
+      : { value: `%${query}%`, predicate: 'LIKE' as const };
+  const results = await Promise.all(
+    NAME_FIELDS.map((field) =>
+      api.cloudInfraNodesList({
+        workspaceId,
+        clauses: [{ field, ...clause }],
+        ...(Object.keys(filters).length ? { filters } : {}),
+        options: { limit },
+      })
+    )
+  );
+  const keep = mode === 'exact' ? isExactMatch : containsQuery;
+  const seen = new Set<string>();
+  const nodes: InfrastructureNode[] = [];
+  for (const node of results.flatMap((r) => r.items)) {
+    const key = formatServiceId(node);
+    if (seen.has(key) || !keep(node, query)) continue;
+    seen.add(key);
+    nodes.push(node);
+  }
+  return { nodes, truncated: results.some((r) => r.items.length >= limit) };
+}
+
+/** Services whose id, name or an alternate name contains the query, for `service find`. */
 export async function findServiceNodes(
   api: NodesListApi,
   workspaceId: string,
   query: string,
   opts: FindServiceOptions = {}
 ): Promise<InfrastructureNode[]> {
-  const limit = opts.limit ?? DEFAULT_FIND_LIMIT;
-  const filters = {
-    ...(opts.provider ? { provider: opts.provider } : {}),
-    ...(opts.type ? { type: opts.type } : {}),
-  };
-  const results = await Promise.all(
-    NAME_FIELDS.map((field) =>
-      api.cloudInfraNodesList({
-        workspaceId,
-        clauses: [{ field, value: query, predicate: 'LIKE' }],
-        ...(Object.keys(filters).length ? { filters } : {}),
-        options: { limit },
-      })
-    )
-  );
-  const seen = new Set<string>();
-  const merged: InfrastructureNode[] = [];
-  for (const node of results.flatMap((r) => r.items)) {
-    const key = formatServiceId(node);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(node);
-  }
-  return merged.slice(0, limit);
-}
-
-function isExactMatch(node: InfrastructureNode, raw: string): boolean {
-  return node.id === raw || node.data?.name === raw || node.alternateNames?.includes(raw) === true;
+  const { nodes } = await lookupNodes(api, workspaceId, query, 'substring', opts);
+  return nodes.slice(0, opts.limit ?? DEFAULT_FIND_LIMIT);
 }
 
 function toServiceId(node: InfrastructureNode): ServiceId {
@@ -125,9 +158,14 @@ export async function resolveServiceId(
   const strict = parseServiceIdStrict(raw);
   if (strict) return strict;
 
-  const matches = await findServiceNodes(api, workspaceId, raw);
+  // Exact matches are queried on their own, before any substring page is cut, so a long
+  // list of partial matches can neither hide the exact one nor make a shared name look unique.
+  const exact = await lookupNodes(api, workspaceId, raw, 'exact');
+  if (exact.nodes.length === 1) return toServiceId(exact.nodes[0]!);
+  if (exact.nodes.length > 1) throw multipleMatches(raw, exact.nodes);
 
-  if (matches.length === 0) {
+  const partial = await lookupNodes(api, workspaceId, raw, 'substring');
+  if (partial.nodes.length === 0) {
     throw new CLIError(
       `No service found matching "${raw}"`,
       ExitCode.GENERAL,
@@ -135,14 +173,13 @@ export async function resolveServiceId(
         'or use the full form: <provider>/<account>/<region>/<type>/<id>'
     );
   }
+  if (partial.nodes.length === 1 && !partial.truncated) return toServiceId(partial.nodes[0]!);
+  throw multipleMatches(raw, partial.nodes);
+}
 
-  const exact = matches.filter((m) => isExactMatch(m, raw));
-  if (exact.length === 1) return toServiceId(exact[0]!);
-  if (matches.length === 1) return toServiceId(matches[0]!);
-
-  const candidates = exact.length > 1 ? exact : matches;
+function multipleMatches(raw: string, candidates: InfrastructureNode[]): CLIError {
   const topK = candidates.slice(0, 5).map((m) => `  ${formatServiceId(m)}`).join('\n');
-  throw new CLIError(
+  return new CLIError(
     `Multiple services match "${raw}"`,
     ExitCode.USAGE,
     `Candidates:\n${topK}\n\nUse the full form to disambiguate.`
