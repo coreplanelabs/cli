@@ -1,6 +1,6 @@
 ---
 name: polylane-cli
-description: Use `polylane` to investigate production issues, explore cloud infrastructure (logs / metrics / dependency graphs), find the repositories that deploy a service, save memories, connect observability tools and cloud accounts, and drive threads with the Polylane agent. Use when the user wants to debug a production issue, look up a service, find a repository, manage integrations, connect a cloud provider, or talk to the Polylane agent from the terminal.
+description: Use `polylane` to investigate production issues, explore cloud infrastructure (logs / metrics / dependency graphs), find the repositories that deploy a service, connect observability tools and cloud accounts, and drive threads with the Polylane agent. Use when the user wants to debug a production issue, look up a service, find a repository, manage integrations, connect a cloud provider, or talk to the Polylane agent from the terminal.
 ---
 
 # Polylane CLI — Agent Skill Guide
@@ -178,17 +178,14 @@ polylane issue timeline <issue-id>                # who did what, when
 polylane issue note <issue-id> "rolled back deploy ABC"
 polylane issue milestone <issue-id> "Mitigated"
 
-# Drill into services
-polylane service find "<query>"
+# Drill into services (a service ID is <provider>/<account>/<region>/<type>/<id>)
+polylane service list                             # discover services and their ids
 polylane service logs <service-id> --since 1h --grep error
 polylane service metrics <service-id> --metric <name> --since 1h
 polylane service graph <service-id> --direction both --depth 1
 
 # Find the repository, then search it in a local clone
 polylane repo find "<query>"
-
-# Save what you learned
-polylane memory save "<finding>"
 ```
 
 ### Running agent tools directly
@@ -237,8 +234,8 @@ Attach resources as context by passing their IDs — the CLI infers the resource
 # Extract a field
 polylane workspace list --output json | jq '.items[0].id'
 
-# Chain: find a service → check its logs
-SVC=$(polylane service find "payment lambda" --output json --quiet | jq -r '.items[0].id')
+# Chain: pick a service → check its logs
+SVC=$(polylane service list --output json --quiet | jq -r '.items[0].id')
 polylane service logs "$SVC" --since 1h --grep error
 
 # Fire-and-forget + later poll

@@ -130,7 +130,6 @@ polylane issue note <issue-id> "rolled back deploy"
 polylane service logs <service> --since 1h --grep error
 polylane tools run findNodes --params '{"query":"api"}'
 polylane thread ask "<prompt>"
-polylane memory save "<finding>"
 ```
 
 ## Discovering commands
