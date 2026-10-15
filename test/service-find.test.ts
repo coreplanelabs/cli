@@ -41,7 +41,9 @@ function graphApi(nodes: InfrastructureNode[], seen: ListBody[] = []) {
     async cloudInfraNodesList(body: ListBody) {
       seen.push(body);
       const clause = body.clauses?.[0];
-      const items = nodes
+      const offset = body.options?.offset ?? 0;
+      const ordered = body.options?.orderBy === 'id' ? [...nodes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) : nodes;
+      const items = ordered
         .filter((n) => {
           if (!clause) return true;
           const values = fieldValues(n, clause.field);
@@ -52,7 +54,7 @@ function graphApi(nodes: InfrastructureNode[], seen: ListBody[] = []) {
           }
           return values.includes(clause.value);
         })
-        .slice(0, body.options?.limit ?? 50);
+        .slice(offset, offset + (body.options?.limit ?? 200));
       return { items, count: items.length };
     },
   } as unknown as Pick<PolylaneAPI, 'cloudInfraNodesList'>;
@@ -75,7 +77,7 @@ describe('findServiceNodes', () => {
     for (const b of seen) {
       assert.equal(b.workspaceId, 'ws_1');
       assert.deepEqual(b.filters, { provider: 'cloudflare' });
-      assert.deepEqual(b.options, { limit: 50 });
+      assert.deepEqual(b.options, { limit: 200, offset: 0, orderBy: 'id' });
     }
   });
 
@@ -95,6 +97,52 @@ describe('findServiceNodes', () => {
     const items = await findServiceNodes(api, 'ws_1', 'payments_api', { provider: 'cloudflare', type: 'cf.workers.script' });
     assert.deepEqual(items.map((n) => n.id).sort(), ['n2', 'n3', 'prod-payments_api-worker']);
   });
+});
+
+describe('underscore wildcards that fill whole pages', () => {
+  // `_` matches any one character, so prod-payments-api-N all match %payments_api%; with
+  // 250 of them the literal match sits past the first 200-row page.
+  const wildcardOnly = (make: (i: number) => InfrastructureNode) => Array.from({ length: 250 }, (_, i) => make(i));
+
+  it('finds a literal id match past a page of wildcard-only hits', async () => {
+    const api = graphApi([...wildcardOnly((i) => node(`prod-payments-api-${i}`)), node('prod-payments_api-worker')]);
+    const items = await findServiceNodes(api, 'ws_1', 'payments_api');
+    assert.deepEqual(items.map((n) => n.id), ['prod-payments_api-worker']);
+  });
+
+  it('finds a literal name or alias match past wildcard-only hits, keeping the scope filters', async () => {
+    const seen: ListBody[] = [];
+    const api = graphApi(
+      [
+        ...wildcardOnly((i) => node(`a-${i}`, { data: { name: `prod-payments-api-${i}` }, alternateNames: [`prod-payments-api-${i}`] })),
+        node('zz-name', { data: { name: 'prod-payments_api-worker' } }),
+        node('zz-alias', { alternateNames: ['prod-payments_api-worker'] }),
+      ],
+      seen
+    );
+    const items = await findServiceNodes(api, 'ws_1', 'payments_api', { provider: 'cloudflare', type: 'cf.workers.script' });
+    assert.deepEqual(items.map((n) => n.id).sort(), ['zz-alias', 'zz-name']);
+    assert.ok(seen.every((b) => b.filters?.provider === 'cloudflare' && b.filters?.type === 'cf.workers.script'));
+  });
+
+  it('applies the limit to literal matches, not raw rows', async () => {
+    const api = graphApi([node('prod-payments-api-worker'), node('prod-payments_api-worker')]);
+    const items = await findServiceNodes(api, 'ws_1', 'payments_api', { limit: 1 });
+    assert.deepEqual(items.map((n) => n.id), ['prod-payments_api-worker']);
+  });
+
+  for (const [label, make] of [
+    ['id', (id: string) => node(id)],
+    ['name', (name: string) => node(`zz-${name.length}`, { data: { name } })],
+    ['alias', (alias: string) => node(`zz-${alias.length}`, { alternateNames: [alias] })],
+  ] as const) {
+    it(`resolves the sole literal ${label} match behind a page of wildcard-only hits`, async () => {
+      const literal = make('prod-payments_api-worker');
+      const api = graphApi([...wildcardOnly((i) => make(`prod-payments-api-${i}`)), literal]);
+      const out = await resolveServiceId(config, 'payments_api', 'ws_1', api);
+      assert.equal(out.id, literal.id);
+    });
+  }
 });
 
 describe('resolveServiceId', () => {

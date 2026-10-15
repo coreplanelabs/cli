@@ -70,7 +70,7 @@ type NodesListApi = Pick<PolylaneAPI, 'cloudInfraNodesList'>;
 
 interface NodeLookup {
   nodes: InfrastructureNode[];
-  /** A field query filled its page, so more nodes may match than were returned. */
+  /** A field stopped before reading every row, so more nodes may match than were returned. */
   truncated: boolean;
 }
 
@@ -87,6 +87,12 @@ function containsQuery(node: InfrastructureNode, query: string): boolean {
 function isExactMatch(node: InfrastructureNode, raw: string): boolean {
   return node.id === raw || node.data?.name === raw || node.alternateNames?.includes(raw) === true;
 }
+
+// Rows are read in pages, ordered by id so offsets are stable, until a field has `limit`
+// kept matches or runs out. The cap bounds the work when `_` wildcards match many rows that
+// containsQuery then drops; a field that hits it counts as truncated.
+const PAGE_SIZE = 200;
+const MAX_PAGES = 10;
 
 // The graph joins clauses after the scope filters without parentheses, so an OR clause would
 // escape provider/type. One query per name field, merged, keeps every match scoped.
@@ -106,26 +112,37 @@ async function lookupNodes(
     mode === 'exact'
       ? { value: query, predicate: '=' as const }
       : { value: `%${query}%`, predicate: 'LIKE' as const };
-  const results = await Promise.all(
-    NAME_FIELDS.map((field) =>
-      api.cloudInfraNodesList({
+  const keep = mode === 'exact' ? isExactMatch : containsQuery;
+
+  const scanField = async (field: (typeof NAME_FIELDS)[number]): Promise<NodeLookup> => {
+    const nodes: InfrastructureNode[] = [];
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const { items } = await api.cloudInfraNodesList({
         workspaceId,
         clauses: [{ field, ...clause }],
         ...(Object.keys(filters).length ? { filters } : {}),
-        options: { limit },
-      })
-    )
-  );
-  const keep = mode === 'exact' ? isExactMatch : containsQuery;
+        options: { limit: PAGE_SIZE, offset: page * PAGE_SIZE, orderBy: 'id' },
+      });
+      for (const node of items) {
+        if (!keep(node, query)) continue;
+        nodes.push(node);
+        if (nodes.length >= limit) return { nodes, truncated: true };
+      }
+      if (items.length < PAGE_SIZE) return { nodes, truncated: false };
+    }
+    return { nodes, truncated: true };
+  };
+
+  const results = await Promise.all(NAME_FIELDS.map(scanField));
   const seen = new Set<string>();
   const nodes: InfrastructureNode[] = [];
-  for (const node of results.flatMap((r) => r.items)) {
+  for (const node of results.flatMap((r) => r.nodes)) {
     const key = formatServiceId(node);
-    if (seen.has(key) || !keep(node, query)) continue;
+    if (seen.has(key)) continue;
     seen.add(key);
     nodes.push(node);
   }
-  return { nodes, truncated: results.some((r) => r.items.length >= limit) };
+  return { nodes, truncated: results.some((r) => r.truncated) };
 }
 
 /** Services whose id, name or an alternate name contains the query, for `service find`. */
