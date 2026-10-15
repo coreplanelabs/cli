@@ -179,7 +179,7 @@ polylane issue note <issue-id> "rolled back deploy ABC"
 polylane issue milestone <issue-id> "Mitigated"
 
 # Drill into services
-polylane service find "<query>"
+polylane service find <part-of-name>               # matches id, name or alternate name
 polylane service logs <service-id> --since 1h --grep error
 polylane service metrics <service-id> --metric <name> --since 1h
 polylane service graph <service-id> --direction both --depth 1
@@ -187,8 +187,10 @@ polylane service graph <service-id> --direction both --depth 1
 # Find the repository, then search it in a local clone
 polylane repo find "<query>"
 
-# Save what you learned
-polylane memory save "<finding>"
+# Read what the agent has learned about this workspace
+polylane memory list [--path <dir>]
+polylane memory show <path>
+polylane memory history
 ```
 
 ### Running agent tools directly
@@ -238,7 +240,7 @@ Attach resources as context by passing their IDs — the CLI infers the resource
 polylane workspace list --output json | jq '.items[0].id'
 
 # Chain: find a service → check its logs
-SVC=$(polylane service find "payment lambda" --output json --quiet | jq -r '.items[0].id')
+SVC=$(polylane service find payments --output json --quiet | jq -r '.items[0].id')
 polylane service logs "$SVC" --since 1h --grep error
 
 # Fire-and-forget + later poll
