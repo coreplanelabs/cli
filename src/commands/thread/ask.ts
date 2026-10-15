@@ -11,14 +11,12 @@ type ContextType =
   | 'repository'
   | 'cloud_account'
   | 'thread'
-  | 'infrastructure_node'
-  | 'memory';
+  | 'infrastructure_node';
 
 function inferContextType(id: string): ContextType {
   if (id.startsWith('repo_')) return 'repository';
   if (id.startsWith('acc_')) return 'cloud_account';
   if (id.startsWith('thrd_')) return 'thread';
-  if (id.startsWith('mem_')) return 'memory';
   return 'infrastructure_node';
 }
 
