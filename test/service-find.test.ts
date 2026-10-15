@@ -64,7 +64,7 @@ describe('findServiceNodes', () => {
   it('sends one scoped LIKE query per name field and merges without duplicates', async () => {
     const seen: ListBody[] = [];
     const api = graphApi([node('payments-api', { data: { name: 'payments-api' } }), node('worker-2', { data: { name: 'payments-worker' } })], seen);
-    const items = await findServiceNodes(api, 'ws_1', 'payments', { provider: 'cloudflare' });
+    const { nodes: items } = await findServiceNodes(api, 'ws_1', 'payments', { provider: 'cloudflare' });
 
     assert.deepEqual(
       items.map((n) => n.id),
@@ -81,6 +81,14 @@ describe('findServiceNodes', () => {
     }
   });
 
+  it('says when more services match than it returns', async () => {
+    const many = graphApi(Array.from({ length: 60 }, (_, i) => node(`pay-${i}`)));
+    assert.equal((await findServiceNodes(many, 'ws_1', 'pay')).truncated, true);
+    assert.equal((await findServiceNodes(many, 'ws_1', 'pay')).nodes.length, 50);
+    const few = graphApi([node('pay-1'), node('pay-2')]);
+    assert.equal((await findServiceNodes(few, 'ws_1', 'pay')).truncated, false);
+  });
+
   it('omits filters when none are given', async () => {
     const seen: ListBody[] = [];
     await findServiceNodes(graphApi([], seen), 'ws_1', 'x');
@@ -94,7 +102,7 @@ describe('findServiceNodes', () => {
       node('n3', { alternateNames: ['payments_api'] }),
       node('payments-api-lookalike'),
     ]);
-    const items = await findServiceNodes(api, 'ws_1', 'payments_api', { provider: 'cloudflare', type: 'cf.workers.script' });
+    const { nodes: items } = await findServiceNodes(api, 'ws_1', 'payments_api', { provider: 'cloudflare', type: 'cf.workers.script' });
     assert.deepEqual(items.map((n) => n.id).sort(), ['n2', 'n3', 'prod-payments_api-worker']);
   });
 });
@@ -106,7 +114,7 @@ describe('underscore wildcards that fill whole pages', () => {
 
   it('finds a literal id match past a page of wildcard-only hits', async () => {
     const api = graphApi([...wildcardOnly((i) => node(`prod-payments-api-${i}`)), node('prod-payments_api-worker')]);
-    const items = await findServiceNodes(api, 'ws_1', 'payments_api');
+    const { nodes: items } = await findServiceNodes(api, 'ws_1', 'payments_api');
     assert.deepEqual(items.map((n) => n.id), ['prod-payments_api-worker']);
   });
 
@@ -120,14 +128,14 @@ describe('underscore wildcards that fill whole pages', () => {
       ],
       seen
     );
-    const items = await findServiceNodes(api, 'ws_1', 'payments_api', { provider: 'cloudflare', type: 'cf.workers.script' });
+    const { nodes: items } = await findServiceNodes(api, 'ws_1', 'payments_api', { provider: 'cloudflare', type: 'cf.workers.script' });
     assert.deepEqual(items.map((n) => n.id).sort(), ['zz-alias', 'zz-name']);
     assert.ok(seen.every((b) => b.filters?.provider === 'cloudflare' && b.filters?.type === 'cf.workers.script'));
   });
 
   it('applies the limit to literal matches, not raw rows', async () => {
     const api = graphApi([node('prod-payments-api-worker'), node('prod-payments_api-worker')]);
-    const items = await findServiceNodes(api, 'ws_1', 'payments_api', { limit: 1 });
+    const { nodes: items } = await findServiceNodes(api, 'ws_1', 'payments_api', { limit: 1 });
     assert.deepEqual(items.map((n) => n.id), ['prod-payments_api-worker']);
   });
 

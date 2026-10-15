@@ -24,7 +24,7 @@ export const serviceFindCommand: Command = {
     const provider = getArgString(args, 'provider');
     const type = getArgString(args, 'type');
 
-    const items = await findServiceNodes(api, workspaceId, query, { provider, type });
+    const { nodes: items, truncated } = await findServiceNodes(api, workspaceId, query, { provider, type });
 
     const projected = items.map((n) => ({
       id: formatServiceId(n),
@@ -48,5 +48,9 @@ export const serviceFindCommand: Command = {
         ],
       }
     );
+    // On stderr, so stdout stays the list a script can parse.
+    if (truncated && !config.quiet) {
+      process.stderr.write(`More services match "${query}" than shown. Narrow the query, or add --provider or --type.\n`);
+    }
   },
 };

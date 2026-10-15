@@ -68,7 +68,7 @@ export interface FindServiceOptions {
 
 type NodesListApi = Pick<PolylaneAPI, 'cloudInfraNodesList'>;
 
-interface NodeLookup {
+export interface NodeLookup {
   nodes: InfrastructureNode[];
   /** A field stopped before reading every row, so more nodes may match than were returned. */
   truncated: boolean;
@@ -145,15 +145,19 @@ async function lookupNodes(
   return { nodes, truncated: results.some((r) => r.truncated) };
 }
 
-/** Services whose id, name or an alternate name contains the query, for `service find`. */
+/**
+ * Services whose id, name or an alternate name contains the query, for `service find`.
+ * `truncated` says more may match than were returned, so the caller can say so.
+ */
 export async function findServiceNodes(
   api: NodesListApi,
   workspaceId: string,
   query: string,
   opts: FindServiceOptions = {}
-): Promise<InfrastructureNode[]> {
-  const { nodes } = await lookupNodes(api, workspaceId, query, 'substring', opts);
-  return nodes.slice(0, opts.limit ?? DEFAULT_FIND_LIMIT);
+): Promise<NodeLookup> {
+  const limit = opts.limit ?? DEFAULT_FIND_LIMIT;
+  const { nodes, truncated } = await lookupNodes(api, workspaceId, query, 'substring', opts);
+  return { nodes: nodes.slice(0, limit), truncated: truncated || nodes.length > limit };
 }
 
 function toServiceId(node: InfrastructureNode): ServiceId {
