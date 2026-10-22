@@ -1,6 +1,6 @@
 import { sep } from 'node:path';
 import { release as osRelease, cpus as osCpus, totalmem } from 'node:os';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { INSTALL_REF_FILE } from '../config/paths';
 
 export type InstallSource = 'npm' | 'bun' | 'brew' | 'curl' | 'dev' | 'unknown';
@@ -9,7 +9,9 @@ export type InstallSource = 'npm' | 'bun' | 'brew' | 'curl' | 'dev' | 'unknown';
 // the launcher came from. False positives go to "unknown" rather than a wrong
 // label. Used purely for distribution-channel analytics.
 export function detectInstallSource(): InstallSource {
-  const candidates: string[] = [process.argv[1] ?? '', process.execPath ?? ''];
+  let launcher = process.argv[1] ?? '';
+  try { launcher = realpathSync(launcher); } catch { /* Keep an unresolved launcher as a best-effort label. */ }
+  const candidates: string[] = [launcher];
   const haystack = candidates.join('|').toLowerCase();
   if (!haystack) return 'unknown';
 
@@ -23,7 +25,7 @@ export function detectInstallSource(): InstallSource {
   if (haystack.includes(`${sep}.bun${sep}`) || haystack.includes('/.bun/')) return 'bun';
 
   // Homebrew Cellar / opt
-  if (haystack.includes(`${sep}cellar${sep}`) || haystack.includes(`${sep}homebrew${sep}`)) return 'brew';
+  if (haystack.includes(`${sep}cellar${sep}polylane${sep}`)) return 'brew';
 
   // Generic npm-global location
   if (haystack.includes(`${sep}npm${sep}`) || haystack.includes(`${sep}node_modules${sep}`)) return 'npm';

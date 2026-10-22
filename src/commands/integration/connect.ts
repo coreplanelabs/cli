@@ -802,10 +802,12 @@ async function connectWithCredentials(
     if (!ok) return BACK;
     body = { type: 'axiom', workspaceId, apiToken, ...(region !== undefined ? { region: region as AxiomRegion } : {}) };
   } else if (type === 'betterstack') {
+    let teamName = '';
     let apiToken = '';
     let uptimeApiToken = '';
     let telemetryApiToken = '';
     const ok = await runSteps([
+      textStep(config, args, 'teamName', 'Better Stack team name', '--team-name', (v) => { teamName = v; }),
       secretStep(
         config,
         args,
@@ -856,7 +858,7 @@ async function connectWithCredentials(
       ),
     ]);
     if (!ok) return BACK;
-    body = { type: 'betterstack', workspaceId, apiToken, uptimeApiToken, telemetryApiToken };
+    body = { type: 'betterstack', workspaceId, teamName, apiToken, uptimeApiToken, telemetryApiToken };
   } else if (type === 'openstatus') {
     let apiKey = '';
     const ok = await runSteps([
@@ -1206,6 +1208,7 @@ export const integrationConnectCommand: Command = {
     { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token)', type: 'string' },
     { flag: '--stack-url <url>', description: 'Grafana Cloud stack URL, e.g. https://mystack.grafana.net', type: 'string' },
     { flag: '--service-account-token <token>', description: 'Service account token (Grafana only, glsa_...)', type: 'string' },
+    { flag: '--team-name <name>', description: 'Team name (Better Stack only)', type: 'string' },
     { flag: '--uptime-api-token <token>', description: 'Uptime API token (Better Stack only)', type: 'string' },
     { flag: '--telemetry-api-token <token>', description: 'Telemetry API token (Better Stack only)', type: 'string' },
     { flag: '--service-account-username <username>', description: 'Service account username (Mixpanel only)', type: 'string' },
@@ -1241,7 +1244,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type datadog --site us5.datadoghq.com --api-key ... --app-key ...',
     'polylane integration connect --type honeycomb --region us --api-key ... --management-api-key-id ... --management-api-key-secret ...',
     'polylane integration connect --type axiom --api-token ...',
-    'polylane integration connect --type betterstack --api-token ... --uptime-api-token ... --telemetry-api-token ...',
+    'polylane integration connect --type betterstack --team-name MyTeam --api-token ... --uptime-api-token ... --telemetry-api-token ...',
     'polylane integration connect --type openstatus --api-key ...',
     'polylane integration connect --type grafana --stack-url https://mystack.grafana.net --service-account-token glsa_...',
     'polylane integration connect --type logfire --api-key pylf_... --organization-api-key pylf_...',

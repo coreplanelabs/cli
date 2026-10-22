@@ -18,6 +18,7 @@ import {
 import type { Credential } from './auth/types';
 import { buildEvent, dispatch, maybeShowTelemetryNotice } from './telemetry';
 import { getCliVersion } from './version';
+import { updateCli } from './update';
 
 const NO_AUTH_COMMANDS = new Set([
   'auth login',
@@ -165,6 +166,7 @@ async function run(): Promise<void> {
     // that timed out) flag it on process.exitCode; a hard exit(0) here used to
     // discard it.
     const exitCode = settledExitCode();
+    if (exitCode === 0 && command.name !== 'update') await updateCli(config, true);
     if (!isTelemetryCommand) {
       await dispatch(
         config,

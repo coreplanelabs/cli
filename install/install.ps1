@@ -1,13 +1,13 @@
 # polylane CLI installer for Windows (PowerShell 5.1+ / 7+).
 #
-#   irm https://polylane.com/install.ps1 | iex
+#   irm https://polylane.com/setup.ps1 | iex
 #
 # Installs the bundled CLI to $env:USERPROFILE\.polylane\bin\ and (if needed)
 # adds it to your user PATH. Node 20+ must be installed.
 # Override the version or install prefix with env vars:
 #
-#   $env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/install.ps1 | iex
-#   $env:POLYLANE_PREFIX='C:\tools'; irm https://polylane.com/install.ps1 | iex
+#   $env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/setup.ps1 | iex
+#   $env:POLYLANE_PREFIX='C:\tools'; irm https://polylane.com/setup.ps1 | iex
 
 $ErrorActionPreference = 'Stop'
 

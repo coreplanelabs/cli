@@ -1,7 +1,7 @@
 # polylane
 
 <p><strong>Agent-focused CLI for the <a href="https://polylane.com">Polylane</a> platform.</strong><br>
-Investigate production issues, explore cloud infrastructure, search code, and drive threads — from any agent or terminal.</p>
+Investigate production issues, explore cloud infrastructure, find the repositories behind a service, and drive threads — from any agent or terminal.</p>
 
 <p>Your coding agent writes the code. It can't see production. Polylane is the missing sense.</p>
 
@@ -35,10 +35,10 @@ Pick whichever channel fits your system. All install the same Node-based bundle 
 
 ```bash
 # macOS / Linux — curl
-curl -fsSL https://polylane.com/install.sh | bash
+curl -fsSL https://polylane.com/setup.sh | bash
 
 # Windows — PowerShell
-irm https://polylane.com/install.ps1 | iex
+irm https://polylane.com/setup.ps1 | iex
 
 # Homebrew (tap: coreplanelabs/tap)
 brew install coreplanelabs/tap/polylane
@@ -55,9 +55,26 @@ bun add -g @coreplane/polylane
 Version-pin the curl / PowerShell installers with:
 
 ```bash
-POLYLANE_VERSION=v0.1.0 curl -fsSL https://polylane.com/install.sh | bash
-$env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/install.ps1 | iex
+POLYLANE_VERSION=v0.1.0 curl -fsSL https://polylane.com/setup.sh | bash
+$env:POLYLANE_VERSION='v0.1.0'; irm https://polylane.com/setup.ps1 | iex
 ```
+
+The CLI checks for updates after successful commands, at most once per day,
+and updates the active install without a prompt. npm, Bun, and Homebrew installs
+use their own package manager. Standalone installs verify the release checksum
+and version before replacing the bundle. The current command finishes on its
+original version; the next command uses the update. Progress goes to stderr.
+
+Automatic updates require CLI `0.2.50` or later. Upgrade earlier versions once
+with the package manager or installer that owns your current install.
+
+Run `polylane update` to update now, or `polylane update --dry-run` to inspect
+the detected install and available update. Set `POLYLANE_NO_AUTO_UPDATE=1` to
+disable automatic updates. Keep `POLYLANE_VERSION` set when running the CLI to
+retain a version pin. Homebrew pins are also respected. CI, development,
+prerelease, and unrecognized installs do not update automatically. An automatic
+update failure does not change the command's result; `polylane update` reports
+update errors and exits nonzero.
 
 ### Wire it into your coding agents
 
@@ -113,7 +130,7 @@ polylane issue note <issue-id> "rolled back deploy"
 polylane service logs <service> --since 1h --grep error
 polylane tools run findNodes --params '{"query":"api"}'
 polylane thread ask "<prompt>"
-polylane memory save "<finding>"
+polylane memory list                              # what the agent has learned (git-backed)
 ```
 
 ## Discovering commands

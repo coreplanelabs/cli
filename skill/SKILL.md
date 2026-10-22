@@ -1,6 +1,6 @@
 ---
 name: polylane-cli
-description: Use `polylane` to investigate production issues, explore cloud infrastructure (logs / metrics / dependency graphs), search code, save memories, connect observability tools and cloud accounts, and drive threads with the Polylane agent. Use when the user wants to debug a production issue, look up a service, search their codebase, manage integrations, connect a cloud provider, or talk to the Polylane agent from the terminal.
+description: Use `polylane` to investigate production issues, explore cloud infrastructure (logs / metrics / dependency graphs), find the repositories that deploy a service, save memories, connect observability tools and cloud accounts, and drive threads with the Polylane agent. Use when the user wants to debug a production issue, look up a service, find a repository, manage integrations, connect a cloud provider, or talk to the Polylane agent from the terminal.
 ---
 
 # Polylane CLI — Agent Skill Guide
@@ -17,7 +17,7 @@ description: Use `polylane` to investigate production issues, explore cloud infr
 ```bash
 # Install (pick one — see README for the full list)
 npm install -g @coreplane/polylane
-# curl -fsSL https://polylane.com/install.sh | bash
+# curl -fsSL https://polylane.com/setup.sh | bash
 # brew install coreplanelabs/tap/polylane
 
 # Pick ONE auth path (OAuth is the default; use an API key only where a browser sign-in is impossible):
@@ -30,6 +30,13 @@ polylane auth signup --email <email> --code <code>     # finish signup with the 
 # Verify
 polylane auth status
 ```
+
+The CLI updates its active install after successful commands, at most once
+per day, without a prompt. Run `polylane update` to update now or add
+`--dry-run` to inspect the update. Set `POLYLANE_NO_AUTO_UPDATE=1` to disable
+automatic updates. Keep `POLYLANE_VERSION` set to retain a version pin.
+CI, development, prerelease, and unknown installs do not update automatically.
+The next command uses the updated version; stdout stays pure data.
 
 **API key** persists to `~/.polylane/config.json`. **OAuth** credentials persist to `~/.polylane/credentials.json` (mode `0600`) and auto-refresh before expiry. Credential precedence: `--api-key` flag > `POLYLANE_API_KEY` > `~/.polylane/credentials.json` > `api_key` in `~/.polylane/config.json` (an exported key always beats a stale OAuth token). **Signup** generates a strong random password when `--password` is omitted and prints it once on stderr (also `generated_password` in JSON output); store it, or change it later via password reset. Weak or known-leaked passwords are challenged at the edge (exit `2`, "challenged by the edge, usually because the password is weak or known-leaked"): do not invent one, let the CLI generate it. Signup emails a 6-digit verification code to the address; the account is unusable until the code is confirmed (interactively, or with `--code`). The confirmed session token is stored under the same OAuth credential shape — for long-lived agent access, create an API key right after signup and switch to it.
 
@@ -172,22 +179,23 @@ polylane issue note <issue-id> "rolled back deploy ABC"
 polylane issue milestone <issue-id> "Mitigated"
 
 # Drill into services
-polylane service find "<query>"
+polylane service find <part-of-name>               # matches id, name or alternate name
 polylane service logs <service-id> --since 1h --grep error
 polylane service metrics <service-id> --metric <name> --since 1h
 polylane service graph <service-id> --direction both --depth 1
 
-# Search code
+# Find the repository, then search it in a local clone
 polylane repo find "<query>"
-polylane repo grep <owner/repo> "<regex>"
 
-# Save what you learned
-polylane memory save "<finding>"
+# Read what the agent has learned about this workspace
+polylane memory list [--path <dir>]
+polylane memory show <path>
+polylane memory history
 ```
 
 ### Running agent tools directly
 
-Polylane exposes the same tools its own agent uses — observability queries across every connected provider, infra-graph traversal, code and change-record search, deployments, audit logs. Discover them, then run them, without opening a thread.
+Polylane exposes the same tools its own agent uses — observability queries across every connected provider, infra-graph traversal, GitHub file and code reads, change-record search, deployments, audit logs. Discover them, then run them, without opening a thread.
 
 ```bash
 # Discover tools available to this workspace (filtered to your credential's scopes)
@@ -232,7 +240,7 @@ Attach resources as context by passing their IDs — the CLI infers the resource
 polylane workspace list --output json | jq '.items[0].id'
 
 # Chain: find a service → check its logs
-SVC=$(polylane service find "payment lambda" --output json --quiet | jq -r '.items[0].id')
+SVC=$(polylane service find payments --output json --quiet | jq -r '.items[0].id')
 polylane service logs "$SVC" --since 1h --grep error
 
 # Fire-and-forget + later poll

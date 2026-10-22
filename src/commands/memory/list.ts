@@ -2,52 +2,33 @@ import type { Command } from '../../command';
 import type { Config } from '../../config/schema';
 import { PolylaneAPI } from '../../generated/client';
 import { formatList } from '../../output/formatter';
-import { projectItems } from '../../output/project';
-import { requireWorkspace, getArgNumber, getArgBoolean } from '../helpers';
-
-const FIELDS = ['id', 'title', 'labels', 'sourceType', 'created'];
+import { requireWorkspace, getArgString } from '../helpers';
 
 export const memoryListCommand: Command = {
   name: 'memory list',
-  description: 'List memories',
-  operationId: 'memories.list',
-  options: [
-    { flag: '--limit <n>', description: 'Max items (default 20)', type: 'number' },
-    { flag: '--full', description: 'Return full objects', type: 'boolean' },
-  ],
+  description: 'List files and folders in the workspace memory repository',
+  operationId: 'memories.tree',
+  options: [{ flag: '--path <dir>', description: 'Folder to list (default: repository root)', type: 'string' }],
+  examples: ['polylane memory list', 'polylane memory list --path services'],
   async execute(config: Config, _flags, args: Record<string, unknown>): Promise<void> {
     const workspaceId = await requireWorkspace(config);
-    const limit = getArgNumber(args, 'limit') ?? 20;
-    const full = getArgBoolean(args, 'full') === true;
+    const dir = (getArgString(args, 'path') ?? '').replace(/^\/+|\/+$/g, '');
 
     const api = new PolylaneAPI(config);
-    const result = await api.memoriesList(workspaceId, { perPage: limit });
+    const result = await api.memoriesTree(workspaceId, dir ? { path: dir } : undefined);
 
-    if (full) {
-      formatList(config, result as { items: Array<Record<string, unknown>>; count: number });
-      return;
-    }
+    const items = result.entries.map((e) => ({
+      path: dir ? `${dir}/${e.name}` : e.name,
+      type: e.type === 'tree' ? 'dir' : 'file',
+    }));
 
     formatList(
       config,
+      { items, count: items.length },
       {
-        items: projectItems(result.items as unknown as Array<Record<string, unknown>>, FIELDS),
-        count: result.count,
-      },
-      {
-        headers: ['ID', 'Title', 'Labels', 'Source', 'Created'],
-        rows: (item) => [
-          String(item.id ?? ''),
-          truncate(String(item.title ?? ''), 50),
-          Array.isArray(item.labels) ? item.labels.join(',') : '',
-          String(item.sourceType ?? ''),
-          String(item.created ?? ''),
-        ],
+        headers: ['Path', 'Type'],
+        rows: (item) => [String(item.path), String(item.type)],
       }
     );
   },
 };
-
-function truncate(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max - 1) + '…' : s;
-}
