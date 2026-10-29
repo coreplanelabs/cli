@@ -50,19 +50,37 @@ type ConnectableType =
   | 'openstatus'
   | 'grafana'
   | 'logfire'
+  | 'newrelic'
+  | 'langsmith'
+  | 'braintrust'
+  | 'incident_io'
+  | 'depot'
   | 'mixpanel'
+  | 'amplitude'
   | 'posthog'
   | 'devin'
   | 'cursor'
   | 'factory'
   | 'conductor'
+  | 'capy'
+  | 'amp'
   | 'linear'
   | 'mcp';
 
 // Mirrors each type's subcategory in the integrations catalog
 // (`polylane integration catalog`), so callers like the install script can
 // narrow the picker to one family of integrations.
-export const CONNECT_CATEGORIES = ['git', 'communication', 'observability', 'product-analytics', 'code-agent', 'issue-tracking', 'protocol'] as const;
+export const CONNECT_CATEGORIES = [
+  'git',
+  'communication',
+  'observability',
+  'incident-management',
+  'ci-cd',
+  'product-analytics',
+  'code-agent',
+  'issue-tracking',
+  'protocol',
+] as const;
 type ConnectCategory = (typeof CONNECT_CATEGORIES)[number];
 
 const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string; category: ConnectCategory }> = [
@@ -81,12 +99,20 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'openstatus', label: 'OpenStatus', hint: 'workspace API key', category: 'observability' },
   { value: 'grafana', label: 'Grafana Cloud', hint: 'stack URL + service account token', category: 'observability' },
   { value: 'logfire', label: 'Logfire', hint: 'project + organization keys', category: 'observability' },
+  { value: 'newrelic', label: 'New Relic', hint: 'User key (NRAK-...)', category: 'observability' },
+  { value: 'langsmith', label: 'LangSmith', hint: 'service key · LLM observability', category: 'observability' },
+  { value: 'braintrust', label: 'Braintrust', hint: 'service token · LLM observability', category: 'observability' },
+  { value: 'incident_io', label: 'incident.io', hint: 'API key', category: 'incident-management' },
+  { value: 'depot', label: 'Depot', hint: 'organization token', category: 'ci-cd' },
   { value: 'mixpanel', label: 'Mixpanel', hint: 'service account + project ID', category: 'product-analytics' },
+  { value: 'amplitude', label: 'Amplitude', hint: 'API key + secret key', category: 'product-analytics' },
   { value: 'posthog', label: 'PostHog', hint: "choose one project on PostHog's consent screen", category: 'product-analytics' },
   { value: 'devin', label: 'Devin', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'factory', label: 'Factory', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'conductor', label: 'Conductor', hint: 'API key · coding agent', category: 'code-agent' },
+  { value: 'capy', label: 'Capy', hint: 'API key · coding agent', category: 'code-agent' },
+  { value: 'amp', label: 'Amp', hint: 'access token · coding agent', category: 'code-agent' },
   { value: 'linear', label: 'Linear', hint: 'personal API key · issue tracking', category: 'issue-tracking' },
   { value: 'mcp', label: 'MCP server', hint: 'any MCP server by URL', category: 'protocol' },
 ];
@@ -340,6 +366,7 @@ export function normalizeGrafanaStackUrl(input: string): string | null {
 
 const CODE_AGENTS = {
   devin: {
+    keyLabel: 'API key',
     name: 'Devin',
     instructions:
       'In Devin, go to Settings > Service users, create a service user and generate its API key. Create it inside the organization, not in Enterprise settings (an enterprise-scoped key is rejected). Give it the Member role; on a custom enterprise role select ManageOrgSessions, ViewOrgSessions and UseDevinSessions. The key starts with cog_ and is shown only once.',
@@ -347,6 +374,7 @@ const CODE_AGENTS = {
     linkLabel: 'Create service user',
   },
   cursor: {
+    keyLabel: 'API key',
     name: 'Cursor',
     instructions:
       'Create a user API key under Dashboard > API Keys. Pick a user key, not a service account key (service account keys are rejected). There are no scopes to select. Keys start with crsr_ (older ones with key_). Your target repositories must be connected to Cursor\'s GitHub App.',
@@ -354,6 +382,7 @@ const CODE_AGENTS = {
     linkLabel: 'Open Cursor API keys',
   },
   factory: {
+    keyLabel: 'API key',
     name: 'Factory',
     instructions:
       'Create an API key in your Factory settings. Prefer a service account key (org-owned; creating one needs the Owner or Manager role). Factory keys have no scope options. The key starts with fk- and is shown only once.',
@@ -361,11 +390,28 @@ const CODE_AGENTS = {
     linkLabel: 'Create API key',
   },
   conductor: {
+    keyLabel: 'API key',
     name: 'Conductor',
     instructions:
       'Create an API key in Conductor under Users > API keys. The key starts with sk_. Handed-off autofixes run as agents in Conductor Cloud workspaces on your account.',
     link: 'https://app.conductor.build/users/api-keys',
     linkLabel: 'Create API key',
+  },
+  capy: {
+    keyLabel: 'API key',
+    name: 'Capy',
+    instructions:
+      'Create an API key under Capy > Settings > API. The key starts with capy_. Make sure the repositories you want fixed belong to a Capy project.',
+    link: 'https://capy.ai/settings/api',
+    linkLabel: 'Open Capy settings',
+  },
+  amp: {
+    keyLabel: 'access token',
+    name: 'Amp',
+    instructions:
+      'Copy your access token under Amp > Settings > Security. The token starts with sgamp_. In Amp, connect GitHub and add each repository you want fixed as an Amp project. Runs use your Amp credits.',
+    link: 'https://ampcode.com/settings/security',
+    linkLabel: 'Open Amp settings',
   },
 } as const;
 
@@ -641,6 +687,98 @@ export function logfireKeyFields(apiKey: string, organizationApiKey: string): { 
   }
   return { apiKey: projectKey, organizationApiKey: organizationKey };
 }
+
+export const INCIDENT_IO_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
+type IncidentIoSeverity = (typeof INCIDENT_IO_SEVERITIES)[number];
+
+export function parseIncidentIoSeverity(value: string): IncidentIoSeverity {
+  const match = INCIDENT_IO_SEVERITIES.find((s) => s === value);
+  if (match === undefined) {
+    throw new CLIError(
+      `Invalid value for --escalation-severity: "${value}"`,
+      ExitCode.USAGE,
+      `Use one of: ${INCIDENT_IO_SEVERITIES.join(', ')} (default: high)`
+    );
+  }
+  return match;
+}
+
+export function parseNewrelicAccountId(value: string): number {
+  const trimmed = value.trim();
+  const parsed = /^\d+$/.test(trimmed) ? Number(trimmed) : NaN;
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new CLIError(
+      `Invalid value for --account-id: "${value}"`,
+      ExitCode.USAGE,
+      'Pass the numeric New Relic account ID, shown in the account switcher at https://one.newrelic.com'
+    );
+  }
+  return parsed;
+}
+
+// A New Relic or LangSmith key can reach several accounts or workspaces, and
+// the API refuses to guess (400) without naming them. The console lists them
+// through a console-only validate route, so the CLI asks for the ID and retries.
+interface ScopeRetry<B> {
+  pattern: RegExp;
+  flag: string;
+  title: string;
+  prompt: string;
+  hint: string;
+  parse: (value: string) => B;
+}
+
+export async function connectPickingScope<B extends Partial<ConnectBody>>(
+  config: Config,
+  api: PolylaneAPI,
+  body: ConnectBody,
+  alreadyChosen: boolean,
+  retry: ScopeRetry<B>
+): Promise<typeof BACK | Integration> {
+  try {
+    return await api.integrationsConnect(body);
+  } catch (err) {
+    if (!isApiError(err) || err.status !== 400 || alreadyChosen || !retry.pattern.test(err.message)) throw err;
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(err.message, ExitCode.USAGE, `Pass ${retry.flag} <id>.\n${retry.hint}`);
+    }
+    note(`${err.message}\n${retry.hint}`, retry.title);
+    const picked = await promptTextOrBack({ nonInteractive: config.nonInteractive }, retry.prompt, {
+      validate: (v: string) => {
+        try {
+          retry.parse(v);
+          return undefined;
+        } catch (e) {
+          return e instanceof Error ? e.message : 'Invalid value';
+        }
+      },
+    });
+    if (picked === BACK) return BACK;
+    return api.integrationsConnect({ ...body, ...retry.parse(picked) } as ConnectBody);
+  }
+}
+
+const NEWRELIC_ACCOUNT_RETRY: ScopeRetry<{ accountId: number }> = {
+  pattern: /more than one New Relic account/i,
+  flag: '--account-id',
+  title: 'New Relic account',
+  prompt: 'New Relic account ID',
+  hint: 'The account ID is in the account switcher at https://one.newrelic.com',
+  parse: (v) => ({ accountId: parseNewrelicAccountId(v) }),
+};
+
+const LANGSMITH_WORKSPACE_RETRY: ScopeRetry<{ langsmithWorkspaceId: string }> = {
+  pattern: /more than one LangSmith workspace/i,
+  flag: '--langsmith-workspace',
+  title: 'LangSmith workspace',
+  prompt: 'LangSmith workspace ID',
+  hint: 'The workspace ID is under Settings > Workspaces at https://smith.langchain.com/settings',
+  parse: (v) => {
+    const id = v.trim();
+    if (!id) throw new CLIError('Invalid value for --langsmith-workspace: ""', ExitCode.USAGE, 'Pass the LangSmith workspace ID');
+    return { langsmithWorkspaceId: id };
+  },
+};
 
 // --- Credential-based connects: each wizard step can go back to the previous
 // one, and backing out of the first returns BACK to re-open type selection ---
@@ -1085,6 +1223,161 @@ async function connectWithCredentials(
     ]);
     if (!ok) return BACK;
     body = { type: 'linear', workspaceId, apiKey };
+  } else if (type === 'newrelic') {
+    const accountIdFlag = getArgString(args, 'accountId');
+    const accountId = accountIdFlag !== undefined ? parseNewrelicAccountId(accountIdFlag) : undefined;
+    let apiKey = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: 'New Relic User key',
+          instructions:
+            'In New Relic, open API keys from your user menu, click Create a key, choose the User key type, and copy the NRAK- value.',
+          link: 'https://one.newrelic.com/api-keys',
+          linkLabel: 'Open New Relic API keys',
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'newrelic', workspaceId, apiKey, ...(accountId !== undefined ? { accountId } : {}) };
+  } else if (type === 'langsmith') {
+    const workspaceFlag = getArgString(args, 'langsmithWorkspace');
+    const langsmithWorkspaceId =
+      workspaceFlag !== undefined ? LANGSMITH_WORKSPACE_RETRY.parse(workspaceFlag).langsmithWorkspaceId : undefined;
+    let apiKey = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: 'LangSmith service key',
+          instructions:
+            'In LangSmith, open Settings, then API Keys, and create a service key for the workspace you want to connect. Service keys start with lsv2_sk_; a personal access token (lsv2_pt_) also works.',
+          link: 'https://smith.langchain.com/settings',
+          linkLabel: 'Open LangSmith settings',
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'langsmith', workspaceId, apiKey, ...(langsmithWorkspaceId !== undefined ? { langsmithWorkspaceId } : {}) };
+  } else if (type === 'braintrust') {
+    let apiKey = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: 'Braintrust service token',
+          instructions:
+            'In Braintrust, open Settings, then Service tokens, and create a token in the organization you want to connect. Add it to a permission group that can read and update all projects, such as Owners or Engineers. The token starts with bt-st-; personal API keys (sk-) are refused.',
+          link: 'https://www.braintrust.dev/app/settings?subroute=service-tokens',
+          linkLabel: 'Open Braintrust service tokens',
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'braintrust', workspaceId, apiKey };
+  } else if (type === 'incident_io') {
+    const severityFlag = getArgString(args, 'escalationSeverity');
+    const escalationSeverity = severityFlag !== undefined ? parseIncidentIoSeverity(severityFlag) : undefined;
+    let apiKey = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: 'incident.io API key',
+          instructions:
+            'Create an API key in incident.io. Each role turns on one part: viewer reads incidents, updates, follow-ups and the catalog; schedules_reader reads who is on call; workflows_editor and secrets_manage start an investigation for each new incident; on_call_editor sends unresolved escalations to incident.io.',
+          link: 'https://app.incident.io/~/settings/api-keys',
+          linkLabel: 'Open incident.io API keys',
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'incident_io', workspaceId, apiKey, ...(escalationSeverity !== undefined ? { escalationSeverity } : {}) };
+  } else if (type === 'depot') {
+    let apiToken = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiToken',
+        '--api-token',
+        {
+          message: 'Depot organization token',
+          instructions: 'In Depot, create an organization token under API Tokens.',
+          link: 'https://depot.dev/orgs/_/settings/api-tokens',
+          linkLabel: 'Create Depot token',
+        },
+        (v) => {
+          apiToken = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'depot', workspaceId, apiToken };
+  } else if (type === 'amplitude') {
+    let apiKey = '';
+    let secretKey = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: 'Amplitude API key',
+          instructions:
+            'In Amplitude, open Settings, then API Keys, and choose the project in the project menu. Copy the key on the API Keys tab. It only identifies the project; Polylane finds the data region for you.',
+          link: 'https://app.amplitude.com',
+          linkLabel: 'Open Amplitude',
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+      secretStep(
+        config,
+        args,
+        'secretKey',
+        '--secret-key',
+        {
+          message: 'Amplitude secret key',
+          instructions:
+            'On the Secret Keys tab, click Show next to the secret key and copy it. If there is no Show, use the secret saved when the key was created, or ask an Amplitude manager or admin to generate a new one.',
+          link: 'https://app.amplitude.com',
+          linkLabel: 'Open Amplitude',
+        },
+        (v) => {
+          secretKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'amplitude', workspaceId, apiKey, secretKey };
   } else {
     const agent = CODE_AGENTS[type];
     let apiKey = '';
@@ -1095,7 +1388,7 @@ async function connectWithCredentials(
         'apiKey',
         '--api-key',
         {
-          message: `${agent.name} API key`,
+          message: `${agent.name} ${agent.keyLabel}`,
           instructions: agent.instructions,
           link: agent.link,
           linkLabel: agent.linkLabel,
@@ -1109,7 +1402,14 @@ async function connectWithCredentials(
     body = { type, workspaceId, apiKey };
   }
 
-  const integration = body.type === 'axiom' ? await connectAxiom(config, api, body) : await api.integrationsConnect(body);
+  const integration =
+    body.type === 'axiom'
+      ? await connectAxiom(config, api, body)
+      : body.type === 'newrelic'
+        ? await connectPickingScope(config, api, body, body.accountId !== undefined, NEWRELIC_ACCOUNT_RETRY)
+        : body.type === 'langsmith'
+          ? await connectPickingScope(config, api, body, body.langsmithWorkspaceId !== undefined, LANGSMITH_WORKSPACE_RETRY)
+          : await api.integrationsConnect(body);
   if (integration === BACK) return BACK;
   if (type === 'honeycomb') assertHoneycombManagementKeyStored(integration);
   printConnectSuccess(config, integration, TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
@@ -1185,7 +1485,7 @@ async function connectType(
 
 export const integrationConnectCommand: Command = {
   name: 'integration connect',
-  description: 'Connect an integration (GitHub, Slack, Sentry, Datadog, Honeycomb, Axiom, Better Stack, OpenStatus, Grafana Cloud, Logfire, Mixpanel, PostHog, Devin, Cursor, Factory, Conductor, Linear, MCP)',
+  description: `Connect an integration (${TYPE_OPTIONS.map((o) => o.label).join(', ')})`,
   operationId: 'integrations.connect',
   options: [
     {
@@ -1200,12 +1500,25 @@ export const integrationConnectCommand: Command = {
     },
     { flag: '--site <site>', description: 'Datadog site (e.g. us5.datadoghq.com)', type: 'string' },
     { flag: '--region <region>', description: 'Honeycomb (us|eu), Axiom (us-east-1|eu-central-1; detected from the token if omitted) or Mixpanel (us|eu|in)', type: 'string' },
-    { flag: '--api-key <key>', description: 'API key (Datadog / Honeycomb / OpenStatus / Logfire project key / Devin / Cursor / Factory / Conductor / Linear)', type: 'string' },
+    {
+      flag: '--api-key <key>',
+      description:
+        'API key (Datadog / Honeycomb / OpenStatus / Logfire project key / New Relic User key / LangSmith / Braintrust service token / incident.io / Amplitude / Devin / Cursor / Factory / Conductor / Capy / Amp access token / Linear)',
+      type: 'string',
+    },
+    { flag: '--secret-key <key>', description: 'Secret key (Amplitude only)', type: 'string' },
+    { flag: '--account-id <id>', description: 'New Relic account ID, when the key can read more than one account', type: 'string' },
+    { flag: '--langsmith-workspace <id>', description: 'LangSmith workspace ID, when the key can read more than one workspace', type: 'string' },
+    {
+      flag: '--escalation-severity <s>',
+      description: `incident.io: lowest escalation severity sent as an incident.io alert: ${INCIDENT_IO_SEVERITIES.join(' | ')} (default: high)`,
+      type: 'string',
+    },
     { flag: '--app-key <key>', description: 'App key (Datadog only)', type: 'string' },
     { flag: '--organization-api-key <key>', description: 'Organization API key (Logfire only, pylf_...)', type: 'string' },
     { flag: '--management-api-key-id <id>', description: 'Management API key ID (Honeycomb)', type: 'string' },
     { flag: '--management-api-key-secret <secret>', description: 'Management API key secret (Honeycomb)', type: 'string' },
-    { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token)', type: 'string' },
+    { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token / Depot organization token)', type: 'string' },
     { flag: '--stack-url <url>', description: 'Grafana Cloud stack URL, e.g. https://mystack.grafana.net', type: 'string' },
     { flag: '--service-account-token <token>', description: 'Service account token (Grafana only, glsa_...)', type: 'string' },
     { flag: '--team-name <name>', description: 'Team name (Better Stack only)', type: 'string' },
@@ -1249,6 +1562,12 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type grafana --stack-url https://mystack.grafana.net --service-account-token glsa_...',
     'polylane integration connect --type logfire --api-key pylf_... --organization-api-key pylf_...',
     'polylane integration connect --type mixpanel --region us --service-account-username ... --service-account-secret ... --project-id 1234567',
+    'polylane integration connect --type newrelic --api-key NRAK-...',
+    'polylane integration connect --type langsmith --api-key lsv2_sk_... --langsmith-workspace <id>',
+    'polylane integration connect --type braintrust --api-key bt-st-...',
+    'polylane integration connect --type incident_io --api-key ... --escalation-severity critical',
+    'polylane integration connect --type depot --api-token ...',
+    'polylane integration connect --type amplitude --api-key ... --secret-key ...',
     'polylane integration connect --type posthog',
     'polylane integration connect --type cursor --api-key crsr_...',
     'polylane integration connect --type linear --api-key lin_api_...',

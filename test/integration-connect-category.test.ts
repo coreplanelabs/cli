@@ -10,22 +10,39 @@ import { isCLIError } from '../src/errors/base';
 describe('typeOptionsForCategory', () => {
   it('returns every option when no category is given', () => {
     const all = typeOptionsForCategory(undefined);
-    assert.equal(all.length, 18);
+    assert.equal(all.length, 26);
   });
 
   it('narrows to exactly the observability integrations', () => {
     const types = typeOptionsForCategory('observability').map((o) => o.value);
-    assert.deepEqual(types.sort(), ['axiom', 'betterstack', 'datadog', 'grafana', 'honeycomb', 'logfire', 'openstatus', 'sentry']);
+    assert.deepEqual(types.sort(), [
+      'axiom',
+      'betterstack',
+      'braintrust',
+      'datadog',
+      'grafana',
+      'honeycomb',
+      'langsmith',
+      'logfire',
+      'newrelic',
+      'openstatus',
+      'sentry',
+    ]);
   });
 
   it('narrows to exactly the product analytics integrations', () => {
     const types = typeOptionsForCategory('product-analytics').map((o) => o.value);
-    assert.deepEqual(types, ['mixpanel', 'posthog']);
+    assert.deepEqual(types, ['mixpanel', 'amplitude', 'posthog']);
   });
 
   it('narrows to exactly the code agents', () => {
     const types = typeOptionsForCategory('code-agent').map((o) => o.value);
-    assert.deepEqual(types.sort(), ['conductor', 'cursor', 'devin', 'factory']);
+    assert.deepEqual(types.sort(), ['amp', 'capy', 'conductor', 'cursor', 'devin', 'factory']);
+  });
+
+  it('narrows to exactly the incident management and CI/CD integrations', () => {
+    assert.deepEqual(typeOptionsForCategory('incident-management').map((o) => o.value), ['incident_io']);
+    assert.deepEqual(typeOptionsForCategory('ci-cd').map((o) => o.value), ['depot']);
   });
 
   it('narrows to exactly the issue trackers', () => {
@@ -78,9 +95,9 @@ describe('typeOptionsForCategory', () => {
 
 describe('resolveTypeOptions', () => {
   it('lets --type win over the filter', () => {
-    assert.equal(resolveTypeOptions('observability', true).length, 18);
-    assert.equal(resolveTypeOptions('observability', false).length, 8);
-    assert.equal(resolveTypeOptions(undefined, false).length, 18);
+    assert.equal(resolveTypeOptions('observability', true).length, 26);
+    assert.equal(resolveTypeOptions('observability', false).length, 11);
+    assert.equal(resolveTypeOptions(undefined, false).length, 26);
   });
 
   it('rejects an unknown category even when --type is present', () => {
