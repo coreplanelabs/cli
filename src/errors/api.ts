@@ -4,10 +4,14 @@ import { ExitCode } from './codes';
 export interface ApiErrorPayload {
   message: string;
   detail?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export class ApiError extends CLIError {
   readonly status: number;
+  // Structured context some errors carry beside the message, e.g. the choices
+  // a retry has to pick from.
+  metadata?: Record<string, unknown>;
 
   constructor(status: number, message: string, exitCode: ExitCode = ExitCode.GENERAL, hint?: string) {
     super(message, exitCode, hint);
@@ -21,6 +25,12 @@ export function isApiError(err: unknown): err is ApiError {
 }
 
 export function mapApiError(status: number, error: ApiErrorPayload | null): ApiError {
+  const err = mapStatus(status, error);
+  if (error?.metadata) err.metadata = error.metadata;
+  return err;
+}
+
+function mapStatus(status: number, error: ApiErrorPayload | null): ApiError {
   const detail = error?.detail;
   const message = error?.message ?? `The request did not succeed (${status})`;
 
