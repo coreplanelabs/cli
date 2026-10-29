@@ -99,7 +99,8 @@ describe('connectGcp', () => {
     assert.equal(created[0]!.investigateAlerts, true);
     assert.match(String(created[0]!.idempotencyKey), /^[A-Za-z0-9._:-]{1,128}$/);
     assert.equal(stdout, 'gcloud infra-manager deployments apply ...\n');
-    assert.ok(stderr.includes(gcpResumeCommand(REQUEST_ID, '123456789012')));
+    assert.ok(stderr.includes(gcpResumeCommand('ws_1', REQUEST_ID, '123456789012')));
+    assert.ok(stderr.includes('polylane --workspace ws_1 cloud connect --provider gcp --request'));
   });
 
   it('turns alert investigation off with --no-investigate-alerts', async () => {
@@ -151,6 +152,35 @@ describe('connectGcp', () => {
     assert.match(stderr, /Connected: my-production-project/);
   });
 
+  it('makes one attempt and exits pending when a non-interactive resume is still verifying', async () => {
+    let calls = 0;
+    const api = {
+      cloudAccountsGcpRequestsGet: async () => ({
+        requestId: REQUEST_ID,
+        projectId: 'my-production-project',
+        status: 'pending',
+        projectNumber: null,
+      }),
+      cloudAccountsGcpActivate: async () => {
+        calls += 1;
+        return { requestId: REQUEST_ID, provisioningStatus: 'verifying' };
+      },
+    } as unknown as PolylaneAPI;
+
+    const outcome = await connectGcp(
+      { ...config, output: 'json' } as Config,
+      api,
+      { request: REQUEST_ID, projectNumber: '123456789012' },
+      'ws_2'
+    );
+
+    assert.equal(outcome, 'pending');
+    assert.equal(calls, 1);
+    const printed = JSON.parse(stdout) as { status: string; next: string };
+    assert.equal(printed.status, 'verifying');
+    assert.equal(printed.next, gcpResumeCommand('ws_2', REQUEST_ID, '123456789012'));
+  });
+
   it('reuses the project number a request already recorded', async () => {
     let sent: unknown;
     const api = {
@@ -182,7 +212,7 @@ describe('connectGcp', () => {
       () => connectGcp(config, api, { request: REQUEST_ID, projectNumber: '123456789012' }, 'ws_1'),
       (err: unknown) =>
         isUsageError(err) &&
-        ((err as CLIError).hint?.includes('polylane cloud connect --provider gcp --project-id my-production-project') ?? false)
+        ((err as CLIError).hint?.includes('polylane --workspace ws_1 cloud connect --provider gcp --project-id my-production-project') ?? false)
     );
   });
 });

@@ -56,8 +56,10 @@ export function parseGcpRequestId(value: string): string {
   return id;
 }
 
-export function gcpResumeCommand(requestId: string, projectNumber: string): string {
-  return `polylane cloud connect --provider gcp --request ${requestId} --project-number ${projectNumber}`;
+// The request belongs to one workspace, so the command names it: a request
+// prepared with --workspace must not resume against the configured default.
+export function gcpResumeCommand(workspaceId: string, requestId: string, projectNumber: string): string {
+  return `polylane --workspace ${workspaceId} cloud connect --provider gcp --request ${requestId} --project-number ${projectNumber}`;
 }
 
 function validatorFor(parse: (v: string) => string): (v: string) => string | undefined {
@@ -101,33 +103,44 @@ function valueStep(
   };
 }
 
+type Activation = { kind: 'registered'; cloudAccountId: string } | { kind: 'verifying' } | { kind: 'timeout' };
+
 // Verify with the API's poll mode: 202 means Google access is still
-// propagating, so re-send until the account registers. Errors are not
-// swallowed — after its retry window the server answers with the real reason.
+// propagating. A run that can wait re-sends until the account registers; one
+// that cannot (non-interactive, JSON) makes a single attempt and hands back
+// the resume command. Errors are not swallowed — after its retry window the
+// server answers with the real reason.
 async function activate(
   config: Config,
   api: PolylaneAPI,
   workspaceId: string,
   requestId: string,
   projectNumber: string
-): Promise<string | null> {
+): Promise<Activation> {
+  const body = { workspaceId, requestId, projectNumber, verificationMode: 'poll' } as const;
+  if (!canWaitForBrowser(config)) {
+    const result = await api.cloudAccountsGcpActivate(body);
+    return result.provisioningStatus === 'registered'
+      ? { kind: 'registered', cloudAccountId: result.cloudAccountId }
+      : { kind: 'verifying' };
+  }
   const spinner = new Spinner('Verifying the Google Cloud connection… (Ctrl+C to stop waiting)');
   const restoreSigint = scopedSigint(() => {
-    spinner.stop(`Stopped waiting. Resume with: ${gcpResumeCommand(requestId, projectNumber)}`);
+    spinner.stop(`Stopped waiting. Resume with: ${gcpResumeCommand(workspaceId, requestId, projectNumber)}`);
     process.exit(0);
   });
   if (!config.quiet && config.output !== 'json') spinner.start();
   try {
     const deadline = Date.now() + ACTIVATE_TIMEOUT_MS;
     for (;;) {
-      const result = await api.cloudAccountsGcpActivate({ workspaceId, requestId, projectNumber, verificationMode: 'poll' });
+      const result = await api.cloudAccountsGcpActivate(body);
       if (result.provisioningStatus === 'registered') {
         spinner.stop();
-        return result.cloudAccountId;
+        return { kind: 'registered', cloudAccountId: result.cloudAccountId };
       }
       if (Date.now() >= deadline) {
         spinner.stop();
-        return null;
+        return { kind: 'timeout' };
       }
       await new Promise((r) => setTimeout(r, ACTIVATE_INTERVAL_MS));
     }
@@ -146,14 +159,21 @@ async function finish(
   request: Pick<GcpConnectionRequest, 'requestId' | 'projectId'>,
   projectNumber: string
 ): Promise<GcpOutcome> {
-  const cloudAccountId = await activate(config, api, workspaceId, request.requestId, projectNumber);
-  if (cloudAccountId === null) {
-    process.stderr.write(
-      'Timed out waiting for Google Cloud access to propagate.\n' +
-        `Retry: ${gcpResumeCommand(request.requestId, projectNumber)}\n`
-    );
+  const activation = await activate(config, api, workspaceId, request.requestId, projectNumber);
+  const resumeCommand = gcpResumeCommand(workspaceId, request.requestId, projectNumber);
+  if (activation.kind === 'verifying') {
+    if (config.output === 'json') {
+      formatOutput(config, { requestId: request.requestId, status: 'verifying', next: resumeCommand });
+    } else {
+      process.stderr.write(`Google Cloud access is still propagating. Retry in a minute:\n${resumeCommand}\n`);
+    }
+    return 'pending';
+  }
+  if (activation.kind === 'timeout') {
+    process.stderr.write(`Timed out waiting for Google Cloud access to propagate.\nRetry: ${resumeCommand}\n`);
     return 'timeout';
   }
+  const { cloudAccountId } = activation;
   if (config.output === 'json') {
     formatOutput(config, await api.cloudAccountsGet(workspaceId, cloudAccountId));
   } else {
@@ -180,7 +200,7 @@ async function resume(
       `Google Cloud connection request ${requestId} is ${request.status}`,
       ExitCode.USAGE,
       'Remove its Google deployment (Infrastructure Manager > Deployments), then prepare a new one:\n' +
-        `polylane cloud connect --provider gcp --project-id ${request.projectId}`
+        `polylane --workspace ${workspaceId} cloud connect --provider gcp --project-id ${request.projectId}`
     );
   }
   // A request that was verified once remembers its project number; the flag
@@ -275,7 +295,7 @@ export async function connectGcp(
     idempotencyKey: randomUUID(),
   });
   const setup = await api.cloudAccountsGcpRequestsSetup(workspaceId, request.requestId);
-  const resumeCommand = gcpResumeCommand(request.requestId, projectNumber);
+  const resumeCommand = gcpResumeCommand(workspaceId, request.requestId, projectNumber);
 
   if (config.output === 'json') {
     formatOutput(config, {
