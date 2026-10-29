@@ -19,6 +19,7 @@ import {
   type WizardStep,
 } from '../helpers';
 import { buildCloudflareTokenUrl } from './cloudflare-token-url';
+import { connectGcp } from './gcp-connect';
 import { ensureCloudAccountCapacity } from '../../billing/cloud-capacity';
 import type { CloudAccount } from '../../generated/types';
 import { isApiError } from '../../errors/api';
@@ -40,6 +41,7 @@ type ConnectBody = Parameters<PolylaneAPI['cloudAccountsConnect']>[0];
 
 type Provider =
   | 'aws'
+  | 'gcp'
   | 'cloudflare'
   | 'vercel'
   | 'fly'
@@ -51,11 +53,13 @@ type Provider =
   | 'convex'
   | 'clickhouse'
   | 'turso'
+  | 'neon'
   | 'triggerdev'
   | 'kubernetes';
 
 export const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> = [
   { value: 'aws', label: 'AWS', hint: 'deploys a read-only CloudFormation stack (browser)' },
+  { value: 'gcp', label: 'Google Cloud', hint: 'runs an Infrastructure Manager setup script (gcloud)' },
   { value: 'cloudflare', label: 'Cloudflare', hint: 'read-only API token' },
   { value: 'vercel', label: 'Vercel', hint: 'install the Vercel integration (browser)' },
   { value: 'fly', label: 'Fly.io', hint: 'API token' },
@@ -67,6 +71,7 @@ export const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: str
   { value: 'convex', label: 'Convex', hint: 'team access token' },
   { value: 'clickhouse', label: 'ClickHouse', hint: 'API key ID + secret' },
   { value: 'turso', label: 'Turso', hint: 'platform API token' },
+  { value: 'neon', label: 'Neon', hint: 'API key' },
   { value: 'triggerdev', label: 'Trigger.dev', hint: 'environment API key' },
   { value: 'kubernetes', label: 'Kubernetes', hint: 'in-cluster agent, installed with Helm (console)' },
 ];
@@ -132,13 +137,14 @@ export type HandoffOutcome = 'connected' | 'timeout';
 export type ConnectOutcome = HandoffOutcome | 'pending';
 
 export function connectExitCode(
-  outcome: HandoffOutcome | null,
+  outcome: ConnectOutcome | null,
   awsOutcome:
     | Extract<ConnectOutcome, 'connected' | 'pending'>
     | ReadonlyArray<Extract<ConnectOutcome, 'connected' | 'pending'>>
     | null
 ): ExitCode {
   if (outcome === 'timeout') return ExitCode.GENERAL;
+  if (outcome === 'pending') return ExitCode.PENDING;
   const awsOutcomes = Array.isArray(awsOutcome) ? awsOutcome : awsOutcome === null ? [] : [awsOutcome];
   if (awsOutcomes.includes('pending')) return ExitCode.PENDING;
   return ExitCode.SUCCESS;
@@ -436,6 +442,49 @@ export async function connectTurso(
   }
 }
 
+const NEON_ORGANIZATION_HINT = 'Organization IDs start with org- and are listed under Organization settings in the Neon Console.';
+
+function neonOrganizations(metadata: Record<string, unknown> | undefined): Array<{ id: string; name: string }> {
+  const raw = metadata?.organizations;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((o: unknown) => {
+    if (typeof o !== 'object' || o === null) return [];
+    const { id, name } = o as { id?: unknown; name?: unknown };
+    return typeof id === 'string' ? [{ id, name: typeof name === 'string' ? name : id }] : [];
+  });
+}
+
+// A personal Neon key reaches every organization its user belongs to. The API
+// refuses to guess (400) and lists the reachable organizations in the error
+// metadata, so pick one here and retry instead of surfacing a dead end.
+export async function connectNeon(
+  config: Config,
+  api: PolylaneAPI,
+  body: Extract<ConnectBody, { provider: 'neon' }>
+): Promise<typeof BACK | ConnectResult> {
+  try {
+    return await api.cloudAccountsConnect(body);
+  } catch (err) {
+    if (!isApiError(err) || err.status !== 400 || body.orgId !== undefined) throw err;
+    const organizations = neonOrganizations(err.metadata);
+    if (organizations.length === 0) throw err;
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(
+        err.message,
+        ExitCode.USAGE,
+        'Pass --org-id <id> with one of:\n' + organizations.map((o) => `  ${o.id}  ${o.name}`).join('\n')
+      );
+    }
+    const picked = await promptSelectOrBack<string>(
+      { nonInteractive: config.nonInteractive },
+      'This key can access more than one organization. Select the one to connect.',
+      organizations.map((o) => ({ value: o.id, label: o.name, hint: o.id }))
+    );
+    if (picked === BACK) return BACK;
+    return api.cloudAccountsConnect({ ...body, orgId: picked });
+  }
+}
+
 const TRIGGERDEV_INSTRUCTIONS =
   'In the Trigger.dev environment you want to monitor, open API Keys and create a key with the "No restrictions" access preset. The API refuses every other preset. A prod key connects production and a staging key connects staging, each as its own account.';
 
@@ -569,7 +618,7 @@ async function connectProvider(
   noBrowser: boolean,
   background: boolean,
   awsWaits: AwsStackWaits
-): Promise<typeof BACK | HandoffOutcome | AwsStackWait> {
+): Promise<typeof BACK | ConnectOutcome | AwsStackWait> {
   const ctx = { nonInteractive: config.nonInteractive };
   const reconnect = getArgBoolean(args, 'reconnect') === true;
 
@@ -628,6 +677,45 @@ async function connectProvider(
       provider: 'turso',
       token,
       ...(organization !== undefined ? { organization } : {}),
+    });
+    if (result === BACK) return BACK;
+    printConnectSuccess(config, result);
+    return 'connected';
+  }
+  if (provider === 'gcp') {
+    return connectGcp(config, api, args, workspaceId);
+  }
+  if (provider === 'neon') {
+    const orgIdFlag = getArgString(args, 'orgId');
+    if (orgIdFlag !== undefined && orgIdFlag.trim().length === 0) {
+      throw new CLIError('Invalid value for --org-id: ""', ExitCode.USAGE, NEON_ORGANIZATION_HINT);
+    }
+    let token = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'token',
+        '--token',
+        {
+          message: 'Neon API key',
+          instructions:
+            'Open API keys in the Neon Console and choose Create new API key. A personal key reaches every organization you belong to, and you pick the organization next. For a key that reaches one organization only, create it under Organization settings, API keys. The key starts with napi_. Polylane reads your projects, branches, computes and databases; investigations can run read-only queries on a branch when you ask for them.',
+          link: 'https://console.neon.tech/app/settings#api-keys',
+          linkLabel: 'Open Neon API keys',
+        },
+        (v) => {
+          token = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    const orgId = orgIdFlag?.trim();
+    const result = await connectNeon(config, api, {
+      workspaceId,
+      provider: 'neon',
+      token,
+      ...(orgId !== undefined ? { orgId } : {}),
     });
     if (result === BACK) return BACK;
     printConnectSuccess(config, result);
@@ -997,7 +1085,7 @@ async function connectProvider(
 
 export const cloudConnectCommand: Command = {
   name: 'cloud connect',
-  description: 'Connect a cloud account (AWS, Cloudflare, Vercel, Fly.io, Render, Railway, PlanetScale, Supabase, Modal, Convex, ClickHouse, Turso, Trigger.dev, Kubernetes)',
+  description: `Connect a cloud account (${PROVIDER_OPTIONS.map((o) => o.label).join(', ')})`,
   operationId: 'cloud_accounts.connect',
   options: [
     {
@@ -1010,8 +1098,14 @@ export const cloudConnectCommand: Command = {
     { flag: '--region <regions>', description: 'AWS regions to scan, comma-separated (e.g. us-east-1,eu-west-1), or "all" for every enabled region', type: 'string' },
     { flag: '--create-alarms', description: 'AWS: create monitoring alarms', type: 'boolean' },
     { flag: '--subscribe-alarms', description: 'AWS: subscribe to existing CloudWatch alarms', type: 'boolean' },
-    // Cloudflare / Fly / Railway / PlanetScale / Convex / Turso
-    { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, Railway token, PlanetScale service token, Convex team access token, or Turso platform API token', type: 'string' },
+    // Google Cloud
+    { flag: '--project-id <id>', description: 'Google Cloud project ID (e.g. my-production-project)', type: 'string' },
+    { flag: '--project-number <n>', description: 'Google Cloud project number (numeric, beside the project ID in project settings)', type: 'string' },
+    { flag: '--no-investigate-alerts', description: 'Google Cloud: do not investigate Cloud Monitoring alerts in the project', type: 'boolean' },
+    { flag: '--request <id>', description: 'Google Cloud: verify and connect a prepared setup (gcpconn_...) once its script has run', type: 'string' },
+    // Cloudflare / Fly / Railway / PlanetScale / Convex / Turso / Neon
+    { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, Railway token, PlanetScale service token, Convex team access token, Turso platform API token, or Neon API key', type: 'string' },
+    { flag: '--org-id <id>', description: 'Neon: organization to connect (org-...), when the key reaches more than one', type: 'string' },
     { flag: '--railway-workspace <id>', description: 'Railway: connect only this Railway workspace ID (default: every workspace the token can reach)', type: 'string' },
     // Retired in 0.2.16: Cloudflare now always connects read-only, which is
     // what anyone passing this flag was asking for. Accepted and ignored for
@@ -1037,6 +1131,8 @@ export const cloudConnectCommand: Command = {
     'polylane cloud connect --provider cloudflare --token <token>',
     'polylane cloud connect --provider aws --account 123456789012 --region us-east-1,eu-west-1 --subscribe-alarms',
     'polylane cloud connect --provider aws --account 123456789012 --region all',
+    'polylane cloud connect --provider gcp --project-id my-production-project --project-number 123456789012',
+    'polylane cloud connect --provider gcp --request gcpconn_... --project-number 123456789012',
     'polylane cloud connect --provider render --api-key <key>',
     'polylane cloud connect --provider railway --token <token>',
     'polylane cloud connect --provider supabase',
@@ -1046,6 +1142,8 @@ export const cloudConnectCommand: Command = {
     'polylane cloud connect --provider clickhouse --key-id <id> --key-secret <secret>',
     'polylane cloud connect --provider turso --token <token>',
     'polylane cloud connect --provider turso --token <token> --organization <slug>',
+    'polylane cloud connect --provider neon --token napi_...',
+    'polylane cloud connect --provider neon --token napi_... --org-id org-...',
     'polylane cloud connect --provider triggerdev --api-key <key>',
     'polylane cloud connect --provider kubernetes',
   ],

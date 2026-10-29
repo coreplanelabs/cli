@@ -59,7 +59,7 @@ describe('Logfire type option', () => {
   });
 
   it('is not offered under other categories', () => {
-    for (const category of ['git', 'communication', 'product-analytics', 'code-agent', 'issue-tracking', 'protocol']) {
+    for (const category of ['git', 'communication', 'incident-management', 'ci-cd', 'product-analytics', 'code-agent', 'issue-tracking', 'protocol']) {
       assert.equal(typeOptionsForCategory(category).some((o) => o.value === 'logfire'), false, category);
     }
   });
