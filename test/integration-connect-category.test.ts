@@ -10,7 +10,7 @@ import { isCLIError } from '../src/errors/base';
 describe('typeOptionsForCategory', () => {
   it('returns every option when no category is given', () => {
     const all = typeOptionsForCategory(undefined);
-    assert.equal(all.length, 26);
+    assert.equal(all.length, 27);
   });
 
   it('narrows to exactly the observability integrations', () => {
@@ -42,7 +42,7 @@ describe('typeOptionsForCategory', () => {
 
   it('narrows to exactly the incident management and CI/CD integrations', () => {
     assert.deepEqual(typeOptionsForCategory('incident-management').map((o) => o.value), ['incident_io']);
-    assert.deepEqual(typeOptionsForCategory('ci-cd').map((o) => o.value), ['depot']);
+    assert.deepEqual(typeOptionsForCategory('ci-cd').map((o) => o.value), ['depot', 'circleci']);
   });
 
   it('narrows to exactly the issue trackers', () => {
@@ -95,9 +95,9 @@ describe('typeOptionsForCategory', () => {
 
 describe('resolveTypeOptions', () => {
   it('lets --type win over the filter', () => {
-    assert.equal(resolveTypeOptions('observability', true).length, 26);
+    assert.equal(resolveTypeOptions('observability', true).length, 27);
     assert.equal(resolveTypeOptions('observability', false).length, 11);
-    assert.equal(resolveTypeOptions(undefined, false).length, 26);
+    assert.equal(resolveTypeOptions(undefined, false).length, 27);
   });
 
   it('rejects an unknown category even when --type is present', () => {
