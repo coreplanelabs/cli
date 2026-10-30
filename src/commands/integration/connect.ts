@@ -55,6 +55,7 @@ type ConnectableType =
   | 'braintrust'
   | 'incident_io'
   | 'depot'
+  | 'circleci'
   | 'mixpanel'
   | 'amplitude'
   | 'posthog'
@@ -104,6 +105,7 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'braintrust', label: 'Braintrust', hint: 'service token · LLM observability', category: 'observability' },
   { value: 'incident_io', label: 'incident.io', hint: 'API key', category: 'incident-management' },
   { value: 'depot', label: 'Depot', hint: 'organization token', category: 'ci-cd' },
+  { value: 'circleci', label: 'CircleCI', hint: 'personal API token', category: 'ci-cd' },
   { value: 'mixpanel', label: 'Mixpanel', hint: 'service account + project ID', category: 'product-analytics' },
   { value: 'amplitude', label: 'Amplitude', hint: 'API key + secret key', category: 'product-analytics' },
   { value: 'posthog', label: 'PostHog', hint: "choose one project on PostHog's consent screen", category: 'product-analytics' },
@@ -767,6 +769,48 @@ const NEWRELIC_ACCOUNT_RETRY: ScopeRetry<{ accountId: number }> = {
   parse: (v) => ({ accountId: parseNewrelicAccountId(v) }),
 };
 
+function circleciOrganizations(metadata: Record<string, unknown> | undefined): Array<{ id: string; name: string; slug: string }> {
+  const raw = metadata?.organizations;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((o: unknown) => {
+    if (typeof o !== 'object' || o === null) return [];
+    const { id, name, slug } = o as { id?: unknown; name?: unknown; slug?: unknown };
+    if (typeof id !== 'string') return [];
+    return [{ id, name: typeof name === 'string' ? name : id, slug: typeof slug === 'string' ? slug : '' }];
+  });
+}
+
+// A personal CircleCI token reaches every organization its user belongs to. The
+// API refuses to guess (400) and lists the reachable organizations in the error
+// metadata, so pick one here and retry instead of surfacing a dead end.
+export async function connectCircleci(
+  config: Config,
+  api: PolylaneAPI,
+  body: Extract<ConnectBody, { type: 'circleci' }>
+): Promise<typeof BACK | Integration> {
+  try {
+    return await api.integrationsConnect(body);
+  } catch (err) {
+    if (!isApiError(err) || err.status !== 400 || body.organizationId !== undefined) throw err;
+    const organizations = circleciOrganizations(err.metadata);
+    if (organizations.length === 0) throw err;
+    if (!isInteractive(config.nonInteractive)) {
+      throw new CLIError(
+        err.message,
+        ExitCode.USAGE,
+        'Pass --organization-id <id> with one of:\n' + organizations.map((o) => `  ${o.id}  ${o.name} (${o.slug})`).join('\n')
+      );
+    }
+    const picked = await promptSelectOrBack<string>(
+      { nonInteractive: config.nonInteractive },
+      'This token can reach more than one CircleCI organization. Select the one to connect.',
+      organizations.map((o) => ({ value: o.id, label: o.name, hint: o.slug }))
+    );
+    if (picked === BACK) return BACK;
+    return api.integrationsConnect({ ...body, organizationId: picked });
+  }
+}
+
 const LANGSMITH_WORKSPACE_RETRY: ScopeRetry<{ langsmithWorkspaceId: string }> = {
   pattern: /more than one LangSmith workspace/i,
   flag: '--langsmith-workspace',
@@ -1339,6 +1383,29 @@ async function connectWithCredentials(
     ]);
     if (!ok) return BACK;
     body = { type: 'depot', workspaceId, apiToken };
+  } else if (type === 'circleci') {
+    const organizationId = getArgString(args, 'organizationId')?.trim() || undefined;
+    let apiKey = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiKey',
+        '--api-key',
+        {
+          message: 'CircleCI personal API token',
+          instructions:
+            'In CircleCI, open User Settings, then Personal API Tokens, and create a token. Project API tokens do not work. If the token reaches more than one organization, you choose the one to connect.',
+          link: 'https://app.circleci.com/settings/user/tokens',
+          linkLabel: 'Open CircleCI token settings',
+        },
+        (v) => {
+          apiKey = v;
+        }
+      ),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'circleci', workspaceId, apiKey, ...(organizationId !== undefined ? { organizationId } : {}) };
   } else if (type === 'amplitude') {
     let apiKey = '';
     let secretKey = '';
@@ -1409,7 +1476,9 @@ async function connectWithCredentials(
         ? await connectPickingScope(config, api, body, body.accountId !== undefined, NEWRELIC_ACCOUNT_RETRY)
         : body.type === 'langsmith'
           ? await connectPickingScope(config, api, body, body.langsmithWorkspaceId !== undefined, LANGSMITH_WORKSPACE_RETRY)
-          : await api.integrationsConnect(body);
+          : body.type === 'circleci'
+            ? await connectCircleci(config, api, body)
+            : await api.integrationsConnect(body);
   if (integration === BACK) return BACK;
   if (type === 'honeycomb') assertHoneycombManagementKeyStored(integration);
   printConnectSuccess(config, integration, TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
@@ -1503,12 +1572,13 @@ export const integrationConnectCommand: Command = {
     {
       flag: '--api-key <key>',
       description:
-        'API key (Datadog / Honeycomb / OpenStatus / Logfire project key / New Relic User key / LangSmith / Braintrust service token / incident.io / Amplitude / Devin / Cursor / Factory / Conductor / Capy / Amp access token / Linear)',
+        'API key (Datadog / Honeycomb / OpenStatus / Logfire project key / New Relic User key / LangSmith / Braintrust service token / incident.io / Amplitude / CircleCI personal API token / Devin / Cursor / Factory / Conductor / Capy / Amp access token / Linear)',
       type: 'string',
     },
     { flag: '--secret-key <key>', description: 'Secret key (Amplitude only)', type: 'string' },
     { flag: '--account-id <id>', description: 'New Relic account ID, when the key can read more than one account', type: 'string' },
     { flag: '--langsmith-workspace <id>', description: 'LangSmith workspace ID, when the key can read more than one workspace', type: 'string' },
+    { flag: '--organization-id <id>', description: 'CircleCI organization ID, when the token can reach more than one organization', type: 'string' },
     {
       flag: '--escalation-severity <s>',
       description: `incident.io: lowest escalation severity sent as an incident.io alert: ${INCIDENT_IO_SEVERITIES.join(' | ')} (default: high)`,
@@ -1567,6 +1637,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type braintrust --api-key bt-st-...',
     'polylane integration connect --type incident_io --api-key ... --escalation-severity critical',
     'polylane integration connect --type depot --api-token ...',
+    'polylane integration connect --type circleci --api-key ... --organization-id <id>',
     'polylane integration connect --type amplitude --api-key ... --secret-key ...',
     'polylane integration connect --type posthog',
     'polylane integration connect --type cursor --api-key crsr_...',
