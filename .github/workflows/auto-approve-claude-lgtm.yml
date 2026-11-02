@@ -49,7 +49,9 @@ jobs:
         (github.event.review.user.login == 'claude[bot]' && github.event.review.user.id == 209825114) ||
         (github.event.review.user.login == 'coreplane-switchboard[bot]' && github.event.review.user.id == 318072483) ||
         (github.event.review.user.login == 'nwm-54' && github.event.review.user.id == 45931542) ||
-        (github.event.review.user.login == 'boristane' && github.event.review.user.id == 10452259)
+        (github.event.review.user.login == 'boristane' && github.event.review.user.id == 10452259) ||
+        (github.event.review.user.login == 'fer' && github.event.review.user.id == 21882) ||
+        (github.event.review.user.login == 'matanyall' && github.event.review.user.id == 28307422)
       ) &&
       github.event.review.state == 'commented' &&
       startsWith(github.event.review.body, 'LGTM')
