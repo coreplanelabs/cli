@@ -56,6 +56,7 @@ type ConnectableType =
   | 'incident_io'
   | 'depot'
   | 'circleci'
+  | 'blacksmith'
   | 'mixpanel'
   | 'amplitude'
   | 'posthog'
@@ -106,6 +107,7 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'incident_io', label: 'incident.io', hint: 'API key', category: 'incident-management' },
   { value: 'depot', label: 'Depot', hint: 'organization token', category: 'ci-cd' },
   { value: 'circleci', label: 'CircleCI', hint: 'personal API token', category: 'ci-cd' },
+  { value: 'blacksmith', label: 'Blacksmith', hint: 'organization token + GitHub organization', category: 'ci-cd' },
   { value: 'mixpanel', label: 'Mixpanel', hint: 'service account + project ID', category: 'product-analytics' },
   { value: 'amplitude', label: 'Amplitude', hint: 'API key + secret key', category: 'product-analytics' },
   { value: 'posthog', label: 'PostHog', hint: "choose one project on PostHog's consent screen", category: 'product-analytics' },
@@ -1383,6 +1385,32 @@ async function connectWithCredentials(
     ]);
     if (!ok) return BACK;
     body = { type: 'depot', workspaceId, apiToken };
+  } else if (type === 'blacksmith') {
+    let apiToken = '';
+    let organization = '';
+    const ok = await runSteps([
+      secretStep(
+        config,
+        args,
+        'apiToken',
+        '--api-token',
+        {
+          message: 'Blacksmith organization token',
+          instructions:
+            'An organization admin runs these commands. Blacksmith confirms admin access in the browser and prints the token once.\n\n  curl -fsSL https://get.blacksmith.sh | sh\n  blacksmith org-token create --label polylane',
+          link: 'https://docs.polylane.com/integrations/blacksmith',
+          linkLabel: 'Open the Blacksmith guide',
+        },
+        (v) => {
+          apiToken = v;
+        }
+      ),
+      textStep(config, args, 'organization', 'GitHub organization login whose jobs run on Blacksmith', '--organization', (v) => {
+        organization = v;
+      }),
+    ]);
+    if (!ok) return BACK;
+    body = { type: 'blacksmith', workspaceId, apiToken, organization };
   } else if (type === 'circleci') {
     const organizationId = getArgString(args, 'organizationId')?.trim() || undefined;
     let apiKey = '';
@@ -1588,7 +1616,8 @@ export const integrationConnectCommand: Command = {
     { flag: '--organization-api-key <key>', description: 'Organization API key (Logfire only, pylf_...)', type: 'string' },
     { flag: '--management-api-key-id <id>', description: 'Management API key ID (Honeycomb)', type: 'string' },
     { flag: '--management-api-key-secret <secret>', description: 'Management API key secret (Honeycomb)', type: 'string' },
-    { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token / Depot organization token)', type: 'string' },
+    { flag: '--api-token <token>', description: 'API token (Axiom / Better Stack global token / Depot or Blacksmith organization token)', type: 'string' },
+    { flag: '--organization <login>', description: 'GitHub organization login whose jobs run on Blacksmith (Blacksmith only)', type: 'string' },
     { flag: '--stack-url <url>', description: 'Grafana Cloud stack URL, e.g. https://mystack.grafana.net', type: 'string' },
     { flag: '--service-account-token <token>', description: 'Service account token (Grafana only, glsa_...)', type: 'string' },
     { flag: '--team-name <name>', description: 'Team name (Better Stack only)', type: 'string' },
@@ -1637,6 +1666,7 @@ export const integrationConnectCommand: Command = {
     'polylane integration connect --type braintrust --api-key bt-st-...',
     'polylane integration connect --type incident_io --api-key ... --escalation-severity critical',
     'polylane integration connect --type depot --api-token ...',
+    'polylane integration connect --type blacksmith --api-token ... --organization acme',
     'polylane integration connect --type circleci --api-key ... --organization-id <id>',
     'polylane integration connect --type amplitude --api-key ... --secret-key ...',
     'polylane integration connect --type posthog',
