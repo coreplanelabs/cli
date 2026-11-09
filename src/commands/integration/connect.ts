@@ -63,7 +63,6 @@ type ConnectableType =
   | 'devin'
   | 'cursor'
   | 'factory'
-  | 'conductor'
   | 'capy'
   | 'amp'
   | 'linear'
@@ -114,7 +113,6 @@ const TYPE_OPTIONS: Array<{ value: ConnectableType; label: string; hint: string;
   { value: 'devin', label: 'Devin', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'cursor', label: 'Cursor', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'factory', label: 'Factory', hint: 'API key · coding agent', category: 'code-agent' },
-  { value: 'conductor', label: 'Conductor', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'capy', label: 'Capy', hint: 'API key · coding agent', category: 'code-agent' },
   { value: 'amp', label: 'Amp', hint: 'access token · coding agent', category: 'code-agent' },
   { value: 'linear', label: 'Linear', hint: 'personal API key · issue tracking', category: 'issue-tracking' },
@@ -391,14 +389,6 @@ const CODE_AGENTS = {
     instructions:
       'Create an API key in your Factory settings. Prefer a service account key (org-owned; creating one needs the Owner or Manager role). Factory keys have no scope options. The key starts with fk- and is shown only once.',
     link: 'https://app.factory.ai/settings/api-keys',
-    linkLabel: 'Create API key',
-  },
-  conductor: {
-    keyLabel: 'API key',
-    name: 'Conductor',
-    instructions:
-      'Create an API key in Conductor under Users > API keys. The key starts with sk_. Handed-off autofixes run as agents in Conductor Cloud workspaces on your account.',
-    link: 'https://app.conductor.build/users/api-keys',
     linkLabel: 'Create API key',
   },
   capy: {
@@ -1600,7 +1590,7 @@ export const integrationConnectCommand: Command = {
     {
       flag: '--api-key <key>',
       description:
-        'API key (Datadog / Honeycomb / OpenStatus / Logfire project key / New Relic User key / LangSmith / Braintrust service token / incident.io / Amplitude / CircleCI personal API token / Devin / Cursor / Factory / Conductor / Capy / Amp access token / Linear)',
+        'API key (Datadog / Honeycomb / OpenStatus / Logfire project key / New Relic User key / LangSmith / Braintrust service token / incident.io / Amplitude / CircleCI personal API token / Devin / Cursor / Factory / Capy / Amp access token / Linear)',
       type: 'string',
     },
     { flag: '--secret-key <key>', description: 'Secret key (Amplitude only)', type: 'string' },
