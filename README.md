@@ -123,6 +123,7 @@ polylane integration connect --type <type>        # see `polylane integration co
 polylane integration connect --type posthog       # choose a project; repeat to add another
 polylane cloud connect --provider <provider>      # see `polylane cloud connect --help`
 polylane cloud connect --provider gcp --project-id <id> --project-number <n>   # prints a gcloud setup script, then verifies
+polylane cloud connect --provider azure                    # opens an Azure portal deployment, then waits
 
 # 4. Work
 polylane issue list --active                      # what the system is flagging
