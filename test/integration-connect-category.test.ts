@@ -10,7 +10,7 @@ import { isCLIError } from '../src/errors/base';
 describe('typeOptionsForCategory', () => {
   it('returns every option when no category is given', () => {
     const all = typeOptionsForCategory(undefined);
-    assert.equal(all.length, 28);
+    assert.equal(all.length, 27);
   });
 
   it('narrows to exactly the observability integrations', () => {
@@ -37,7 +37,7 @@ describe('typeOptionsForCategory', () => {
 
   it('narrows to exactly the code agents', () => {
     const types = typeOptionsForCategory('code-agent').map((o) => o.value);
-    assert.deepEqual(types.sort(), ['amp', 'capy', 'conductor', 'cursor', 'devin', 'factory']);
+    assert.deepEqual(types.sort(), ['amp', 'capy', 'cursor', 'devin', 'factory']);
   });
 
   it('narrows to exactly the incident management and CI/CD integrations', () => {
@@ -95,9 +95,9 @@ describe('typeOptionsForCategory', () => {
 
 describe('resolveTypeOptions', () => {
   it('lets --type win over the filter', () => {
-    assert.equal(resolveTypeOptions('observability', true).length, 28);
+    assert.equal(resolveTypeOptions('observability', true).length, 27);
     assert.equal(resolveTypeOptions('observability', false).length, 11);
-    assert.equal(resolveTypeOptions(undefined, false).length, 28);
+    assert.equal(resolveTypeOptions(undefined, false).length, 27);
   });
 
   it('rejects an unknown category even when --type is present', () => {

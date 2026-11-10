@@ -59,7 +59,6 @@ export const threadAskCommand: Command = {
       ...(name ? { name } : {}),
       ...(context.length > 0 ? { context } : {}),
     });
-    await api.messagesPost({ workspaceId, threadId: thread.id, prompt });
     const url = await threadConsoleUrl(config, api, thread);
 
     if (noWait) {
