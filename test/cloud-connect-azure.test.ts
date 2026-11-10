@@ -4,12 +4,14 @@ import {
   azureResumeCommand,
   cancelAzureRequest,
   connectAzure,
+  isTransientAzurePollError,
   parseAzureRequestId,
   pollAzureRequest,
   type AzureConnectionRequest,
 } from '../src/commands/cloud/azure-connect';
-import { PROVIDER_OPTIONS } from '../src/commands/cloud/connect';
+import { PROVIDER_OPTIONS, needsCloudAccountCapacity } from '../src/commands/cloud/connect';
 import { CLIError } from '../src/errors/base';
+import { ApiError } from '../src/errors/api';
 import { ExitCode } from '../src/errors/codes';
 import type { Config } from '../src/config/schema';
 import type { PolylaneAPI } from '../src/generated/client';
@@ -210,5 +212,43 @@ describe('Azure connect', () => {
     assert.equal(await cancelAzureRequest(api, 'ws_1', REQUEST_ID), true);
     assert.deepEqual(cancelled, [REQUEST_ID]);
     assert.ok(stderr.includes('polylane --workspace ws_1 cloud connect --provider azure'));
+  });
+  it('checks a started Azure request without the plan capacity gate', () => {
+    assert.equal(needsCloudAccountCapacity({ provider: 'azure', request: REQUEST_ID }), false);
+    assert.equal(needsCloudAccountCapacity({ provider: 'azure' }), true);
+    assert.equal(needsCloudAccountCapacity({ provider: 'gcp', request: 'gcpconn_1' }), true);
+    assert.equal(needsCloudAccountCapacity({ provider: 'aws', reconnect: true }), false);
+  });
+
+  it('keeps waiting through a network error or a server error', async () => {
+    let reads = 0;
+    const failures: unknown[] = [new TypeError('fetch failed'), new ApiError(503, 'Service unavailable'), new CLIError('Network error', ExitCode.NETWORK)];
+    const api = {
+      cloudAccountsAzureRequestsGet: async () => {
+        const failure = failures[reads++];
+        if (failure) throw failure;
+        return connected;
+      },
+    } as unknown as PolylaneAPI;
+    const result = await pollAzureRequest(api, 'ws_1', REQUEST_ID, { sleep: async () => {} });
+    assert.equal(result.kind, 'connected');
+    assert.equal(reads, 4);
+  });
+
+  it('stops on an error that a retry cannot fix', async () => {
+    const api = {
+      cloudAccountsAzureRequestsGet: async () => {
+        throw new ApiError(403, 'Forbidden', ExitCode.AUTH);
+      },
+    } as unknown as PolylaneAPI;
+    await assert.rejects(() => pollAzureRequest(api, 'ws_1', REQUEST_ID, { sleep: async () => {} }), /Forbidden/);
+    assert.equal(isTransientAzurePollError(new ApiError(404, 'Not found')), false);
+  });
+
+  it('reports a request that connected before the cancel instead of cancelling it', async () => {
+    const api = { cloudAccountsAzureRequestsCancel: async () => connected } as unknown as PolylaneAPI;
+    assert.equal(await cancelAzureRequest(api, 'ws_1', REQUEST_ID), false);
+    assert.ok(!stderr.includes('Cancelled.'));
+    assert.ok(stderr.includes(`--request ${REQUEST_ID}`));
   });
 });

@@ -1089,6 +1089,11 @@ async function connectProvider(
   return 'connected';
 }
 
+export function needsCloudAccountCapacity(args: Record<string, unknown>): boolean {
+  if (getArgBoolean(args, 'reconnect') === true) return false;
+  return !(getArgString(args, 'provider') === 'azure' && getArgString(args, 'request') !== undefined);
+}
+
 export const cloudConnectCommand: Command = {
   name: 'cloud connect',
   description: `Connect a cloud account (${PROVIDER_OPTIONS.map((o) => o.label).join(', ')})`,
@@ -1165,8 +1170,9 @@ export const cloudConnectCommand: Command = {
     // One more account has to fit the plan. At the limit the gate offers the
     // upgrade and, once it lands, the connect continues; a decline ends the
     // command with QUOTA so a driving script knows nothing failed. A
-    // reconnect replaces an account and needs no room.
-    if (getArgBoolean(args, 'reconnect') !== true) {
+    // reconnect replaces an account and needs no room, and checking a started
+    // Azure request adds none: the server checks room when it activates it.
+    if (needsCloudAccountCapacity(args)) {
       const gate = await ensureCloudAccountCapacity(config, workspaceId, { noBrowser });
       if (gate === 'declined') {
         process.exitCode = ExitCode.QUOTA;

@@ -3,6 +3,7 @@ import { PolylaneAPI } from '../../generated/client';
 import { formatOutput } from '../../output/formatter';
 import { Spinner } from '../../output/progress';
 import { CLIError } from '../../errors/base';
+import { ApiError } from '../../errors/api';
 import { ExitCode } from '../../errors/codes';
 import { openBrowser } from '../../utils/browser';
 import { isInteractive } from '../../utils/env';
@@ -51,6 +52,14 @@ function endedError(workspaceId: string, request: AzureConnectionRequest): CLIEr
   );
 }
 
+// A dropped connection or a server error does not end the request, so the
+// wait reads again on the next interval instead of giving up.
+export function isTransientAzurePollError(err: unknown): boolean {
+  if (err instanceof ApiError) return err.status >= 500 || err.status === 429;
+  if (err instanceof CLIError) return err.exitCode === ExitCode.NETWORK;
+  return err instanceof TypeError;
+}
+
 export type AzurePollResult = { kind: 'connected'; request: AzureConnectionRequest } | { kind: 'timeout' };
 
 // Each read also asks the API to finish the connection once Azure has
@@ -72,9 +81,14 @@ export async function pollAzureRequest(
   const now = deps.now ?? Date.now;
   const deadline = now() + timeoutMs;
   for (;;) {
-    const request = await api.cloudAccountsAzureRequestsGet(workspaceId, requestId);
-    if (isAzureRequestConnected(request)) return { kind: 'connected', request };
-    if (request.status === 'cancelled' || request.status === 'expired') throw endedError(workspaceId, request);
+    let request: AzureConnectionRequest | null = null;
+    try {
+      request = await api.cloudAccountsAzureRequestsGet(workspaceId, requestId);
+    } catch (err) {
+      if (!isTransientAzurePollError(err)) throw err;
+    }
+    if (request && isAzureRequestConnected(request)) return { kind: 'connected', request };
+    if (request && (request.status === 'cancelled' || request.status === 'expired')) throw endedError(workspaceId, request);
     if (now() >= deadline) return { kind: 'timeout' };
     await sleep(intervalMs);
   }
@@ -106,7 +120,15 @@ export async function cancelAzureRequest(
 ): Promise<boolean> {
   process.stderr.write('Cancelling the Azure connection request…\n');
   try {
-    await api.cloudAccountsAzureRequestsCancel(workspaceId, requestId);
+    const request = await api.cloudAccountsAzureRequestsCancel(workspaceId, requestId);
+    // The API cancels only a pending request: one that Azure finished between
+    // two reads comes back active, so the message follows the returned status.
+    if (request.status === 'active') {
+      process.stderr.write(
+        `The Azure deployment finished before the cancel, so the request was not cancelled. To see the connection, run:\n${azureResumeCommand(workspaceId, requestId)}\n`
+      );
+      return false;
+    }
     process.stderr.write(`Cancelled. To connect Azure later, run:\n${startAgainCommand(workspaceId)}\n`);
     return true;
   } catch {
