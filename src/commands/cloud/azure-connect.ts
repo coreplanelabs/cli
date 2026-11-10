@@ -52,11 +52,11 @@ function endedError(workspaceId: string, request: AzureConnectionRequest): CLIEr
   );
 }
 
-// A dropped connection or a server error does not end the request, so the
+// A dropped connection, a slow read or a server error does not end the request, so the
 // wait reads again on the next interval instead of giving up.
 export function isTransientAzurePollError(err: unknown): boolean {
   if (err instanceof ApiError) return err.status >= 500 || err.status === 429;
-  if (err instanceof CLIError) return err.exitCode === ExitCode.NETWORK;
+  if (err instanceof CLIError) return err.exitCode === ExitCode.NETWORK || err.exitCode === ExitCode.TIMEOUT;
   return err instanceof TypeError;
 }
 

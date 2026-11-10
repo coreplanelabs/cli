@@ -222,7 +222,7 @@ describe('Azure connect', () => {
 
   it('keeps waiting through a network error or a server error', async () => {
     let reads = 0;
-    const failures: unknown[] = [new TypeError('fetch failed'), new ApiError(503, 'Service unavailable'), new CLIError('Network error', ExitCode.NETWORK)];
+    const failures: unknown[] = [new TypeError('fetch failed'), new ApiError(503, 'Service unavailable'), new CLIError('Network error', ExitCode.NETWORK), new CLIError('Request timed out', ExitCode.TIMEOUT)];
     const api = {
       cloudAccountsAzureRequestsGet: async () => {
         const failure = failures[reads++];
@@ -232,7 +232,7 @@ describe('Azure connect', () => {
     } as unknown as PolylaneAPI;
     const result = await pollAzureRequest(api, 'ws_1', REQUEST_ID, { sleep: async () => {} });
     assert.equal(result.kind, 'connected');
-    assert.equal(reads, 4);
+    assert.equal(reads, 5);
   });
 
   it('stops on an error that a retry cannot fix', async () => {
