@@ -60,7 +60,7 @@ type Provider =
 export const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> = [
   { value: 'aws', label: 'AWS', hint: 'deploys a read-only CloudFormation stack (browser)' },
   { value: 'gcp', label: 'Google Cloud', hint: 'runs an Infrastructure Manager setup script (gcloud)' },
-  { value: 'cloudflare', label: 'Cloudflare', hint: 'read-only API token' },
+  { value: 'cloudflare', label: 'Cloudflare', hint: 'account API token' },
   { value: 'vercel', label: 'Vercel', hint: 'install the Vercel integration (browser)' },
   { value: 'fly', label: 'Fly.io', hint: 'API token' },
   { value: 'render', label: 'Render', hint: 'API key' },
@@ -544,14 +544,15 @@ async function browserConnect(
 const CLOUDFLARE_MANUAL_STEPS =
   'Create the token from any machine with a browser:\n' +
   '- Easiest: open your Polylane console > Settings > Clouds > Connect >\n' +
-  '  Cloudflare — its create-token link opens Cloudflare with the read-only\n' +
-  '  token pre-filled. Create it as-is.\n' +
+  '  Cloudflare — its create-token link opens Cloudflare with the\n' +
+  '  permissions pre-filled. Create it as-is.\n' +
   '- By hand: open https://dash.cloudflare.com/?to=/:account/api-tokens and\n' +
-  '  create a custom token with Read access for the account and its zones.\n' +
+  '  create a custom token with Read access for the account and its zones,\n' +
+  '  plus Edit on Notifications and Workers Observability.\n' +
   'Then come back and paste the token here.';
 
 const CLOUDFLARE_HEADLESS_HINT =
-  'Create a read-only token from your Polylane console (Settings > Clouds > Connect > Cloudflare — the create-token link comes pre-filled), then re-run:\n' +
+  'Create a token from your Polylane console (Settings > Clouds > Connect > Cloudflare — the create-token link comes pre-filled), then re-run:\n' +
   'polylane cloud connect --provider cloudflare --token <token>';
 
 // Token creation happens in-flow: the CLI opens Cloudflare's account API
@@ -576,7 +577,9 @@ function cloudflareTokenStep(
     }
     const ctx = { nonInteractive: config.nonInteractive };
     note(
-      'Polylane connects to Cloudflare with a read-only account API token.\n' +
+      'Polylane connects to Cloudflare with an account API token that reads\n' +
+        'your account and edits only Notifications and Workers Observability,\n' +
+        'so Polylane can send Workers issues and alerts to itself.\n' +
         'The CLI can open Cloudflare with the token pre-filled: create it as-is\n' +
         '(nothing to edit) and paste it here.\n' +
         'You must be a Super Administrator on the Cloudflare account.',
