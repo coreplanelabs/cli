@@ -18,12 +18,15 @@ describe('buildCloudflareTokenUrl', () => {
     assert.equal(parsed.searchParams.get('name'), 'Polylane');
   });
 
-  it('read-only tokens carry only read permissions', () => {
+  it('read-only tokens read everything except the alert subscription grants', () => {
     const permissions = parsePermissions(buildCloudflareTokenUrl({ readOnly: true }));
     assert.ok(permissions.length > 0);
     for (const permission of permissions) {
-      assert.equal(permission.type, 'read');
+      const expected = permission.key === 'notifications' || permission.key === 'workers_observability' ? 'edit' : 'read';
+      assert.equal(permission.type, expected, permission.key);
     }
+    assert.ok(permissions.some((p) => p.key === 'notifications' && p.type === 'edit'));
+    assert.ok(permissions.some((p) => p.key === 'workers_observability' && p.type === 'edit'));
   });
 
   it('read-only downgrades edit grants instead of dropping them', () => {

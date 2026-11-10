@@ -213,6 +213,10 @@ const NOMINAL_PERMISSIONS: CloudflarePermission[] = [
   { key: 'zone_waf', type: 'edit' },
 ];
 
+// Polylane creates its own webhook destination, notification policies, Workers Issues
+// automation and observability alerts on connect, so a read-only token still edits these two.
+const ALERT_SUBSCRIPTION_KEYS = new Set(['notifications', 'workers_observability']);
+
 // A read-only token keeps every readable resource but downgrades each 'edit' grant to
 // 'read' and drops the action-only grants (run/send/purge), which have no read equivalent.
 // Keys are de-duplicated so a resource that appears as both edit and run collapses to one
@@ -224,6 +228,10 @@ function toReadOnlyPermissions(permissions: CloudflarePermission[]): CloudflareP
     if (permission.type !== 'read' && permission.type !== 'edit') continue;
     if (keys.has(permission.key)) continue;
     keys.add(permission.key);
+    if (permission.type === 'edit' && ALERT_SUBSCRIPTION_KEYS.has(permission.key)) {
+      result.push(permission);
+      continue;
+    }
     result.push({ key: permission.key, type: 'read' });
   }
   return result;
