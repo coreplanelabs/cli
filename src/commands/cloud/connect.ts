@@ -20,6 +20,7 @@ import {
 } from '../helpers';
 import { buildCloudflareTokenUrl } from './cloudflare-token-url';
 import { connectGcp } from './gcp-connect';
+import { connectAzure } from './azure-connect';
 import { ensureCloudAccountCapacity } from '../../billing/cloud-capacity';
 import type { CloudAccount } from '../../generated/types';
 import { isApiError } from '../../errors/api';
@@ -42,6 +43,7 @@ type ConnectBody = Parameters<PolylaneAPI['cloudAccountsConnect']>[0];
 type Provider =
   | 'aws'
   | 'gcp'
+  | 'azure'
   | 'cloudflare'
   | 'vercel'
   | 'fly'
@@ -60,6 +62,7 @@ type Provider =
 export const PROVIDER_OPTIONS: Array<{ value: Provider; label: string; hint: string }> = [
   { value: 'aws', label: 'AWS', hint: 'deploys a read-only CloudFormation stack (browser)' },
   { value: 'gcp', label: 'Google Cloud', hint: 'runs an Infrastructure Manager setup script (gcloud)' },
+  { value: 'azure', label: 'Azure', hint: 'deploys an Azure Lighthouse template in the Azure portal (browser)' },
   { value: 'cloudflare', label: 'Cloudflare', hint: 'read-only API token' },
   { value: 'vercel', label: 'Vercel', hint: 'install the Vercel integration (browser)' },
   { value: 'fly', label: 'Fly.io', hint: 'API token' },
@@ -685,6 +688,9 @@ async function connectProvider(
   if (provider === 'gcp') {
     return connectGcp(config, api, args, workspaceId);
   }
+  if (provider === 'azure') {
+    return connectAzure(config, api, args, workspaceId, noBrowser);
+  }
   if (provider === 'neon') {
     const orgIdFlag = getArgString(args, 'orgId');
     if (orgIdFlag !== undefined && orgIdFlag.trim().length === 0) {
@@ -1083,6 +1089,11 @@ async function connectProvider(
   return 'connected';
 }
 
+export function needsCloudAccountCapacity(args: Record<string, unknown>): boolean {
+  if (getArgBoolean(args, 'reconnect') === true) return false;
+  return !(getArgString(args, 'provider') === 'azure' && getArgString(args, 'request') !== undefined);
+}
+
 export const cloudConnectCommand: Command = {
   name: 'cloud connect',
   description: `Connect a cloud account (${PROVIDER_OPTIONS.map((o) => o.label).join(', ')})`,
@@ -1102,7 +1113,10 @@ export const cloudConnectCommand: Command = {
     { flag: '--project-id <id>', description: 'Google Cloud project ID (e.g. my-production-project)', type: 'string' },
     { flag: '--project-number <n>', description: 'Google Cloud project number (numeric, beside the project ID in project settings)', type: 'string' },
     { flag: '--no-investigate-alerts', description: 'Google Cloud: do not investigate Cloud Monitoring alerts in the project', type: 'boolean' },
-    { flag: '--request <id>', description: 'Google Cloud: verify and connect a prepared setup (gcpconn_...) once its script has run', type: 'string' },
+    { flag: '--request <id>', description: 'Google Cloud: verify and connect a prepared setup (gcpconn_...) once its script has run; Azure: check a started connection (azureconn_...)', type: 'string' },
+    // Azure
+    { flag: '--no-alert-rules', description: 'Azure: do not allow Polylane to create Azure Monitor alert rules', type: 'boolean' },
+    { flag: '--no-wait', description: 'Azure: print the deployment URL and the request ID, then exit without waiting', type: 'boolean' },
     // Cloudflare / Fly / Railway / PlanetScale / Convex / Turso / Neon
     { flag: '--token <token>', description: 'Cloudflare API token, Fly.io token, Railway token, PlanetScale service token, Convex team access token, Turso platform API token, or Neon API key', type: 'string' },
     { flag: '--org-id <id>', description: 'Neon: organization to connect (org-...), when the key reaches more than one', type: 'string' },
@@ -1121,7 +1135,7 @@ export const cloudConnectCommand: Command = {
     // ClickHouse
     { flag: '--key-id <id>', description: 'ClickHouse Cloud API key ID', type: 'string' },
     { flag: '--key-secret <secret>', description: 'ClickHouse Cloud API key secret', type: 'string' },
-    { flag: '--no-browser', description: 'AWS / Vercel / PlanetScale / Supabase: print the URL instead of opening it; Cloudflare: show manual token-creation steps instead of opening the browser', type: 'boolean' },
+    { flag: '--no-browser', description: 'AWS / Azure / Vercel / PlanetScale / Supabase: print the URL instead of opening it; Cloudflare: show manual token-creation steps instead of opening the browser', type: 'boolean' },
     { flag: '--reconnect', description: 'AWS / Vercel / PlanetScale / Supabase / Kubernetes: run the connect flow even when the provider is already connected', type: 'boolean' },
   ],
   examples: [
@@ -1133,6 +1147,9 @@ export const cloudConnectCommand: Command = {
     'polylane cloud connect --provider aws --account 123456789012 --region all',
     'polylane cloud connect --provider gcp --project-id my-production-project --project-number 123456789012',
     'polylane cloud connect --provider gcp --request gcpconn_... --project-number 123456789012',
+    'polylane cloud connect --provider azure',
+    'polylane cloud connect --provider azure --no-alert-rules --no-wait',
+    'polylane cloud connect --provider azure --request azureconn_...',
     'polylane cloud connect --provider render --api-key <key>',
     'polylane cloud connect --provider railway --token <token>',
     'polylane cloud connect --provider supabase',
@@ -1153,8 +1170,9 @@ export const cloudConnectCommand: Command = {
     // One more account has to fit the plan. At the limit the gate offers the
     // upgrade and, once it lands, the connect continues; a decline ends the
     // command with QUOTA so a driving script knows nothing failed. A
-    // reconnect replaces an account and needs no room.
-    if (getArgBoolean(args, 'reconnect') !== true) {
+    // reconnect replaces an account and needs no room, and checking a started
+    // Azure request adds none: the server checks room when it activates it.
+    if (needsCloudAccountCapacity(args)) {
       const gate = await ensureCloudAccountCapacity(config, workspaceId, { noBrowser });
       if (gate === 'declined') {
         process.exitCode = ExitCode.QUOTA;
